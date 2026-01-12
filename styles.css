@@ -1,0 +1,379 @@
+ (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
+diff --git a/styles.css b/styles.css
+new file mode 100644
+index 0000000000000000000000000000000000000000..83161f80cf1b26c0d93431319319673f2c922bb4
+--- /dev/null
++++ b/styles.css
+@@ -0,0 +1,369 @@
++:root {
++  color-scheme: light;
++  --bg: #f7f8fa;
++  --card: #ffffff;
++  --text: #1d1d1f;
++  --muted: #6c727f;
++  --border: #e6e8ee;
++  --accent: #c75300;
++  --accent-soft: rgba(199, 83, 0, 0.12);
++  --danger: #e04646;
++  --warning: #ffb648;
++  --success: #2c8f5a;
++}
++
++* {
++  box-sizing: border-box;
++  margin: 0;
++  padding: 0;
++}
++
++body {
++  font-family: "Inter", system-ui, -apple-system, sans-serif;
++  background: var(--bg);
++  color: var(--text);
++  line-height: 1.5;
++}
++
++h1, h2, h3 {
++  font-weight: 600;
++}
++
++a {
++  text-decoration: none;
++  color: inherit;
++}
++
++.topbar {
++  background: var(--card);
++  border-bottom: 1px solid var(--border);
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++  padding: 20px 32px;
++}
++
++.brand {
++  display: flex;
++  gap: 16px;
++  align-items: center;
++}
++
++.brand-mark {
++  width: 40px;
++  height: 40px;
++  border-radius: 12px;
++  background: var(--accent);
++  display: inline-block;
++}
++
++.eyebrow {
++  font-size: 12px;
++  letter-spacing: 0.08em;
++  text-transform: uppercase;
++  color: var(--muted);
++}
++
++.topbar-actions {
++  display: flex;
++  gap: 12px;
++}
++
++.primary-btn,
++.ghost-btn {
++  border-radius: 999px;
++  padding: 10px 18px;
++  font-weight: 500;
++  border: 1px solid transparent;
++  background: transparent;
++  cursor: pointer;
++  font-size: 14px;
++}
++
++.primary-btn {
++  background: var(--accent);
++  color: #fff;
++}
++
++.ghost-btn {
++  border-color: var(--border);
++  color: var(--text);
++}
++
++.layout {
++  display: grid;
++  grid-template-columns: 240px 1fr;
++  min-height: calc(100vh - 82px);
++}
++
++.sidebar {
++  background: var(--card);
++  border-right: 1px solid var(--border);
++  padding: 28px 20px;
++  display: flex;
++  flex-direction: column;
++  gap: 12px;
++}
++
++.nav-link {
++  padding: 12px 16px;
++  border-radius: 12px;
++  color: var(--muted);
++  font-weight: 500;
++}
++
++.nav-link.active {
++  background: var(--accent-soft);
++  color: var(--accent);
++}
++
++.nav-footer {
++  margin-top: auto;
++  font-size: 12px;
++  color: var(--muted);
++}
++
++.content {
++  padding: 28px 32px 60px;
++}
++
++.banner {
++  background: #fff3f0;
++  color: #8a2c00;
++  padding: 12px 16px;
++  border: 1px solid #ffd9c9;
++  border-radius: 12px;
++  margin-bottom: 20px;
++  font-size: 14px;
++}
++
++.banner.hidden {
++  display: none;
++}
++
++.page {
++  display: none;
++  flex-direction: column;
++  gap: 24px;
++}
++
++.page.active {
++  display: flex;
++}
++
++.page-header {
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++  gap: 20px;
++  flex-wrap: wrap;
++}
++
++.subtext {
++  color: var(--muted);
++  font-size: 14px;
++}
++
++.filters {
++  display: flex;
++  gap: 12px;
++  flex-wrap: wrap;
++}
++
++.filter {
++  font-size: 12px;
++  color: var(--muted);
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++}
++
++select {
++  border: 1px solid var(--border);
++  padding: 10px 14px;
++  border-radius: 10px;
++  background: #fff;
++  font-family: inherit;
++  min-width: 160px;
++}
++
++.kpi-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
++  gap: 16px;
++}
++
++.card {
++  background: var(--card);
++  border: 1px solid var(--border);
++  border-radius: 16px;
++  padding: 18px;
++  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
++}
++
++.kpi h3 {
++  margin-top: 8px;
++  font-size: 28px;
++  color: var(--accent);
++}
++
++.kpi-sub {
++  font-size: 12px;
++  color: var(--muted);
++}
++
++.table-card {
++  padding: 0;
++}
++
++.table-header {
++  padding: 16px 20px;
++  border-bottom: 1px solid var(--border);
++}
++
++.table-wrap {
++  width: 100%;
++  overflow-x: auto;
++}
++
++table {
++  width: 100%;
++  border-collapse: collapse;
++  font-size: 14px;
++}
++
++thead th {
++  text-align: left;
++  padding: 14px 20px;
++  color: var(--muted);
++  font-weight: 500;
++  background: #fafbfc;
++  border-bottom: 1px solid var(--border);
++}
++
++tbody td {
++  padding: 14px 20px;
++  border-bottom: 1px solid var(--border);
++}
++
++tbody tr:last-child td {
++  border-bottom: none;
++}
++
++.badge {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  padding: 4px 10px;
++  border-radius: 999px;
++  font-size: 12px;
++  font-weight: 500;
++  border: 1px solid transparent;
++}
++
++.badge.status-open {
++  background: rgba(44, 143, 90, 0.12);
++  color: var(--success);
++}
++
++.badge.status-on-hold {
++  background: rgba(108, 114, 127, 0.12);
++  color: var(--muted);
++}
++
++.badge.status-filled {
++  background: rgba(199, 83, 0, 0.12);
++  color: var(--accent);
++}
++
++.badge.health-new {
++  background: #fff;
++  border-color: var(--border);
++  color: var(--muted);
++}
++
++.badge.health-progress {
++  background: #f1f2f6;
++  color: var(--muted);
++}
++
++.badge.health-critical {
++  background: rgba(224, 70, 70, 0.12);
++  color: var(--danger);
++}
++
++.badge.health-hold {
++  background: rgba(108, 114, 127, 0.12);
++  color: var(--muted);
++}
++
++.badge.health-filled {
++  background: rgba(199, 83, 0, 0.12);
++  color: var(--accent);
++}
++
++.badge .dot {
++  width: 8px;
++  height: 8px;
++  border-radius: 50%;
++  background: currentColor;
++}
++
++.badge.health-new .dot {
++  background: #fff;
++  border: 1px solid var(--border);
++}
++
++.chart-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
++  gap: 16px;
++}
++
++.chart-card canvas {
++  width: 100% !important;
++  height: 260px !important;
++}
++
++@media (max-width: 900px) {
++  .layout {
++    grid-template-columns: 1fr;
++  }
++
++  .sidebar {
++    flex-direction: row;
++    overflow-x: auto;
++    gap: 8px;
++    border-right: none;
++    border-bottom: 1px solid var(--border);
++  }
++
++  .nav-link {
++    white-space: nowrap;
++  }
++
++  .nav-footer {
++    display: none;
++  }
++}
++
++@media (max-width: 640px) {
++  .topbar {
++    flex-direction: column;
++    align-items: flex-start;
++    gap: 16px;
++  }
++
++  .content {
++    padding: 20px;
++  }
++
++  .page-header {
++    flex-direction: column;
++    align-items: flex-start;
++  }
++
++  .table-wrap {
++    overflow-x: auto;
++  }
++}
+ 
+EOF
+)
