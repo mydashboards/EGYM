@@ -1,0 +1,286 @@
+ (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
+diff --git a/index.html b/index.html
+new file mode 100644
+index 0000000000000000000000000000000000000000..8129076b8da3e7fe0186b5cca1f155d7b84ab470
+--- /dev/null
++++ b/index.html
+@@ -0,0 +1,276 @@
++<!DOCTYPE html>
++<html lang="en">
++<head>
++  <meta charset="UTF-8" />
++  <meta name="viewport" content="width=device-width, initial-scale=1" />
++  <title>Recruiting Dashboard</title>
++  <link rel="preconnect" href="https://fonts.googleapis.com" />
++  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
++  <link
++    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
++    rel="stylesheet"
++  />
++  <link rel="stylesheet" href="styles.css" />
++  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
++  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
++</head>
++<body>
++  <header class="topbar">
++    <div class="brand">
++      <span class="brand-mark"></span>
++      <div>
++        <p class="eyebrow">Recruiting</p>
++        <h1>Talent Dashboard</h1>
++      </div>
++    </div>
++    <div class="topbar-actions">
++      <button class="ghost-btn" type="button">Export</button>
++      <button class="primary-btn" type="button">Add role</button>
++    </div>
++  </header>
++
++  <div class="layout">
++    <nav class="sidebar">
++      <a class="nav-link active" data-page="overview" href="#overview">Overview</a>
++      <a class="nav-link" data-page="pipeline" href="#pipeline">Pipeline</a>
++      <a class="nav-link" data-page="sourcing" href="#sourcing">Sourcing</a>
++      <a class="nav-link" data-page="hires" href="#hires">Hires &amp; KPIs</a>
++      <div class="nav-footer">
++        <p>Last refreshed</p>
++        <span id="last-refresh">—</span>
++      </div>
++    </nav>
++
++    <main class="content">
++      <section id="banner" class="banner hidden" role="status">
++        Data source unavailable.
++      </section>
++
++      <section id="overview" class="page active">
++        <header class="page-header">
++          <div>
++            <h2>Overview</h2>
++            <p class="subtext">Current role status and hiring progress.</p>
++          </div>
++          <div class="filters">
++            <label class="filter">
++              Role
++              <select id="overview-role"></select>
++            </label>
++          </div>
++        </header>
++
++        <div class="kpi-grid">
++          <div class="card kpi">
++            <p class="kpi-label">Open Roles</p>
++            <h3 id="kpi-open">—</h3>
++          </div>
++          <div class="card kpi">
++            <p class="kpi-label">Filled Roles</p>
++            <h3 id="kpi-filled">—</h3>
++          </div>
++          <div class="card kpi">
++            <p class="kpi-label">Hiring Progress</p>
++            <h3 id="kpi-progress">—</h3>
++            <p id="kpi-progress-sub" class="kpi-sub">—</p>
++          </div>
++          <div class="card kpi">
++            <p class="kpi-label">Avg. Time to Hire</p>
++            <h3 id="kpi-tth">—</h3>
++          </div>
++        </div>
++
++        <div class="card table-card">
++          <div class="table-header">
++            <h3>Roles</h3>
++          </div>
++          <div class="table-wrap">
++            <table>
++              <thead>
++                <tr>
++                  <th>Role</th>
++                  <th>Status</th>
++                  <th>Health</th>
++                  <th>Openings</th>
++                  <th>Current Stage</th>
++                  <th>Comment</th>
++                </tr>
++              </thead>
++              <tbody id="roles-table"></tbody>
++            </table>
++          </div>
++        </div>
++      </section>
++
++      <section id="pipeline" class="page">
++        <header class="page-header">
++          <div>
++            <h2>Pipeline</h2>
++            <p class="subtext">Weekly pipeline movement by stage.</p>
++          </div>
++          <div class="filters">
++            <label class="filter">
++              Role
++              <select id="pipeline-role"></select>
++            </label>
++            <label class="filter">
++              Time range
++              <select id="pipeline-range">
++                <option value="4">Last 4 weeks</option>
++                <option value="8" selected>Last 8 weeks</option>
++                <option value="12">Last 12 weeks</option>
++              </select>
++            </label>
++          </div>
++        </header>
++
++        <div class="card chart-card">
++          <canvas id="pipeline-chart" aria-label="Pipeline chart" role="img"></canvas>
++        </div>
++
++        <div class="card table-card">
++          <div class="table-header">
++            <h3>Weekly pipeline</h3>
++          </div>
++          <div class="table-wrap">
++            <table>
++              <thead>
++                <tr>
++                  <th>Week</th>
++                  <th>Sourced</th>
++                  <th>Reviewed</th>
++                  <th>Step 1</th>
++                  <th>Tech light</th>
++                  <th>Tech IV</th>
++                  <th>Final</th>
++                  <th>Offer</th>
++                  <th>Hired</th>
++                  <th>Health</th>
++                </tr>
++              </thead>
++              <tbody id="pipeline-table"></tbody>
++            </table>
++          </div>
++        </div>
++      </section>
++
++      <section id="sourcing" class="page">
++        <header class="page-header">
++          <div>
++            <h2>Sourcing</h2>
++            <p class="subtext">Response rates and recruiter screens.</p>
++          </div>
++          <div class="filters">
++            <label class="filter">
++              Role
++              <select id="sourcing-role"></select>
++            </label>
++            <label class="filter">
++              Time range
++              <select id="sourcing-range">
++                <option value="4">Last 4 weeks</option>
++                <option value="8" selected>Last 8 weeks</option>
++                <option value="12">Last 12 weeks</option>
++              </select>
++            </label>
++          </div>
++        </header>
++
++        <div class="kpi-grid">
++          <div class="card kpi">
++            <p class="kpi-label">Contacted</p>
++            <h3 id="kpi-contacted">—</h3>
++          </div>
++          <div class="card kpi">
++            <p class="kpi-label">Replied</p>
++            <h3 id="kpi-replied">—</h3>
++          </div>
++          <div class="card kpi">
++            <p class="kpi-label">Reply rate</p>
++            <h3 id="kpi-reply-rate">—</h3>
++          </div>
++          <div class="card kpi">
++            <p class="kpi-label">Recruiter screens</p>
++            <h3 id="kpi-screens">—</h3>
++          </div>
++        </div>
++
++        <div class="chart-grid">
++          <div class="card chart-card">
++            <h3>Contacted vs. replied</h3>
++            <canvas id="sourcing-line" aria-label="Sourcing line chart" role="img"></canvas>
++          </div>
++          <div class="card chart-card">
++            <h3>Recruiter screens</h3>
++            <canvas id="sourcing-bar" aria-label="Sourcing bar chart" role="img"></canvas>
++          </div>
++        </div>
++      </section>
++
++      <section id="hires" class="page">
++        <header class="page-header">
++          <div>
++            <h2>Hires &amp; KPIs</h2>
++            <p class="subtext">Hires list with time-to-hire metrics.</p>
++          </div>
++        </header>
++
++        <div class="kpi-grid">
++          <div class="card kpi">
++            <p class="kpi-label">Total hires</p>
++            <h3 id="kpi-total-hires">—</h3>
++          </div>
++          <div class="card kpi">
++            <p class="kpi-label">Avg TTH</p>
++            <h3 id="kpi-avg-tth">—</h3>
++          </div>
++          <div class="card kpi">
++            <p class="kpi-label">Avg TTF</p>
++            <h3 id="kpi-avg-ttf">—</h3>
++          </div>
++          <div class="card kpi">
++            <p class="kpi-label">Avg Days in Process</p>
++            <h3 id="kpi-avg-dip">—</h3>
++          </div>
++        </div>
++
++        <div class="chart-grid">
++          <div class="card chart-card">
++            <h3>Hires per role</h3>
++            <canvas id="hires-bar" aria-label="Hires per role" role="img"></canvas>
++          </div>
++        </div>
++
++        <div class="card table-card">
++          <div class="table-header">
++            <h3>Hire details</h3>
++          </div>
++          <div class="table-wrap">
++            <table>
++              <thead>
++                <tr>
++                  <th>Role</th>
++                  <th>First name</th>
++                  <th>Last name</th>
++                  <th>Source</th>
++                  <th>Salary</th>
++                  <th>Live date</th>
++                  <th>1st contact</th>
++                  <th>Signature date</th>
++                  <th>Start date</th>
++                  <th>TTH</th>
++                  <th>TTF</th>
++                  <th>Days in process</th>
++                </tr>
++              </thead>
++              <tbody id="hires-table"></tbody>
++            </table>
++          </div>
++        </div>
++      </section>
++    </main>
++  </div>
++
++  <script src="app.js"></script>
++</body>
++</html>
+ 
+EOF
+)
