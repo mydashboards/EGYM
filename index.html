@@ -31,13 +31,17 @@
       <button class="tab active" data-tab="overview" role="tab" aria-selected="true">Overview</button>
       <button class="tab" data-tab="pipeline" role="tab" aria-selected="false">Pipeline</button>
       <button class="tab" data-tab="sourcing" role="tab" aria-selected="false">Sourcing</button>
-      <button class="tab" data-tab="hires" role="tab" aria-selected="false">Hires & KPIs</button>
+      <button class="tab" data-tab="hires" role="tab" aria-selected="false">Hires &amp; KPIs</button>
     </nav>
 
     <section id="overview" class="panel active" role="tabpanel">
       <div class="card">
-        <h2>Overview</h2>
-        <p class="muted">Current role status and quick summary.</p>
+        <div class="card-header">
+          <div>
+            <h2>Overview</h2>
+            <p class="muted">Current role status and quick summary.</p>
+          </div>
+        </div>
 
         <div class="cards" id="overviewCards">
           <!-- filled by JS -->
@@ -67,17 +71,34 @@
 
     <section id="pipeline" class="panel" role="tabpanel">
       <div class="card">
-        <h2>Pipeline Health</h2>
-        <p class="muted">Health is computed from last weeks’ funnel conversions vs role targets.</p>
+        <div class="card-header">
+          <div>
+            <h2>Pipeline Health</h2>
+            <p class="muted">Health is computed from the selected week and lookback targets.</p>
+          </div>
+          <div class="controls">
+            <label class="field">
+              <span class="label">Week</span>
+              <select id="pipelineWeekSelect" class="select"></select>
+            </label>
+          </div>
+        </div>
 
         <div class="tablewrap">
           <table>
             <thead>
               <tr>
                 <th>Role</th>
+                <th>Sourced</th>
+                <th>Reviewed</th>
+                <th>Step1</th>
+                <th>Tech Light</th>
+                <th>Tech IV</th>
+                <th>Final</th>
+                <th>Offer</th>
+                <th>Hired</th>
                 <th>Health</th>
                 <th>Bottleneck</th>
-                <th>Lookback</th>
               </tr>
             </thead>
             <tbody id="pipelineTable"></tbody>
@@ -90,17 +111,74 @@
 
     <section id="sourcing" class="panel" role="tabpanel">
       <div class="card">
-        <h2>Sourcing</h2>
-        <p class="muted">Coming next: outreach, replies and screen conversions by week.</p>
-        <div class="placeholder">We’ll wire <code>sourcing_data</code> here next.</div>
+        <div class="card-header">
+          <div>
+            <h2>Sourcing</h2>
+            <p class="muted">Weekly outreach and recruiter screens by role.</p>
+          </div>
+          <div class="controls">
+            <label class="field">
+              <span class="label">Week</span>
+              <select id="sourcingWeekSelect" class="select"></select>
+            </label>
+          </div>
+        </div>
+
+        <div class="cards" id="sourcingSummary"></div>
+
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Role</th>
+                <th>Contacted</th>
+                <th>Replied</th>
+                <th>Recruiter Screen</th>
+                <th>Conv. Rate</th>
+              </tr>
+            </thead>
+            <tbody id="sourcingTable"></tbody>
+          </table>
+        </div>
+
+        <div id="sourcingError" class="error hidden"></div>
       </div>
     </section>
 
     <section id="hires" class="panel" role="tabpanel">
       <div class="card">
-        <h2>Hires & KPIs</h2>
-        <p class="muted">Coming next: TTH / TTF / Offer acceptance and hires.</p>
-        <div class="placeholder">We’ll wire <code>hired_data</code> here next.</div>
+        <div class="card-header">
+          <div>
+            <h2>Hires &amp; KPIs</h2>
+            <p class="muted">All-time hiring KPIs and individual hires.</p>
+          </div>
+        </div>
+
+        <div class="cards" id="hiresKpis"></div>
+
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Role</th>
+                <th>First Name</th>
+                <th>Last Name</th>
+                <th>Source</th>
+                <th>Salary</th>
+                <th>Live Date</th>
+                <th>1st Contact</th>
+                <th>Signature Date</th>
+                <th>Start Date</th>
+                <th>TTH</th>
+                <th>TTF</th>
+                <th>Days in Process</th>
+              </tr>
+            </thead>
+            <tbody id="hiresTable"></tbody>
+          </table>
+        </div>
+
+        <div id="hiresError" class="error hidden"></div>
       </div>
     </section>
   </main>
