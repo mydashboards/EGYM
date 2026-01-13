@@ -2,24 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>EGYM Recruiting Dashboard</title>
+  <title>Recruiting Dashboard – EGYM</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- Font -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-  <!-- Styles -->
   <link rel="stylesheet" href="styles.css" />
 </head>
-
 <body>
   <header class="header">
-    <div class="header-inner">
-      <h1>Recruiting Dashboard</h1>
-      <span class="badge">EGYM</span>
-    </div>
+    <h1>Recruiting Dashboard <span class="badge">EGYM</span></h1>
   </header>
 
   <nav class="tabs">
@@ -29,41 +19,27 @@
     <button class="tab" data-tab="hires">Hires & KPIs</button>
   </nav>
 
-  <main class="container">
-
-    <!-- OVERVIEW -->
+  <main class="content">
     <section id="overview" class="tab-content active">
       <h2>Overview</h2>
-      <p class="subtitle">Current role status and pipeline snapshot.</p>
-      <div id="overview-table"></div>
+      <p>Current role status and pipeline snapshot.</p>
     </section>
 
-    <!-- PIPELINE -->
     <section id="pipeline" class="tab-content">
-      <h2>Pipeline (Weekly)</h2>
-      <p class="subtitle">Weekly pipeline health per role.</p>
-      <div id="pipeline-table"></div>
+      <h2>Pipeline</h2>
+      <p>Weekly pipeline health by role.</p>
     </section>
 
-    <!-- SOURCING -->
     <section id="sourcing" class="tab-content">
       <h2>Sourcing</h2>
-      <p class="subtitle">Outreach → Reply → Recruiter Screen.</p>
-      <div id="sourcing-table"></div>
+      <p>Weekly sourcing KPIs.</p>
     </section>
 
-    <!-- HIRES -->
     <section id="hires" class="tab-content">
       <h2>Hires & KPIs</h2>
-      <p class="subtitle">Time-to-hire and conversion KPIs.</p>
-      <div id="hires-table"></div>
+      <p>Time to hire, time to fill and hiring efficiency.</p>
     </section>
-
   </main>
-
-  <footer class="footer">
-    Last updated automatically from Google Sheets
-  </footer>
 
   <script src="app.js"></script>
 </body>
