@@ -2,42 +2,106 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Recruiting Dashboard – EGYM</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Recruiting Dashboard – EGYM</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="header">
-    <h1>Recruiting Dashboard <span class="badge">EGYM</span></h1>
+  <header class="topbar">
+    <div class="container">
+      <div class="brand">
+        <div class="brand-title">Recruiting Dashboard</div>
+        <span class="pill">EGYM</span>
+      </div>
+
+      <div class="meta">
+        <span id="lastUpdated" class="muted">Last updated: —</span>
+        <button id="refreshBtn" class="btn">Refresh</button>
+      </div>
+    </div>
   </header>
 
-  <nav class="tabs">
-    <button class="tab active" data-tab="overview">Overview</button>
-    <button class="tab" data-tab="pipeline">Pipeline</button>
-    <button class="tab" data-tab="sourcing">Sourcing</button>
-    <button class="tab" data-tab="hires">Hires & KPIs</button>
-  </nav>
+  <main class="container">
+    <nav class="tabs" role="tablist" aria-label="Dashboard pages">
+      <button class="tab active" data-tab="overview" role="tab" aria-selected="true">Overview</button>
+      <button class="tab" data-tab="pipeline" role="tab" aria-selected="false">Pipeline</button>
+      <button class="tab" data-tab="sourcing" role="tab" aria-selected="false">Sourcing</button>
+      <button class="tab" data-tab="hires" role="tab" aria-selected="false">Hires & KPIs</button>
+    </nav>
 
-  <main class="content">
-    <section id="overview" class="tab-content active">
-      <h2>Overview</h2>
-      <p>Current role status and pipeline snapshot.</p>
+    <section id="overview" class="panel active" role="tabpanel">
+      <div class="card">
+        <h2>Overview</h2>
+        <p class="muted">Current role status and quick summary.</p>
+
+        <div class="cards" id="overviewCards">
+          <!-- filled by JS -->
+        </div>
+
+        <div class="spacer"></div>
+
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Location</th>
+                <th>Openings</th>
+                <th>Owner</th>
+                <th>Health</th>
+              </tr>
+            </thead>
+            <tbody id="overviewTable"></tbody>
+          </table>
+        </div>
+
+        <div id="overviewError" class="error hidden"></div>
+      </div>
     </section>
 
-    <section id="pipeline" class="tab-content">
-      <h2>Pipeline</h2>
-      <p>Weekly pipeline health by role.</p>
+    <section id="pipeline" class="panel" role="tabpanel">
+      <div class="card">
+        <h2>Pipeline Health</h2>
+        <p class="muted">Health is computed from last weeks’ funnel conversions vs role targets.</p>
+
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Role</th>
+                <th>Health</th>
+                <th>Bottleneck</th>
+                <th>Lookback</th>
+              </tr>
+            </thead>
+            <tbody id="pipelineTable"></tbody>
+          </table>
+        </div>
+
+        <div id="pipelineError" class="error hidden"></div>
+      </div>
     </section>
 
-    <section id="sourcing" class="tab-content">
-      <h2>Sourcing</h2>
-      <p>Weekly sourcing KPIs.</p>
+    <section id="sourcing" class="panel" role="tabpanel">
+      <div class="card">
+        <h2>Sourcing</h2>
+        <p class="muted">Coming next: outreach, replies and screen conversions by week.</p>
+        <div class="placeholder">We’ll wire <code>sourcing_data</code> here next.</div>
+      </div>
     </section>
 
-    <section id="hires" class="tab-content">
-      <h2>Hires & KPIs</h2>
-      <p>Time to hire, time to fill and hiring efficiency.</p>
+    <section id="hires" class="panel" role="tabpanel">
+      <div class="card">
+        <h2>Hires & KPIs</h2>
+        <p class="muted">Coming next: TTH / TTF / Offer acceptance and hires.</p>
+        <div class="placeholder">We’ll wire <code>hired_data</code> here next.</div>
+      </div>
     </section>
   </main>
 
