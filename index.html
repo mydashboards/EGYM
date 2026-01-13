@@ -38,7 +38,7 @@
       <div class="card">
         <div class="card-header">
           <div>
-            <h2>Overview</h2>
+            <h2 class="title"><span class="health-icon" aria-hidden="true"></span>Overview</h2>
             <p class="muted">Current role status and quick summary.</p>
           </div>
         </div>
@@ -46,6 +46,8 @@
         <div class="cards" id="overviewCards">
           <!-- filled by JS -->
         </div>
+
+        <div class="health-summary" id="overviewHealthSummary"></div>
 
         <div class="spacer"></div>
 
@@ -74,7 +76,7 @@
         <div class="card-header">
           <div>
             <h2>Pipeline Health</h2>
-            <p class="muted">Health is computed from the selected week and lookback targets.</p>
+            <p class="muted">Health is computed from the selected week and role targets.</p>
           </div>
           <div class="controls">
             <label class="field">
