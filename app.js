@@ -145,7 +145,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     html += "</tbody></table>";
     document.getElementById("pipeline").innerHTML = html;
-    document.getElementById("overview").innerHTML = html;
   }
 
   /* -------------------- INIT -------------------- */
