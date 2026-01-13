@@ -15,6 +15,8 @@ document.addEventListener("DOMContentLoaded", () => {
     healthy: 4 / 6
   };
 
+  const HIRES_PASSWORD = "EGYM2026";
+
   /* ---------------- HELPERS ---------------- */
 
   const $ = (id) => document.getElementById(id);
@@ -90,6 +92,13 @@ document.addEventListener("DOMContentLoaded", () => {
     return `<span class="badge"><span class="dot neutral"></span>New</span>`;
   }
 
+  function healthDotHTML(health) {
+    if (health === "healthy") return `<span class="status-dot good" aria-label="Healthy"></span>`;
+    if (health === "warning") return `<span class="status-dot warn" aria-label="At risk"></span>`;
+    if (health === "critical") return `<span class="status-dot bad" aria-label="Critical"></span>`;
+    return `<span class="status-dot neutral" aria-label="New"></span>`;
+  }
+
   function fmtDate(d = new Date()) {
     return d.toLocaleString(undefined, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
   }
@@ -143,9 +152,18 @@ document.addEventListener("DOMContentLoaded", () => {
   function initTabs() {
     const tabs = document.querySelectorAll(".tab");
     const panels = document.querySelectorAll(".panel");
+    let hiresUnlocked = false;
 
     tabs.forEach(btn => {
       btn.addEventListener("click", () => {
+        if (btn.dataset.tab === "hires" && !hiresUnlocked) {
+          const input = window.prompt("Enter password to access Hires & KPIs:");
+          if (input !== HIRES_PASSWORD) {
+            return;
+          }
+          hiresUnlocked = true;
+        }
+
         tabs.forEach(t => t.classList.remove("active"));
         panels.forEach(p => p.classList.remove("active"));
 
@@ -254,7 +272,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <td>${formatNumber(num(weekRow.final))}</td>
         <td>${formatNumber(num(weekRow.offer))}</td>
         <td>${formatNumber(num(weekRow.hired))}</td>
-        <td>${badgeHTML(result.health)}</td>
+        <td>${healthDotHTML(result.health)}</td>
         <td>${result.reason || "—"}</td>
       `;
       tbody.appendChild(tr);
@@ -298,7 +316,22 @@ document.addEventListener("DOMContentLoaded", () => {
       <div class="kpi"><div class="label">Open Roles</div><div class="value">${openRoles}</div></div>
       <div class="kpi"><div class="label">Filled Roles</div><div class="value">${filledRoles}</div></div>
       <div class="kpi"><div class="label">Total Openings</div><div class="value">${totalOpenings}</div></div>
-      <div class="kpi"><div class="label">Health (🟢/🟡/🔴)</div><div class="value">${healthCounts.healthy}/${healthCounts.warning}/${healthCounts.critical}</div></div>
+    `;
+
+    const healthSummary = $("overviewHealthSummary");
+    healthSummary.innerHTML = `
+      <div class="health-badge ${healthCounts.healthy ? "" : "zero"}">
+        <span class="health-dot good"></span>
+        <span>${healthCounts.healthy} Healthy roles</span>
+      </div>
+      <div class="health-badge ${healthCounts.warning ? "" : "zero"}">
+        <span class="health-dot warn"></span>
+        <span>${healthCounts.warning} At risk roles</span>
+      </div>
+      <div class="health-badge ${healthCounts.critical ? "" : "zero"}">
+        <span class="health-dot bad"></span>
+        <span>${healthCounts.critical} Critical roles</span>
+      </div>
     `;
 
     // Overview table
