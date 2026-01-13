@@ -9,6 +9,14 @@ document.addEventListener("DOMContentLoaded", () => {
     targets: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1524950504&single=true&output=csv"
   };
 
+  const DATA_SOURCE_LABELS = {
+    overview: "overview_data",
+    pipeline: "pipeline_weekly",
+    sourcing: "sourcing_data",
+    hired: "hired_data",
+    targets: "role_targets"
+  };
+
   const HEALTH_THRESHOLDS = {
     critical: 1 / 6,
     warning: 2 / 6,
@@ -20,6 +28,30 @@ document.addEventListener("DOMContentLoaded", () => {
   /* ---------------- HELPERS ---------------- */
 
   const $ = (id) => document.getElementById(id);
+  const dataErrors = new Map();
+
+  function updateDataErrorBanner() {
+    const banner = $("dataErrors");
+    if (!banner) return;
+    if (dataErrors.size === 0) {
+      banner.classList.add("hidden");
+      banner.innerHTML = "";
+      return;
+    }
+    banner.classList.remove("hidden");
+    banner.innerHTML = Array.from(dataErrors.values())
+      .map(message => `<div>${message}</div>`)
+      .join("");
+  }
+
+  function setDataError(key, message) {
+    if (message) {
+      dataErrors.set(key, message);
+    } else {
+      dataErrors.delete(key);
+    }
+    updateDataErrorBanner();
+  }
 
   function setError(id, msg) {
     const el = $(id);
@@ -34,8 +66,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function parseCSV(text) {
-    // Simple CSV parser (works for your sheets: no embedded commas)
-    const lines = text.trim().split("\n");
+    const trimmed = text.trim();
+    if (!trimmed) return [];
+    const lines = trimmed.split("\n");
     const headers = lines.shift().split(",").map(h => h.trim());
     return lines.map(line => {
       const cells = line.split(",");
@@ -45,11 +78,29 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  async function loadCSV(url) {
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) throw new Error(`Failed to load CSV (${res.status})`);
-    const text = await res.text();
-    return parseCSV(text);
+  async function loadCSV(key, url) {
+    const cacheBuster = `cb=${Date.now()}`;
+    const joiner = url.includes("?") ? "&" : "?";
+    const fullUrl = `${url}${joiner}${cacheBuster}`;
+
+    try {
+      const res = await fetch(fullUrl, { cache: "no-store" });
+      if (!res.ok) {
+        console.error(`CSV fetch failed (${key})`, { url: fullUrl, status: res.status });
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const text = await res.text();
+      const rows = parseCSV(text);
+      if (!rows.length) {
+        console.error(`CSV parse failed (${key})`, { url: fullUrl, status: res.status });
+        throw new Error("Empty or invalid CSV");
+      }
+      setDataError(key, "");
+      return rows;
+    } catch (error) {
+      setDataError(key, `Data source unavailable: ${DATA_SOURCE_LABELS[key]}`);
+      throw error;
+    }
   }
 
   const num = v => Number(String(v).replace(",", ".")) || 0;
@@ -87,7 +138,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function badgeHTML(health) {
     if (health === "healthy") return `<span class="badge"><span class="dot good"></span>Healthy</span>`;
-    if (health === "warning") return `<span class="badge"><span class="dot warn"></span>Warning</span>`;
+    if (health === "warning") return `<span class="badge"><span class="dot warn"></span>At risk</span>`;
     if (health === "critical") return `<span class="badge"><span class="dot bad"></span>Critical</span>`;
     return `<span class="badge"><span class="dot neutral"></span>New</span>`;
   }
@@ -149,9 +200,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /* ---------------- TABS (always keep clickable) ---------------- */
 
-  function initTabs() {
+  function activateTab(tabId) {
     const tabs = document.querySelectorAll(".tab");
     const panels = document.querySelectorAll(".panel");
+    const targetId = tabId || "overview";
+
+    tabs.forEach(t => {
+      const isActive = t.dataset.tab === targetId;
+      t.classList.toggle("active", isActive);
+      t.setAttribute("aria-selected", String(isActive));
+    });
+
+    panels.forEach(p => {
+      p.classList.toggle("active", p.id === targetId);
+    });
+  }
+
+  function initTabs() {
+    const tabs = document.querySelectorAll(".tab");
     let hiresUnlocked = false;
 
     tabs.forEach(btn => {
@@ -163,15 +229,19 @@ document.addEventListener("DOMContentLoaded", () => {
           }
           hiresUnlocked = true;
         }
-
-        tabs.forEach(t => t.classList.remove("active"));
-        panels.forEach(p => p.classList.remove("active"));
-
-        btn.classList.add("active");
-        const id = btn.dataset.tab;
-        document.getElementById(id).classList.add("active");
+        const tabId = btn.dataset.tab;
+        window.location.hash = tabId;
+        activateTab(tabId);
       });
     });
+
+    window.addEventListener("hashchange", () => {
+      const tabId = window.location.hash.replace("#", "");
+      activateTab(tabId || "overview");
+    });
+
+    const initialTab = window.location.hash.replace("#", "") || "overview";
+    activateTab(initialTab);
   }
 
   /* ---------------- HEALTH LOGIC ---------------- */
@@ -464,11 +534,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
       const [overviewRows, pipelineRows, sourcingRows, hiredRows, targets] = await Promise.all([
-        loadCSV(CSV.overview),
-        loadCSV(CSV.pipeline),
-        loadCSV(CSV.sourcing),
-        loadCSV(CSV.hired),
-        loadCSV(CSV.targets)
+        loadCSV("overview", CSV.overview),
+        loadCSV("pipeline", CSV.pipeline),
+        loadCSV("sourcing", CSV.sourcing),
+        loadCSV("hired", CSV.hired),
+        loadCSV("targets", CSV.targets)
       ]);
 
       const pipelineWeeks = getWeekOptions(pipelineRows);
