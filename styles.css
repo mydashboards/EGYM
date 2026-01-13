@@ -116,6 +116,42 @@ body{
   box-shadow:0 1px 0 rgba(0,0,0,0.02);
 }
 
+.card-header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+}
+
+.controls{
+  display:flex;
+  gap:12px;
+  align-items:center;
+}
+
+.field{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  font-weight:600;
+  color:var(--muted);
+  font-size:12px;
+  letter-spacing:0.04em;
+  text-transform:uppercase;
+}
+
+.select{
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:10px 12px;
+  font-weight:600;
+  font-size:14px;
+  background:var(--card);
+  color:var(--text);
+  min-width:180px;
+}
+
 h2{
   margin:0 0 8px 0;
   font-size:32px;
@@ -141,6 +177,7 @@ p{margin:0}
 }
 .kpi .label{color:var(--muted); font-weight:700; font-size:12px}
 .kpi .value{font-size:26px; font-weight:800; margin-top:6px}
+.kpi .sub{font-size:12px; color:var(--muted); margin-top:6px}
 
 .tablewrap{
   overflow:auto;
@@ -152,7 +189,7 @@ p{margin:0}
 table{
   width:100%;
   border-collapse:collapse;
-  min-width:740px;
+  min-width:900px;
 }
 th,td{
   padding:12px 14px;
@@ -212,4 +249,5 @@ tr:last-child td{border-bottom:none;}
 @media (max-width: 520px){
   .cards{grid-template-columns:1fr;}
   .brand-title{font-size:22px}
+  .select{min-width:150px;}
 }
