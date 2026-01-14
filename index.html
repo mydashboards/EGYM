@@ -48,10 +48,7 @@
           </div>
         </div>
 
-        <div class="cards" id="overviewCards">
-          <!-- filled by JS -->
-        </div>
-
+        <div class="cards" id="overviewCards"></div>
         <div class="health-summary" id="overviewHealthSummary"></div>
 
         <div class="spacer"></div>
@@ -80,8 +77,8 @@
       <div class="card">
         <div class="card-header">
           <div>
-            <h2>Pipeline Health</h2>
-            <p class="muted">Health is computed from the selected week and role targets.</p>
+            <h2>Pipeline</h2>
+            <p class="muted">Current pipeline by end of week.</p>
           </div>
           <div class="controls">
             <label class="field">
@@ -96,14 +93,6 @@
             <thead>
               <tr>
                 <th>Role</th>
-                <th>Sourced</th>
-                <th>Reviewed</th>
-                <th>Step1</th>
-                <th>Tech Light</th>
-                <th>Tech IV</th>
-                <th>Final</th>
-                <th>Offer</th>
-                <th>Hired</th>
                 <th>Health</th>
               </tr>
             </thead>
@@ -120,7 +109,7 @@
         <div class="card-header">
           <div>
             <h2>Activity</h2>
-            <p class="muted">Weekly stage activity from pipeline flow data.</p>
+            <p class="muted">Weekly stage activity.</p>
           </div>
           <div class="controls">
             <label class="field">
@@ -130,17 +119,21 @@
           </div>
         </div>
 
+        <!-- NEW: Summary cards (like Sourcing) -->
+        <div class="cards" id="activitySummary"></div>
+
         <div class="tablewrap">
           <table>
             <thead id="activityHead">
               <tr>
                 <th>Role</th>
-                <th>Health</th>
               </tr>
             </thead>
             <tbody id="activityTable"></tbody>
           </table>
         </div>
+
+        <div id="activityError" class="error hidden"></div>
       </div>
     </section>
 
