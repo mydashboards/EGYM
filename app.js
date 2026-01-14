@@ -697,6 +697,21 @@ document.addEventListener("DOMContentLoaded", () => {
     renderOverview(state.overviewRows, state.pipelineRows, state.targets, state.selectedPipelineWeek);
   }
 
+  function normalizeTargets(rows) {
+    return rows.map(row => ({
+      ...row,
+      role: getField(row, ["role"]) || row.role || "",
+      lookback_weeks: getField(row, ["lookback_weeks"]) || row.lookback_weeks || "",
+      min_prev_stage_n: getField(row, ["min_prev_stage_n"]) || row.min_prev_stage_n || "",
+      step1_from_sourced_exp: getField(row, ["step1_from_sourced_exp", "screen_to_step1_exp"]) || row.step1_from_sourced_exp || "",
+      techlight_from_step1_exp: getField(row, ["techlight_from_step1_exp", "step1_to_tech_exp"]) || row.techlight_from_step1_exp || "",
+      techiv_from_techlight_exp: getField(row, ["techiv_from_techlight_exp", "step1_to_tech_exp"]) || row.techiv_from_techlight_exp || "",
+      final_from_techiv_exp: getField(row, ["final_from_techiv_exp", "tech_to_final_exp"]) || row.final_from_techiv_exp || "",
+      offer_from_final_exp: getField(row, ["offer_from_final_exp", "final_to_offer_exp"]) || row.offer_from_final_exp || "",
+      hired_from_offer_exp: getField(row, ["hired_from_offer_exp", "offer_to_hired_exp"]) || row.hired_from_offer_exp || ""
+    }));
+  }
+
   /* ---------------- MAIN LOAD ---------------- */
 
   async function refreshAll() {
@@ -718,7 +733,7 @@ document.addEventListener("DOMContentLoaded", () => {
       state.pipelineRows = pipelineRows;
       state.sourcingRows = sourcingRows;
       state.hiredRows = hiredRows;
-      state.targets = targets;
+      state.targets = normalizeTargets(targets);
 
       syncWeekSelections();
       renderFromState();
