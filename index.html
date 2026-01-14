@@ -39,12 +39,13 @@
       <button class="tab" data-tab="hires" role="tab" aria-selected="false">Hires &amp; KPIs</button>
     </nav>
 
+    <!-- OVERVIEW -->
     <section id="overview" class="panel active" role="tabpanel">
       <div class="card">
         <div class="card-header">
           <div>
             <h2 class="title"><span class="health-icon" aria-hidden="true"></span>Overview</h2>
-            <p class="muted">Current role status</p>
+            <p class="muted">Current role status.</p>
           </div>
         </div>
 
@@ -73,17 +74,28 @@
       </div>
     </section>
 
+    <!-- PIPELINE (inventory snapshot) -->
     <section id="pipeline" class="panel" role="tabpanel">
       <div class="card">
         <div class="card-header">
           <div>
             <h2>Pipeline</h2>
-            <p class="muted">Current pipeline by end of week</p>
+            <p class="muted">Current pipeline by end of week.</p>
           </div>
           <div class="controls">
             <label class="field">
               <span class="label">Week</span>
               <select id="pipelineWeekSelect" class="select"></select>
+            </label>
+
+            <label class="field">
+              <span class="label">Role</span>
+              <select id="pipelineRoleSelect" class="select"></select>
+            </label>
+
+            <label class="field">
+              <span class="label">Recruiter</span>
+              <select id="pipelineRecruiterSelect" class="select"></select>
             </label>
           </div>
         </div>
@@ -91,8 +103,15 @@
         <div class="tablewrap">
           <table>
             <thead>
-              <tr>
+              <tr id="pipelineHeadRow">
                 <th>Role</th>
+                <th>Sourced</th>
+                <th>Step1</th>
+                <th>Tech Light</th>
+                <th>Tech IV</th>
+                <th>Final</th>
+                <th>Offer</th>
+                <th>Hired</th>
                 <th>Health</th>
               </tr>
             </thead>
@@ -104,22 +123,32 @@
       </div>
     </section>
 
+    <!-- ACTIVITY (weekly flow) -->
     <section id="activity" class="panel" role="tabpanel">
       <div class="card">
         <div class="card-header">
           <div>
             <h2>Activity</h2>
-            <p class="muted">Weekly stage activity</p>
+            <p class="muted">Weekly stage activity.</p>
           </div>
           <div class="controls">
             <label class="field">
               <span class="label">Week</span>
               <select id="activityWeekSelect" class="select"></select>
             </label>
+
+            <label class="field">
+              <span class="label">Role</span>
+              <select id="activityRoleSelect" class="select"></select>
+            </label>
+
+            <label class="field">
+              <span class="label">Recruiter</span>
+              <select id="activityRecruiterSelect" class="select"></select>
+            </label>
           </div>
         </div>
 
-        <!-- NEW: Summary cards (like Sourcing) -->
         <div class="cards" id="activitySummary"></div>
 
         <div class="tablewrap">
@@ -127,6 +156,13 @@
             <thead id="activityHead">
               <tr>
                 <th>Role</th>
+                <th>Sourced</th>
+                <th>Step1</th>
+                <th>Tech Light</th>
+                <th>Tech IV</th>
+                <th>Final</th>
+                <th>Offer</th>
+                <th>Hired</th>
               </tr>
             </thead>
             <tbody id="activityTable"></tbody>
@@ -137,12 +173,13 @@
       </div>
     </section>
 
+    <!-- SOURCING -->
     <section id="sourcing" class="panel" role="tabpanel">
       <div class="card">
         <div class="card-header">
           <div>
             <h2>Sourcing</h2>
-            <p class="muted">Weekly sourcing outreach by role</p>
+            <p class="muted">Weekly outreach and recruiter screens by role.</p>
           </div>
           <div class="controls">
             <label class="field">
@@ -173,12 +210,13 @@
       </div>
     </section>
 
+    <!-- HIRES -->
     <section id="hires" class="panel" role="tabpanel">
       <div class="card">
         <div class="card-header">
           <div>
             <h2>Hires &amp; KPIs</h2>
-            <p class="muted">All-time hiring KPIs and individual hires</p>
+            <p class="muted">All-time hiring KPIs and individual hires.</p>
           </div>
         </div>
 
