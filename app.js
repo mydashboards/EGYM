@@ -76,6 +76,14 @@ document.addEventListener("DOMContentLoaded", () => {
     el.textContent = msg;
   }
 
+  function normalizeHeader(value) {
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/[\s\-]+/g, "_")
+      .replace(/[^\w]/g, "");
+  }
+
   function parseCSV(text) {
     const cleaned = text.replace(/^\uFEFF/, "");
     const trimmed = cleaned.trim();
@@ -134,7 +142,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const headerRow = rows.shift() || [];
-    const headers = headerRow.map(header => header.trim());
+    const headers = headerRow.map(header => normalizeHeader(header));
     const mappedRows = rows.map(line => {
       const obj = {};
       headers.forEach((header, index) => {
@@ -198,6 +206,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const getField = (row, keys) => {
     for (const key of keys) {
+      const normalizedKey = normalizeHeader(String(key));
+      if (row[normalizedKey] !== undefined && row[normalizedKey] !== null && String(row[normalizedKey]).trim() !== "") {
+        return row[normalizedKey];
+      }
       if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== "") {
         return row[key];
       }
