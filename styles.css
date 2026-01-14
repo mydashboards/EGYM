@@ -185,3 +185,39 @@ tbody tr:hover td{background:rgba(255,255,255,.03)}
   background:rgba(255,77,79,.12);
   border:1px solid rgba(255,77,79,.35);
 }
+
+/* ------------------------------
+   Activity KPI grid overrides
+   Goal: 7 KPI cards fit in 2 rows (4 + 3)
+--------------------------------- */
+
+#activitySummary.cards{
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:10px;
+}
+
+/* slightly more compact cards so they don't feel cramped */
+#activitySummary .kpi{
+  padding:12px 12px;
+  border-radius:16px;
+}
+
+#activitySummary .kpi .label{
+  font-size:11px;
+  letter-spacing:.35px;
+}
+
+#activitySummary .kpi .value{
+  font-size:26px;
+}
+
+/* responsive fallbacks */
+@media (max-width: 980px){
+  #activitySummary.cards{grid-template-columns:repeat(3,minmax(0,1fr));}
+}
+@media (max-width: 720px){
+  #activitySummary.cards{grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+@media (max-width: 420px){
+  #activitySummary.cards{grid-template-columns:1fr;}
+}
