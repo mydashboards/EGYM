@@ -207,7 +207,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   function getRecruiter(row) {
-    const v = getField(row, ["recruiter", "owner", "pplwise_tap", "pplwise_sourcer", "tap", "responsible"]);
+    const v = getField(row, ["recruiter", "Recruiter"]);
     return String(v || "").trim();
   }
 
@@ -473,7 +473,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     roles.forEach(role => {
       const rows = byRole[role] || [];
-      // for pipeline_inventory, we expect one row per role/week, but make robust:
       const sums = sumStageCounts(rows, PIPELINE_STAGES);
 
       const target = targetByRole[role];
@@ -685,14 +684,14 @@ document.addEventListener("DOMContentLoaded", () => {
     tbody.innerHTML = "";
 
     overviewRows.forEach(r => {
-      const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap"]);
+      const recruiter = getRecruiter(r); // <-- now recruiter, not owner
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${r.role || ""}</td>
         <td>${r.status || ""}</td>
         <td>${r.location || ""}</td>
         <td>${r.openings || ""}</td>
-        <td>${owner || ""}</td>
+        <td>${recruiter || ""}</td>
         <td><span class="status-dot neutral"></span></td>
       `;
       tbody.appendChild(tr);
