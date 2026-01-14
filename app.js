@@ -24,6 +24,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const HIRES_PASSWORD = "EGYM2026";
 
+  const state = {
+    overviewRows: [],
+    pipelineRows: [],
+    sourcingRows: [],
+    hiredRows: [],
+    targets: [],
+    pipelineOptions: [],
+    sourcingOptions: [],
+    selectedPipelineWeek: "",
+    selectedSourcingWeek: ""
+  };
+
   /* ---------------- HELPERS ---------------- */
 
   const $ = (id) => document.getElementById(id);
@@ -65,17 +77,82 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function parseCSV(text) {
-    const trimmed = text.trim();
-    if (!trimmed) return [];
+    const cleaned = text.replace(/^\uFEFF/, "");
+    const trimmed = cleaned.trim();
+    if (!trimmed) return { headers: [], rows: [], isHtml: false };
     const lower = trimmed.toLowerCase();
-    if (lower.startsWith("<!doctype") || lower.startsWith("<html")) return [];
-    const lines = trimmed.split("\n");
-    const headers = lines.shift().split(",").map(h => h.trim());
-    return lines.map(line => {
-      const cells = line.split(",");
+    if (lower.startsWith("<!doctype") || lower.startsWith("<html")) {
+      return { headers: [], rows: [], isHtml: true };
+    }
+
+    const rows = [];
+    let current = [];
+    let field = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < cleaned.length; i += 1) {
+      const char = cleaned[i];
+      const next = cleaned[i + 1];
+
+      if (char === "\"") {
+        if (inQuotes && next === "\"") {
+          field += "\"";
+          i += 1;
+        } else {
+          inQuotes = !inQuotes;
+        }
+        continue;
+      }
+
+      if (char === "," && !inQuotes) {
+        current.push(field);
+        field = "";
+        continue;
+      }
+
+      if ((char === "\n" || char === "\r") && !inQuotes) {
+        if (char === "\r" && next === "\n") {
+          i += 1;
+        }
+        current.push(field);
+        if (current.some(value => value !== "")) {
+          rows.push(current);
+        }
+        current = [];
+        field = "";
+        continue;
+      }
+
+      field += char;
+    }
+
+    if (field.length || current.length) {
+      current.push(field);
+      if (current.some(value => value !== "")) {
+        rows.push(current);
+      }
+    }
+
+    const headerRow = rows.shift() || [];
+    const headers = headerRow.map(header => header.trim());
+    const mappedRows = rows.map(line => {
       const obj = {};
-      headers.forEach((h, i) => obj[h] = (cells[i] || "").trim());
+      headers.forEach((header, index) => {
+        obj[header] = (line[index] || "").trim();
+      });
       return obj;
+    });
+
+    return { headers, rows: mappedRows, isHtml: false };
+  }
+
+  function logLoadFailure({ key, url, status, text, error }) {
+    console.log("Data source failed", {
+      key,
+      url,
+      status,
+      snippet: (text || "").slice(0, 200),
+      error
     });
   }
 
@@ -92,20 +169,23 @@ document.addEventListener("DOMContentLoaded", () => {
       text = await res.text();
 
       if (!res.ok) {
-        console.log(`Fetch failed for ${key}`, { url: fullUrl, status, snippet: text.slice(0, 200) });
+        logLoadFailure({ key, url: fullUrl, status, text, error: new Error(`HTTP ${res.status}`) });
         throw new Error(`HTTP ${res.status}`);
       }
 
-      const rows = parseCSV(text);
-      if (!rows.length) {
-        console.log(`Parse failed for ${key}`, { url: fullUrl, status, snippet: text.slice(0, 200) });
+      const parsed = parseCSV(text);
+      if (parsed.isHtml || !parsed.headers.length) {
+        logLoadFailure({ key, url: fullUrl, status, text, error: new Error("Empty or invalid CSV") });
         throw new Error("Empty or invalid CSV");
       }
 
       setDataError(key, "");
-      return rows;
+      return parsed.rows;
     } catch (error) {
       setDataError(key, `Data source unavailable: ${DATA_SOURCE_LABELS[key]}`);
+      if (!text || status === "unknown") {
+        logLoadFailure({ key, url: fullUrl, status, text, error });
+      }
       throw error;
     }
   }
@@ -306,7 +386,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const recent = eligible.slice(-lookback);
 
     const sums = {};
-    ["sourced","step1","tech_light","tech_iv","final","offer","hired"].forEach(k => {
+    ["sourced", "step1", "tech_light", "tech_iv", "final", "offer", "hired"].forEach(k => {
       sums[k] = recent.reduce((s, r) => s + num(r[k]), 0);
     });
 
@@ -419,7 +499,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const filledRoles = overviewRows.filter(r => (r.status || "").toLowerCase() === "filled").length;
     const totalOpenings = overviewRows.reduce((s, r) => s + num(r.openings), 0);
 
-    const healthCounts = { healthy:0, warning:0, critical:0, new:0 };
+    const healthCounts = { healthy: 0, warning: 0, critical: 0, new: 0 };
     overviewRows.forEach(r => {
       const h = healthByRole[r.role] || "new";
       healthCounts[h] = (healthCounts[h] || 0) + 1;
@@ -539,8 +619,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <td>${getField(row, ["source", "Source"])}</td>
         <td>${getField(row, ["salary", "Salary"])}</td>
         <td>${getField(row, ["live_date", "Live Date", "live date"])}</td>
-        <td>${getField(row, ["1st_contact", "1st Contact", "first_contact", "first contact"])}
-        </td>
+        <td>${getField(row, ["1st_contact", "1st Contact", "first_contact", "first contact"])}</td>
         <td>${getField(row, ["signature_date", "Signature Date", "signature date"])}</td>
         <td>${getField(row, ["start_date", "Start Date", "start date"])}</td>
         <td>${tth !== null ? tth : "—"}</td>
@@ -575,6 +654,37 @@ document.addEventListener("DOMContentLoaded", () => {
     `;
   }
 
+  function syncWeekSelections() {
+    state.pipelineOptions = getWeekOptions(state.pipelineRows);
+    state.sourcingOptions = getWeekOptions(state.sourcingRows);
+
+    const pipelineSelect = $("pipelineWeekSelect");
+    const sourcingSelect = $("sourcingWeekSelect");
+
+    setSelectOptions(pipelineSelect, state.pipelineOptions);
+    setSelectOptions(sourcingSelect, state.sourcingOptions);
+
+    const latestPipelineWeek = getLatestWeekKey(state.pipelineRows) || (state.pipelineOptions[0] ? state.pipelineOptions[0].key : "");
+    const latestSourcingWeek = getLatestWeekKey(state.sourcingRows) || (state.sourcingOptions[0] ? state.sourcingOptions[0].key : "");
+
+    if (!state.selectedPipelineWeek || !state.pipelineOptions.some(opt => opt.key === state.selectedPipelineWeek)) {
+      state.selectedPipelineWeek = latestPipelineWeek;
+    }
+    if (!state.selectedSourcingWeek || !state.sourcingOptions.some(opt => opt.key === state.selectedSourcingWeek)) {
+      state.selectedSourcingWeek = latestSourcingWeek;
+    }
+
+    if (state.selectedPipelineWeek) pipelineSelect.value = state.selectedPipelineWeek;
+    if (state.selectedSourcingWeek) sourcingSelect.value = state.selectedSourcingWeek;
+  }
+
+  function renderFromState() {
+    renderPipeline(state.pipelineRows, state.targets, state.selectedPipelineWeek);
+    renderSourcing(state.sourcingRows, state.selectedSourcingWeek);
+    renderHires(state.hiredRows, state.pipelineRows);
+    renderOverview(state.overviewRows, state.pipelineRows, state.targets, state.selectedPipelineWeek);
+  }
+
   /* ---------------- MAIN LOAD ---------------- */
 
   async function refreshAll() {
@@ -592,25 +702,14 @@ document.addEventListener("DOMContentLoaded", () => {
         loadCSV("targets", CSV.targets)
       ]);
 
-      const pipelineOptions = getWeekOptions(pipelineRows);
-      const sourcingOptions = getWeekOptions(sourcingRows);
+      state.overviewRows = overviewRows;
+      state.pipelineRows = pipelineRows;
+      state.sourcingRows = sourcingRows;
+      state.hiredRows = hiredRows;
+      state.targets = targets;
 
-      setSelectOptions($("pipelineWeekSelect"), pipelineOptions);
-      setSelectOptions($("sourcingWeekSelect"), sourcingOptions);
-
-      const latestPipelineWeek = getLatestWeekKey(pipelineRows) || (pipelineOptions[0] ? pipelineOptions[0].key : "");
-      const latestSourcingWeek = getLatestWeekKey(sourcingRows) || (sourcingOptions[0] ? sourcingOptions[0].key : "");
-
-      if (latestPipelineWeek) $("pipelineWeekSelect").value = latestPipelineWeek;
-      if (latestSourcingWeek) $("sourcingWeekSelect").value = latestSourcingWeek;
-
-      const selectedPipelineWeek = $("pipelineWeekSelect").value || latestPipelineWeek;
-      const selectedSourcingWeek = $("sourcingWeekSelect").value || latestSourcingWeek;
-
-      renderPipeline(pipelineRows, targets, selectedPipelineWeek);
-      renderSourcing(sourcingRows, selectedSourcingWeek);
-      renderHires(hiredRows, pipelineRows);
-      renderOverview(overviewRows, pipelineRows, targets, selectedPipelineWeek);
+      syncWeekSelections();
+      renderFromState();
 
       $("lastUpdated").textContent = `Last updated: ${fmtDate()}`;
     } catch (e) {
@@ -622,13 +721,24 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function handlePipelineWeekChange() {
+    state.selectedPipelineWeek = $("pipelineWeekSelect").value;
+    renderPipeline(state.pipelineRows, state.targets, state.selectedPipelineWeek);
+    renderOverview(state.overviewRows, state.pipelineRows, state.targets, state.selectedPipelineWeek);
+  }
+
+  function handleSourcingWeekChange() {
+    state.selectedSourcingWeek = $("sourcingWeekSelect").value;
+    renderSourcing(state.sourcingRows, state.selectedSourcingWeek);
+  }
+
   /* ---------------- INIT ---------------- */
 
   initTabs();
 
   $("refreshBtn").addEventListener("click", refreshAll);
-  $("pipelineWeekSelect").addEventListener("change", refreshAll);
-  $("sourcingWeekSelect").addEventListener("change", refreshAll);
+  $("pipelineWeekSelect").addEventListener("change", handlePipelineWeekChange);
+  $("sourcingWeekSelect").addEventListener("change", handleSourcingWeekChange);
 
   refreshAll();
   setInterval(refreshAll, 60000);
