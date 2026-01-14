@@ -218,7 +218,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   function parseWeekStart(value) {
-    if (!value) return null;
+    see if (!value) return null;
     const date = new Date(`${value}T00:00:00`);
     return Number.isNaN(date.getTime()) ? null : date;
   }
@@ -279,6 +279,16 @@ document.addEventListener("DOMContentLoaded", () => {
     return `${year}-KW${String(kw).padStart(2, "0")}`;
   }
 
+  function getIsoWeekKey(date = new Date()) {
+    const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNumber = target.getUTCDay() || 7;
+    target.setUTCDate(target.getUTCDate() + 4 - dayNumber);
+    const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+    const weekNumber = Math.ceil(((target - yearStart) / 86400000 + 1) / 7);
+    const year = target.getUTCFullYear();
+    return `${year}-KW${String(weekNumber).padStart(2, "0")}`;
+  }
+
   function getLatestWeekKey(rows) {
     const years = rows.map(r => num(r.year)).filter(Boolean);
     if (!years.length) return "";
@@ -309,8 +319,7 @@ document.addEventListener("DOMContentLoaded", () => {
     options.forEach(optionValue => {
       const option = document.createElement("option");
       option.value = optionValue.key;
-      const weekLabel = optionValue.week_start ? ` (${formatWeekLabel(optionValue.week_start)})` : "";
-      option.textContent = `${optionValue.year} KW${String(optionValue.kw).padStart(2, "0")}${weekLabel}`;
+      option.textContent = `KW ${optionValue.kw}`;
       select.appendChild(option);
     });
     if (current && options.some(opt => opt.key === current)) {
@@ -676,14 +685,17 @@ document.addEventListener("DOMContentLoaded", () => {
     setSelectOptions(pipelineSelect, state.pipelineOptions);
     setSelectOptions(sourcingSelect, state.sourcingOptions);
 
+    const currentWeekKey = getIsoWeekKey();
     const latestPipelineWeek = getLatestWeekKey(state.pipelineRows) || (state.pipelineOptions[0] ? state.pipelineOptions[0].key : "");
     const latestSourcingWeek = getLatestWeekKey(state.sourcingRows) || (state.sourcingOptions[0] ? state.sourcingOptions[0].key : "");
+    const pipelineDefault = state.pipelineOptions.some(opt => opt.key === currentWeekKey) ? currentWeekKey : latestPipelineWeek;
+    const sourcingDefault = state.sourcingOptions.some(opt => opt.key === currentWeekKey) ? currentWeekKey : latestSourcingWeek;
 
     if (!state.selectedPipelineWeek || !state.pipelineOptions.some(opt => opt.key === state.selectedPipelineWeek)) {
-      state.selectedPipelineWeek = latestPipelineWeek;
+      state.selectedPipelineWeek = pipelineDefault;
     }
     if (!state.selectedSourcingWeek || !state.sourcingOptions.some(opt => opt.key === state.selectedSourcingWeek)) {
-      state.selectedSourcingWeek = latestSourcingWeek;
+      state.selectedSourcingWeek = sourcingDefault;
     }
 
     if (state.selectedPipelineWeek) pipelineSelect.value = state.selectedPipelineWeek;
