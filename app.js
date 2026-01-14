@@ -218,7 +218,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   function parseWeekStart(value) {
-    see if (!value) return null;
+    if (!value) return null;
     const date = new Date(`${value}T00:00:00`);
     return Number.isNaN(date.getTime()) ? null : date;
   }
