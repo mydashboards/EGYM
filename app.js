@@ -4,6 +4,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const CSV = {
     overview: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=780337575&single=true&output=csv",
     pipeline: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=565686110&single=true&output=csv",
+    pipelineInventory: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=0&single=true&output=csv",
     sourcing: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1825170360&single=true&output=csv",
     hired: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=756634566&single=true&output=csv",
     targets: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1524950504&single=true&output=csv"
@@ -12,6 +13,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const DATA_SOURCE_LABELS = {
     overview: "overview_data",
     pipeline: "pipeline_weekly",
+    pipelineInventory: "pipeline_inventory",
     sourcing: "sourcing_data",
     hired: "hired_data",
     targets: "role_targets"
@@ -26,7 +28,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const state = {
     overviewRows: [],
-    pipelineRows: [],
+    pipelineWeeklyRows: [],
+    pipelineInventoryRows: [],
     sourcingRows: [],
     hiredRows: [],
     targets: [],
@@ -279,6 +282,10 @@ document.addEventListener("DOMContentLoaded", () => {
     return `${year}-KW${String(kw).padStart(2, "0")}`;
   }
 
+  function normalizeStageValue(value) {
+    return normalizeHeader(String(value || ""));
+  }
+
   function getIsoWeekKey(date = new Date()) {
     const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
     const dayNumber = target.getUTCDay() || 7;
@@ -310,6 +317,74 @@ document.addEventListener("DOMContentLoaded", () => {
     return Array.from(options.values()).sort((a, b) => {
       if (a.year !== b.year) return b.year - a.year;
       return b.kw - a.kw;
+    });
+  }
+
+  function normalizePipelineWeekly(rows) {
+    if (!rows.length) return [];
+    const hasStage = Object.prototype.hasOwnProperty.call(rows[0], "stage");
+    const hasCount = Object.prototype.hasOwnProperty.call(rows[0], "count");
+    if (hasStage && hasCount) {
+      return rows.map(row => ({
+        year: num(row.year),
+        kw: num(row.kw),
+        week_start: row.week_start || "",
+        role: row.role || "",
+        stage: row.stage || "",
+        count: num(row.count)
+      }));
+    }
+
+    const coreKeys = new Set(["year", "kw", "week_start", "role", "health"]);
+    const longRows = [];
+    rows.forEach(row => {
+      Object.keys(row).forEach(key => {
+        if (coreKeys.has(key)) return;
+        longRows.push({
+          year: num(row.year),
+          kw: num(row.kw),
+          week_start: row.week_start || "",
+          role: row.role || "",
+          stage: key,
+          count: num(row[key])
+        });
+      });
+    });
+    return longRows;
+  }
+
+  function normalizePipelineInventory(rows) {
+    return rows.map(row => ({
+      year: num(row.year),
+      kw: num(row.kw),
+      week_start: row.week_start || "",
+      role: row.role || "",
+      stage: row.stage || "",
+      count: num(row.count),
+      stage_order: row.stage_order !== undefined && row.stage_order !== "" ? num(row.stage_order) : null
+    }));
+  }
+
+  function getStagesForInventory(rows, weekKeyValue) {
+    const stageMap = new Map();
+    rows.forEach(row => {
+      if (weekKey(row) !== weekKeyValue) return;
+      const label = row.stage || "";
+      if (!label) return;
+      if (!stageMap.has(label)) {
+        stageMap.set(label, { label, order: row.stage_order });
+      }
+    });
+
+    return Array.from(stageMap.values()).sort((a, b) => {
+      const aOrder = Number.isFinite(a.order) ? a.order : null;
+      const bOrder = Number.isFinite(b.order) ? b.order : null;
+      if (aOrder !== null && bOrder !== null && aOrder !== bOrder) {
+        return aOrder - bOrder;
+      }
+      if (aOrder !== null && bOrder === null) return -1;
+      if (aOrder === null && bOrder !== null) return 1;
+      return a.label.localeCompare(b.label);
     });
   }
 
@@ -389,64 +464,65 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /* ---------------- HEALTH LOGIC ---------------- */
 
-  function computeHealth(roleRows, target, endWeekKey) {
-    const lookback = Math.max(1, num(target.lookback_weeks));
-    const minN = Math.max(1, num(target.min_prev_stage_n));
+  function computeHealth(roleRows, transitions, endWeekKey) {
+    if (!transitions.length) return { health: "new", reason: "Not enough data" };
+    const sortedWeeks = Array.from(new Set(roleRows.map(row => weekKey(row)).filter(Boolean))).sort();
+    const eligibleWeeks = endWeekKey ? sortedWeeks.filter(key => key <= endWeekKey) : sortedWeeks;
+    if (!eligibleWeeks.length) return { health: "new", reason: "Not enough data" };
 
-    const sorted = roleRows
-      .filter(r => weekKey(r))
-      .sort((a, b) => {
-        if (num(a.year) !== num(b.year)) return num(a.year) - num(b.year);
-        return num(a.kw) - num(b.kw);
-      });
-
-    const eligible = endWeekKey
-      ? sorted.filter(r => weekKey(r) <= endWeekKey)
-      : sorted;
-
-    const recent = eligible.slice(-lookback);
-
-    const sums = {};
-    ["sourced", "step1", "tech_light", "tech_iv", "final", "offer", "hired"].forEach(k => {
-      sums[k] = recent.reduce((s, r) => s + num(r[k]), 0);
+    const rowsByWeek = new Map();
+    roleRows.forEach(row => {
+      const key = weekKey(row);
+      if (!key) return;
+      if (!rowsByWeek.has(key)) rowsByWeek.set(key, []);
+      rowsByWeek.get(key).push(row);
     });
-
-    if (sums.sourced < minN) {
-      return { health: "new", reason: "Not enough data" };
-    }
-
-    const checks = [
-      { a: "step1", b: "sourced", exp: target.step1_from_sourced_exp, label: "sourced → step1" },
-      { a: "tech_light", b: "step1", exp: target.techlight_from_step1_exp, label: "step1 → tech_light" },
-      { a: "tech_iv", b: "tech_light", exp: target.techiv_from_techlight_exp, label: "tech_light → tech_iv" },
-      { a: "final", b: "tech_iv", exp: target.final_from_techiv_exp, label: "tech_iv → final" },
-      { a: "offer", b: "final", exp: target.offer_from_final_exp, label: "final → offer" },
-      { a: "hired", b: "offer", exp: target.hired_from_offer_exp, label: "offer → hired" }
-    ];
 
     let worstScore = Infinity;
     let bottleneck = "—";
     let maxGap = -Infinity;
+    let evaluated = 0;
 
-    for (const c of checks) {
-      const prev = sums[c.b];
-      const expected = num(c.exp);
-      if (prev >= minN && expected > 0) {
-        const actual = prev > 0 ? sums[c.a] / prev : 0;
+    transitions.forEach(transition => {
+      const lookback = Math.max(1, num(transition.lookback_weeks));
+      const minN = Math.max(1, num(transition.min_prev_stage_n));
+      const expected = num(transition.expected_rate);
+      const fromStage = normalizeStageValue(transition.from_stage);
+      const toStage = normalizeStageValue(transition.to_stage);
+      const recentWeeks = eligibleWeeks.slice(-lookback);
+      let fromCount = 0;
+      let toCount = 0;
+
+      recentWeeks.forEach(week => {
+        const weekRows = rowsByWeek.get(week) || [];
+        weekRows.forEach(row => {
+          const stageKey = normalizeStageValue(row.stage);
+          if (stageKey === fromStage) {
+            fromCount += num(row.count);
+          }
+          if (stageKey === toStage) {
+            toCount += num(row.count);
+          }
+        });
+      });
+
+      if (fromCount >= minN && expected > 0) {
+        const actual = fromCount > 0 ? toCount / fromCount : 0;
         const score = actual / expected;
         const gap = expected - actual;
+        evaluated += 1;
 
         if (score < worstScore) {
           worstScore = score;
         }
         if (gap > maxGap) {
           maxGap = gap;
-          bottleneck = `${c.label} (${formatPercent(actual)} vs ${formatPercent(expected)})`;
+          bottleneck = `${transition.from_stage} → ${transition.to_stage} (${formatPercent(actual)} vs ${formatPercent(expected)})`;
         }
       }
-    }
+    });
 
-    if (worstScore === Infinity) {
+    if (!evaluated) {
       return { health: "new", reason: "Not enough data" };
     }
 
@@ -457,37 +533,61 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /* ---------------- RENDER: PIPELINE ---------------- */
 
-  function renderPipeline(pipelineRows, targets, selectedWeekKey) {
-    const byRole = {};
-    pipelineRows.forEach(r => {
-      const role = r.role;
-      if (!role) return;
-      if (!byRole[role]) byRole[role] = [];
-      byRole[role].push(r);
+  function renderPipeline(inventoryRows, weeklyRows, targets, selectedWeekKey) {
+    const stages = getStagesForInventory(inventoryRows, selectedWeekKey);
+    const roles = new Set();
+    const countsByRole = new Map();
+
+    inventoryRows.forEach(row => {
+      if (weekKey(row) !== selectedWeekKey) return;
+      if (!row.role) return;
+      roles.add(row.role);
+      if (!countsByRole.has(row.role)) countsByRole.set(row.role, new Map());
+      const stageMap = countsByRole.get(row.role);
+      stageMap.set(row.stage, (stageMap.get(row.stage) || 0) + num(row.count));
     });
 
-    const roles = new Set([...Object.keys(byRole), ...targets.map(t => t.role)]);
+    const thead = document.querySelector("#pipeline table thead");
+    if (thead) {
+      const stageHeaders = stages.map(stage => `<th>${stage.label}</th>`).join("");
+      thead.innerHTML = `
+        <tr>
+          <th>Role</th>
+          ${stageHeaders}
+          <th>Health</th>
+          <th>Bottleneck</th>
+        </tr>
+      `;
+    }
+
+    const rowsByRoleWeekly = {};
+    weeklyRows.forEach(row => {
+      if (!row.role) return;
+      if (!rowsByRoleWeekly[row.role]) rowsByRoleWeekly[row.role] = [];
+      rowsByRoleWeekly[row.role].push(row);
+    });
+
+    const targetsByRole = {};
+    targets.forEach(target => {
+      if (!target.role) return;
+      if (!targetsByRole[target.role]) targetsByRole[target.role] = [];
+      targetsByRole[target.role].push(target);
+    });
 
     const tbody = $("pipelineTable");
     tbody.innerHTML = "";
 
-    roles.forEach(role => {
-      const roleRows = byRole[role] || [];
-      const weekRow = roleRows.find(r => weekKey(r) === selectedWeekKey) || {};
-      const target = targets.find(t => t.role === role);
-      const result = target ? computeHealth(roleRows, target, selectedWeekKey) : { health: "new", reason: "—" };
+    Array.from(roles).sort().forEach(role => {
+      const stageMap = countsByRole.get(role) || new Map();
+      const weeklyRoleRows = rowsByRoleWeekly[role] || [];
+      const roleTargets = targetsByRole[role] || [];
+      const result = computeHealth(weeklyRoleRows, roleTargets, selectedWeekKey);
+      const stageCells = stages.map(stage => `<td>${formatNumber(stageMap.get(stage.label) || 0)}</td>`).join("");
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${role}</td>
-        <td>${formatNumber(num(weekRow.sourced))}</td>
-        <td>${formatNumber(num(weekRow.reviewed))}</td>
-        <td>${formatNumber(num(weekRow.step1))}</td>
-        <td>${formatNumber(num(weekRow.tech_light))}</td>
-        <td>${formatNumber(num(weekRow.tech_iv))}</td>
-        <td>${formatNumber(num(weekRow.final))}</td>
-        <td>${formatNumber(num(weekRow.offer))}</td>
-        <td>${formatNumber(num(weekRow.hired))}</td>
+        ${stageCells}
         <td>${healthDotHTML(result.health)}</td>
         <td>${result.reason || "—"}</td>
       `;
@@ -497,23 +597,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /* ---------------- RENDER: OVERVIEW ---------------- */
 
-  function renderOverview(overviewRows, pipelineRows, targets, latestWeekKey) {
-    const byRolePipeline = {};
-    pipelineRows.forEach(r => {
+  function renderOverview(overviewRows, weeklyRows, targets, latestWeekKey) {
+    const byRoleWeekly = {};
+    weeklyRows.forEach(r => {
       const role = r.role;
       if (!role) return;
-      if (!byRolePipeline[role]) byRolePipeline[role] = [];
-      byRolePipeline[role].push(r);
+      if (!byRoleWeekly[role]) byRoleWeekly[role] = [];
+      byRoleWeekly[role].push(r);
     });
 
-    const targetByRole = {};
-    targets.forEach(t => { targetByRole[t.role] = t; });
+    const targetsByRole = {};
+    targets.forEach(t => {
+      if (!t.role) return;
+      if (!targetsByRole[t.role]) targetsByRole[t.role] = [];
+      targetsByRole[t.role].push(t);
+    });
 
     const healthByRole = {};
-    Object.keys(byRolePipeline).forEach(role => {
-      const t = targetByRole[role];
-      if (!t) return;
-      healthByRole[role] = computeHealth(byRolePipeline[role], t, latestWeekKey).health;
+    Object.keys(byRoleWeekly).forEach(role => {
+      const roleTargets = targetsByRole[role] || [];
+      healthByRole[role] = computeHealth(byRoleWeekly[role], roleTargets, latestWeekKey).health;
     });
 
     const openRoles = overviewRows.filter(r => (r.status || "").toLowerCase() === "open").length;
@@ -610,7 +713,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /* ---------------- RENDER: HIRES ---------------- */
 
-  function renderHires(hiredRows, pipelineRows) {
+  function renderHires(hiredRows, weeklyRows) {
     const tbody = $("hiresTable");
     tbody.innerHTML = "";
 
@@ -655,9 +758,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let offerTotal = 0;
     let hiredTotal = 0;
-    pipelineRows.forEach(row => {
-      offerTotal += num(row.offer);
-      hiredTotal += num(row.hired);
+    weeklyRows.forEach(row => {
+      const stageKey = normalizeStageValue(row.stage);
+      if (stageKey === "offer") offerTotal += num(row.count);
+      if (stageKey === "hired") hiredTotal += num(row.count);
     });
 
     if (!offerTotal) {
@@ -676,7 +780,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function syncWeekSelections() {
-    state.pipelineOptions = getWeekOptions(state.pipelineRows);
+    const pipelineWeekSource = state.pipelineInventoryRows.length ? state.pipelineInventoryRows : state.pipelineWeeklyRows;
+    state.pipelineOptions = getWeekOptions(pipelineWeekSource);
     state.sourcingOptions = getWeekOptions(state.sourcingRows);
 
     const pipelineSelect = $("pipelineWeekSelect");
@@ -686,7 +791,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setSelectOptions(sourcingSelect, state.sourcingOptions);
 
     const currentWeekKey = getIsoWeekKey();
-    const latestPipelineWeek = getLatestWeekKey(state.pipelineRows) || (state.pipelineOptions[0] ? state.pipelineOptions[0].key : "");
+    const latestPipelineWeek = getLatestWeekKey(pipelineWeekSource) || (state.pipelineOptions[0] ? state.pipelineOptions[0].key : "");
     const latestSourcingWeek = getLatestWeekKey(state.sourcingRows) || (state.sourcingOptions[0] ? state.sourcingOptions[0].key : "");
     const pipelineDefault = state.pipelineOptions.some(opt => opt.key === currentWeekKey) ? currentWeekKey : latestPipelineWeek;
     const sourcingDefault = state.sourcingOptions.some(opt => opt.key === currentWeekKey) ? currentWeekKey : latestSourcingWeek;
@@ -703,10 +808,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderFromState() {
-    renderPipeline(state.pipelineRows, state.targets, state.selectedPipelineWeek);
+    renderPipeline(state.pipelineInventoryRows, state.pipelineWeeklyRows, state.targets, state.selectedPipelineWeek);
     renderSourcing(state.sourcingRows, state.selectedSourcingWeek);
-    renderHires(state.hiredRows, state.pipelineRows);
-    renderOverview(state.overviewRows, state.pipelineRows, state.targets, state.selectedPipelineWeek);
+    renderHires(state.hiredRows, state.pipelineWeeklyRows);
+    renderOverview(state.overviewRows, state.pipelineWeeklyRows, state.targets, state.selectedPipelineWeek);
   }
 
   function normalizeTargets(rows) {
@@ -715,12 +820,9 @@ document.addEventListener("DOMContentLoaded", () => {
       role: getField(row, ["role"]) || row.role || "",
       lookback_weeks: getField(row, ["lookback_weeks"]) || row.lookback_weeks || "",
       min_prev_stage_n: getField(row, ["min_prev_stage_n"]) || row.min_prev_stage_n || "",
-      step1_from_sourced_exp: getField(row, ["step1_from_sourced_exp", "screen_to_step1_exp"]) || row.step1_from_sourced_exp || "",
-      techlight_from_step1_exp: getField(row, ["techlight_from_step1_exp", "step1_to_tech_exp"]) || row.techlight_from_step1_exp || "",
-      techiv_from_techlight_exp: getField(row, ["techiv_from_techlight_exp", "step1_to_tech_exp"]) || row.techiv_from_techlight_exp || "",
-      final_from_techiv_exp: getField(row, ["final_from_techiv_exp", "tech_to_final_exp"]) || row.final_from_techiv_exp || "",
-      offer_from_final_exp: getField(row, ["offer_from_final_exp", "final_to_offer_exp"]) || row.offer_from_final_exp || "",
-      hired_from_offer_exp: getField(row, ["hired_from_offer_exp", "offer_to_hired_exp"]) || row.hired_from_offer_exp || ""
+      from_stage: getField(row, ["from_stage"]) || row.from_stage || "",
+      to_stage: getField(row, ["to_stage"]) || row.to_stage || "",
+      expected_rate: getField(row, ["expected_rate"]) || row.expected_rate || ""
     }));
   }
 
@@ -733,16 +835,18 @@ document.addEventListener("DOMContentLoaded", () => {
     setError("hiresError", "");
 
     try {
-      const [overviewRows, pipelineRows, sourcingRows, hiredRows, targets] = await Promise.all([
+      const [overviewRows, pipelineWeeklyRaw, pipelineInventoryRaw, sourcingRows, hiredRows, targets] = await Promise.all([
         loadCSV("overview", CSV.overview),
         loadCSV("pipeline", CSV.pipeline),
+        loadCSV("pipelineInventory", CSV.pipelineInventory),
         loadCSV("sourcing", CSV.sourcing),
         loadCSV("hired", CSV.hired),
         loadCSV("targets", CSV.targets)
       ]);
 
       state.overviewRows = overviewRows;
-      state.pipelineRows = pipelineRows;
+      state.pipelineWeeklyRows = normalizePipelineWeekly(pipelineWeeklyRaw);
+      state.pipelineInventoryRows = normalizePipelineInventory(pipelineInventoryRaw);
       state.sourcingRows = sourcingRows;
       state.hiredRows = hiredRows;
       state.targets = normalizeTargets(targets);
@@ -762,8 +866,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function handlePipelineWeekChange() {
     state.selectedPipelineWeek = $("pipelineWeekSelect").value;
-    renderPipeline(state.pipelineRows, state.targets, state.selectedPipelineWeek);
-    renderOverview(state.overviewRows, state.pipelineRows, state.targets, state.selectedPipelineWeek);
+    renderPipeline(state.pipelineInventoryRows, state.pipelineWeeklyRows, state.targets, state.selectedPipelineWeek);
+    renderOverview(state.overviewRows, state.pipelineWeeklyRows, state.targets, state.selectedPipelineWeek);
   }
 
   function handleSourcingWeekChange() {
