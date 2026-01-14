@@ -32,23 +32,33 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const HIRES_PASSWORD = "EGYM2026";
   const ALL_TIME_KEY = "__all__";
+  const ALL_FILTER_KEY = "__all__";
 
-  // Expected stage keys (stable internal keys)
-  const STAGES = ["sourced", "reviewed", "step1", "tech_light", "tech_iv", "final", "offer", "hired"];
+  // reviewed removed everywhere
+  const PIPELINE_STAGES = ["sourced", "step1", "tech_light", "tech_iv", "final", "offer", "hired"];
+  const ACTIVITY_STAGES = ["sourced", "step1", "tech_light", "tech_iv", "final", "offer", "hired"];
 
   const state = {
     overviewRows: [],
-    weeklyRows: [],     // pipeline_weekly
-    inventoryRows: [],  // pipeline_inventory
+    weeklyRows: [],
+    inventoryRows: [],
     sourcingRows: [],
     hiredRows: [],
     targets: [],
+
     pipelineOptions: [],
     activityOptions: [],
     sourcingOptions: [],
+
     selectedPipelineWeek: "",
     selectedActivityWeek: "",
-    selectedSourcingWeek: ""
+    selectedSourcingWeek: "",
+
+    selectedPipelineRole: ALL_FILTER_KEY,
+    selectedPipelineRecruiter: ALL_FILTER_KEY,
+
+    selectedActivityRole: ALL_FILTER_KEY,
+    selectedActivityRecruiter: ALL_FILTER_KEY
   };
 
   /* ---------------- HELPERS ---------------- */
@@ -160,46 +170,24 @@ document.addEventListener("DOMContentLoaded", () => {
     return { headers, rows: mappedRows, isHtml: false };
   }
 
-  function logLoadFailure({ key, url, status, text, error }) {
-    console.log("Data source failed", {
-      key,
-      url,
-      status,
-      snippet: (text || "").slice(0, 200),
-      error
-    });
-  }
-
   async function loadCSV(key, url) {
     const cacheBuster = `cb=${Date.now()}`;
     const joiner = url.includes("?") ? "&" : "?";
     const fullUrl = `${url}${joiner}${cacheBuster}`;
 
-    let text = "";
-    let status = "unknown";
-
     try {
       const res = await fetch(fullUrl, { cache: "no-store" });
-      status = res.status;
-      text = await res.text();
-
-      if (!res.ok) {
-        logLoadFailure({ key, url: fullUrl, status, text, error: new Error(`HTTP ${res.status}`) });
-        throw new Error(`HTTP ${res.status}`);
-      }
+      const text = await res.text();
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const parsed = parseCSV(text);
-      if (parsed.isHtml || !parsed.headers.length) {
-        logLoadFailure({ key, url: fullUrl, status, text, error: new Error("Empty or invalid CSV") });
-        throw new Error("Empty or invalid CSV");
-      }
+      if (parsed.isHtml || !parsed.headers.length) throw new Error("Empty or invalid CSV");
 
       setDataError(key, "");
       return parsed.rows;
-    } catch (error) {
+    } catch (e) {
       setDataError(key, `Data source unavailable: ${DATA_SOURCE_LABELS[key]}`);
-      if (!text || status === "unknown") logLoadFailure({ key, url: fullUrl, status, text, error });
-      throw error;
+      throw e;
     }
   }
 
@@ -217,6 +205,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     return "";
   };
+
+  function getRecruiter(row) {
+    const v = getField(row, ["recruiter", "owner", "pplwise_tap", "pplwise_sourcer", "tap", "responsible"]);
+    return String(v || "").trim();
+  }
 
   function formatNumber(value) {
     if (value === null || value === undefined || value === "") return "0";
@@ -264,7 +257,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // ISO week/year
   function getISOWeekYear(date = new Date()) {
     const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
     const dayNum = d.getUTCDay() || 7;
@@ -285,7 +277,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return options[0] ? options[0].key : "";
   }
 
-  function setSelectOptions(select, options, currentValue) {
+  function setWeekSelectOptions(select, options, currentValue) {
     select.innerHTML = "";
 
     const all = document.createElement("option");
@@ -305,23 +297,52 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // default: current week if exists, else latest from data (options[0])
     const def = pickDefaultWeekKey(options);
     select.value = def || ALL_TIME_KEY;
   }
 
-  function filterRowsBySelection(rows, selectedKey) {
-    if (selectedKey === ALL_TIME_KEY) return rows;
-    return rows.filter(r => weekKey(r) === selectedKey);
+  function setFilterSelectOptions(select, values, currentValue, allLabel) {
+    select.innerHTML = "";
+
+    const all = document.createElement("option");
+    all.value = ALL_FILTER_KEY;
+    all.textContent = allLabel;
+    select.appendChild(all);
+
+    values.forEach(v => {
+      const opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = v;
+      select.appendChild(opt);
+    });
+
+    if (currentValue && [...select.options].some(x => x.value === currentValue)) {
+      select.value = currentValue;
+    } else {
+      select.value = ALL_FILTER_KEY;
+    }
+  }
+
+  function filterRowsByWeek(rows, selectedWeekKey) {
+    if (selectedWeekKey === ALL_TIME_KEY) return rows;
+    return rows.filter(r => weekKey(r) === selectedWeekKey);
+  }
+
+  function filterRowsByRoleRecruiter(rows, roleValue, recruiterValue) {
+    return rows.filter(r => {
+      const roleOk = roleValue === ALL_FILTER_KEY || String(r.role || "").trim() === roleValue;
+      const rec = getRecruiter(r);
+      const recruiterOk = recruiterValue === ALL_FILTER_KEY || rec === recruiterValue;
+      return roleOk && recruiterOk;
+    });
   }
 
   function groupByRole(rows) {
     const by = {};
     rows.forEach(r => {
-      const role = r.role || "";
+      const role = String(r.role || "").trim();
       if (!role) return;
-      if (!by[role]) by[role] = [];
-      by[role].push(r);
+      (by[role] ||= []).push(r);
     });
     return by;
   }
@@ -381,16 +402,12 @@ document.addEventListener("DOMContentLoaded", () => {
     activateTab(initialTab);
   }
 
-  /* ---------------- HEALTH (Inventory snapshot heuristic) ----------------
-     We calculate "coverage" to reach 1 hire based on expected conversion chain.
-     Coverage = actual_stage_count / required_stage_count_for_1_hire
-     Worst coverage decides health.
-  ----------------------------------------------------------------------- */
+  /* ---------------- HEALTH (inventory snapshot) ---------------- */
 
   function computeInventoryHealth(inventoryRow, target) {
     const minN = Math.max(1, num(target.min_prev_stage_n));
-
     const r = inventoryRow || {};
+
     const actual = {
       sourced: num(r.sourced),
       step1: num(r.step1),
@@ -401,21 +418,18 @@ document.addEventListener("DOMContentLoaded", () => {
       hired: num(r.hired)
     };
 
-    // If almost no data, treat as new
     if (actual.sourced < minN) return "new";
 
-    const step1Exp = num(getField(target, ["step1_from_sourced_exp", "screen_to_step1_exp"]));
-    const techLightExp = num(getField(target, ["techlight_from_step1_exp", "step1_to_tech_exp", "step1_to_techlight_exp"]));
-    const techIvExp = num(getField(target, ["techiv_from_techlight_exp", "tech_to_final_exp", "techlight_to_techiv_exp"]));
-    const finalExp = num(getField(target, ["final_from_techiv_exp", "tech_to_final_exp", "techiv_to_final_exp"]));
-    const offerExp = num(getField(target, ["offer_from_final_exp", "final_to_offer_exp"]));
-    const hiredExp = num(getField(target, ["hired_from_offer_exp", "offer_to_hired_exp"]));
+    const step1Exp = num(getField(target, ["step1_from_sourced_exp"]));
+    const techLightExp = num(getField(target, ["techlight_from_step1_exp"]));
+    const techIvExp = num(getField(target, ["techiv_from_techlight_exp"]));
+    const finalExp = num(getField(target, ["final_from_techiv_exp"]));
+    const offerExp = num(getField(target, ["offer_from_final_exp"]));
+    const hiredExp = num(getField(target, ["hired_from_offer_exp"]));
 
-    // Need valid expectations
     const exps = [step1Exp, techLightExp, techIvExp, finalExp, offerExp, hiredExp];
     if (exps.some(x => !x || x <= 0)) return "new";
 
-    // Required counts for 1 hire
     const req = {};
     req.hired = 1;
     req.offer = req.hired / hiredExp;
@@ -425,7 +439,6 @@ document.addEventListener("DOMContentLoaded", () => {
     req.step1 = req.tech_light / techLightExp;
     req.sourced = req.step1 / step1Exp;
 
-    // Compute coverage ratios (cap huge values)
     const coverages = [
       actual.sourced / req.sourced,
       actual.step1 / req.step1,
@@ -444,186 +457,78 @@ document.addEventListener("DOMContentLoaded", () => {
     return "healthy";
   }
 
-  /* ---------------- RENDER: OVERVIEW ---------------- */
+  /* ---------------- RENDER: PIPELINE ---------------- */
 
-  function renderOverview(overviewRows, inventoryRows, targets, selectedPipelineWeekKey) {
-    const byRoleInventory = groupByRole(inventoryRows);
+  function renderPipelineInventory(inventoryRows, targets, weekKeySelected, roleFilter, recruiterFilter) {
+    const weekFiltered = filterRowsByWeek(inventoryRows, weekKeySelected);
+    const filtered = filterRowsByRoleRecruiter(weekFiltered, roleFilter, recruiterFilter);
+
+    const byRole = groupByRole(filtered);
     const targetByRole = {};
-    targets.forEach(t => {
-      if (t.role) targetByRole[t.role] = t;
-    });
+    targets.forEach(t => { if (t.role) targetByRole[t.role] = t; });
 
-    // health by role (based on selected week inventory snapshot)
-    const healthByRole = {};
-    Object.keys(byRoleInventory).forEach(role => {
-      const rows = byRoleInventory[role] || [];
-      let snap = {};
-      if (selectedPipelineWeekKey === ALL_TIME_KEY) {
-        // all-time = sum across all inventory snapshots
-        const sums = sumStageCounts(rows, STAGES);
-        snap = { ...sums, role };
-      } else {
-        snap = rows.find(r => weekKey(r) === selectedPipelineWeekKey) || {};
-      }
-      const target = targetByRole[role];
-      healthByRole[role] = target ? computeInventoryHealth(snap, target) : "new";
-    });
-
-    const openRoles = overviewRows.filter(r => (r.status || "").toLowerCase() === "open").length;
-    const filledRoles = overviewRows.filter(r => (r.status || "").toLowerCase() === "filled").length;
-    const totalOpenings = overviewRows.reduce((s, r) => s + num(r.openings), 0);
-
-    $("overviewCards").innerHTML = `
-      <div class="kpi"><div class="label">Open Roles</div><div class="value">${openRoles}</div></div>
-      <div class="kpi"><div class="label">Filled Roles</div><div class="value">${filledRoles}</div></div>
-      <div class="kpi"><div class="label">Total Openings</div><div class="value">${totalOpenings}</div></div>
-    `;
-
-    const healthCounts = { healthy: 0, warning: 0, critical: 0 };
-    overviewRows.forEach(r => {
-      const h = healthByRole[r.role] || "new";
-      if (h === "healthy") healthCounts.healthy += 1;
-      else if (h === "warning") healthCounts.warning += 1;
-      else if (h === "critical") healthCounts.critical += 1;
-    });
-
-    const healthSummary = $("overviewHealthSummary");
-    healthSummary.innerHTML = `
-      <div class="health-badge ${healthCounts.healthy ? "" : "zero"}">
-        <span class="health-dot good"></span>
-        <span>${healthCounts.healthy} Healthy roles</span>
-      </div>
-      <div class="health-badge ${healthCounts.warning ? "" : "zero"}">
-        <span class="health-dot warn"></span>
-        <span>${healthCounts.warning} At risk roles</span>
-      </div>
-      <div class="health-badge ${healthCounts.critical ? "" : "zero"}">
-        <span class="health-dot bad"></span>
-        <span>${healthCounts.critical} Critical roles</span>
-      </div>
-    `;
-
-    const tbody = $("overviewTable");
-    tbody.innerHTML = "";
-
-    overviewRows.forEach(r => {
-      const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap"]);
-      const h = healthByRole[r.role] || "new";
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${r.role || ""}</td>
-        <td>${r.status || ""}</td>
-        <td>${r.location || ""}</td>
-        <td>${r.openings || ""}</td>
-        <td>${owner || ""}</td>
-        <td>${healthDotHTML(h)}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-  }
-
-  /* ---------------- RENDER: PIPELINE (Inventory snapshot) ---------------- */
-
-  function renderPipelineInventory(inventoryRows, targets, selectedWeekKey) {
-    const byRole = groupByRole(inventoryRows);
-    const targetByRole = {};
-    targets.forEach(t => {
-      if (t.role) targetByRole[t.role] = t;
-    });
-
-    const roles = new Set([...Object.keys(byRole), ...targets.map(t => t.role).filter(Boolean)]);
+    const roles = Object.keys(byRole).sort((a, b) => a.localeCompare(b));
     const tbody = $("pipelineTable");
     tbody.innerHTML = "";
 
     roles.forEach(role => {
-      const roleRows = byRole[role] || [];
-      let row = {};
-
-      if (selectedWeekKey === ALL_TIME_KEY) {
-        const sums = sumStageCounts(roleRows, STAGES);
-        row = { ...sums, role };
-      } else {
-        row = roleRows.find(r => weekKey(r) === selectedWeekKey) || {};
-      }
+      const rows = byRole[role] || [];
+      // for pipeline_inventory, we expect one row per role/week, but make robust:
+      const sums = sumStageCounts(rows, PIPELINE_STAGES);
 
       const target = targetByRole[role];
-      const health = target ? computeInventoryHealth(row, target) : "new";
+      const health = target ? computeInventoryHealth(sums, target) : "new";
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${role}</td>
-        <td>${formatNumber(num(row.sourced))}</td>
-        <td>${formatNumber(num(row.reviewed))}</td>
-        <td>${formatNumber(num(row.step1))}</td>
-        <td>${formatNumber(num(row.tech_light))}</td>
-        <td>${formatNumber(num(row.tech_iv))}</td>
-        <td>${formatNumber(num(row.final))}</td>
-        <td>${formatNumber(num(row.offer))}</td>
-        <td>${formatNumber(num(row.hired))}</td>
+        <td>${formatNumber(sums.sourced)}</td>
+        <td>${formatNumber(sums.step1)}</td>
+        <td>${formatNumber(sums.tech_light)}</td>
+        <td>${formatNumber(sums.tech_iv)}</td>
+        <td>${formatNumber(sums.final)}</td>
+        <td>${formatNumber(sums.offer)}</td>
+        <td>${formatNumber(sums.hired)}</td>
         <td>${healthDotHTML(health)}</td>
       `;
       tbody.appendChild(tr);
     });
   }
 
-  /* ---------------- RENDER: ACTIVITY (Weekly stage activity) ---------------- */
+  /* ---------------- RENDER: ACTIVITY ---------------- */
 
-  function ensureActivitySummaryContainer() {
-    const panel = $("activity");
-    if (!panel) return null;
-    let el = $("activitySummary");
-    if (el) return el;
+  function renderActivityWeekly(weeklyRows, weekKeySelected, roleFilter, recruiterFilter) {
+    const weekFiltered = filterRowsByWeek(weeklyRows, weekKeySelected);
+    const filtered = filterRowsByRoleRecruiter(weekFiltered, roleFilter, recruiterFilter);
 
-    // Insert cards container between header and tablewrap
-    const card = panel.querySelector(".card");
-    const tablewrap = panel.querySelector(".tablewrap");
-    if (!card || !tablewrap) return null;
+    const totals = sumStageCounts(filtered, ACTIVITY_STAGES);
 
-    el = document.createElement("div");
-    el.id = "activitySummary";
-    el.className = "cards";
+    const summary = $("activitySummary");
+    summary.innerHTML = ACTIVITY_STAGES.map(s => {
+      const label = s.replace("_", " ").toUpperCase();
+      return `<div class="kpi"><div class="label">${label}</div><div class="value">${formatNumber(totals[s])}</div></div>`;
+    }).join("");
 
-    card.insertBefore(el, tablewrap);
-    return el;
-  }
-
-  function renderActivityWeekly(weeklyRows, selectedWeekKey) {
-    const filtered = filterRowsBySelection(weeklyRows, selectedWeekKey);
     const byRole = groupByRole(filtered);
+    const roles = Object.keys(byRole).sort((a, b) => a.localeCompare(b));
 
-    // Summary totals across all roles
-    const summaryEl = ensureActivitySummaryContainer();
-    const totals = sumStageCounts(filtered, STAGES);
-
-    if (summaryEl) {
-      summaryEl.innerHTML = STAGES.map(stage => {
-        return `<div class="kpi"><div class="label">${stage.replace("_", " ").toUpperCase()}</div><div class="value">${formatNumber(totals[stage])}</div></div>`;
-      }).join("");
-    }
-
-    // Table header dynamic: Role + stages
     const thead = $("activityHead");
-    if (thead) {
-      thead.innerHTML = `
-        <tr>
-          <th>Role</th>
-          ${STAGES.map(s => `<th>${s.replace("_", " ").toUpperCase()}</th>`).join("")}
-        </tr>
-      `;
-    }
+    thead.innerHTML = `
+      <tr>
+        <th>Role</th>
+        ${ACTIVITY_STAGES.map(s => `<th>${s.replace("_", " ").toUpperCase()}</th>`).join("")}
+      </tr>
+    `;
 
     const tbody = $("activityTable");
     tbody.innerHTML = "";
 
-    const roles = Object.keys(byRole).sort((a, b) => a.localeCompare(b));
     roles.forEach(role => {
-      const rows = byRole[role] || [];
-      const sums = sumStageCounts(rows, STAGES);
-
+      const sums = sumStageCounts(byRole[role] || [], ACTIVITY_STAGES);
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${role}</td>
-        ${STAGES.map(s => `<td>${formatNumber(sums[s])}</td>`).join("")}
+        ${ACTIVITY_STAGES.map(s => `<td>${formatNumber(sums[s])}</td>`).join("")}
       `;
       tbody.appendChild(tr);
     });
@@ -632,7 +537,7 @@ document.addEventListener("DOMContentLoaded", () => {
   /* ---------------- RENDER: SOURCING ---------------- */
 
   function renderSourcing(sourcingRows, selectedWeekKey) {
-    const filtered = filterRowsBySelection(sourcingRows, selectedWeekKey);
+    const filtered = filterRowsByWeek(sourcingRows, selectedWeekKey);
 
     const tbody = $("sourcingTable");
     tbody.innerHTML = "";
@@ -641,7 +546,6 @@ document.addEventListener("DOMContentLoaded", () => {
     let totalReplied = 0;
     let totalScreen = 0;
 
-    // per role sums
     const byRole = groupByRole(filtered);
     Object.keys(byRole).sort((a, b) => a.localeCompare(b)).forEach(role => {
       const rows = byRole[role] || [];
@@ -706,7 +610,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const tbody = $("hiresTable");
     tbody.innerHTML = "";
 
-    // Header-only / empty is valid
     if (!hiredRows || hiredRows.length === 0) {
       $("hiresKpis").innerHTML = `
         <div class="kpi"><div class="label">Total Hires</div><div class="value">0</div></div>
@@ -718,21 +621,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const tthValues = [];
     const ttfValues = [];
-    const processValues = [];
 
     hiredRows.forEach(row => {
       const liveDate = parseDate(getField(row, ["live_date", "live date"]));
       const signatureDate = parseDate(getField(row, ["signature_date", "signature date"]));
       const startDate = parseDate(getField(row, ["start_date", "start date"]));
-      const firstContact = parseDate(getField(row, ["1st_contact", "first_contact", "1st contact", "first contact"]));
 
       const tth = dayDiff(liveDate, signatureDate);
       const ttf = dayDiff(liveDate, startDate);
-      const daysInProcess = dayDiff(firstContact, signatureDate);
 
       if (tth !== null) tthValues.push(tth);
       if (ttf !== null) ttfValues.push(ttf);
-      if (daysInProcess !== null) processValues.push(daysInProcess);
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -747,7 +646,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <td>${getField(row, ["start_date", "start date"])}</td>
         <td>${tth !== null ? tth : "—"}</td>
         <td>${ttf !== null ? ttf : "—"}</td>
-        <td>${daysInProcess !== null ? daysInProcess : "—"}</td>
+        <td>—</td>
       `;
       tbody.appendChild(tr);
     });
@@ -762,6 +661,66 @@ document.addEventListener("DOMContentLoaded", () => {
     `;
   }
 
+  /* ---------------- OVERVIEW ---------------- */
+
+  function renderOverview(overviewRows) {
+    const openRoles = overviewRows.filter(r => (r.status || "").toLowerCase() === "open").length;
+    const filledRoles = overviewRows.filter(r => (r.status || "").toLowerCase() === "filled").length;
+    const totalOpenings = overviewRows.reduce((s, r) => s + num(r.openings), 0);
+
+    $("overviewCards").innerHTML = `
+      <div class="kpi"><div class="label">Open Roles</div><div class="value">${openRoles}</div></div>
+      <div class="kpi"><div class="label">Filled Roles</div><div class="value">${filledRoles}</div></div>
+      <div class="kpi"><div class="label">Total Openings</div><div class="value">${totalOpenings}</div></div>
+    `;
+
+    const healthSummary = $("overviewHealthSummary");
+    healthSummary.innerHTML = `
+      <div class="health-badge"><span class="health-dot good"></span><span>Healthy roles</span></div>
+      <div class="health-badge"><span class="health-dot warn"></span><span>At risk roles</span></div>
+      <div class="health-badge"><span class="health-dot bad"></span><span>Critical roles</span></div>
+    `;
+
+    const tbody = $("overviewTable");
+    tbody.innerHTML = "";
+
+    overviewRows.forEach(r => {
+      const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap"]);
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${r.role || ""}</td>
+        <td>${r.status || ""}</td>
+        <td>${r.location || ""}</td>
+        <td>${r.openings || ""}</td>
+        <td>${owner || ""}</td>
+        <td><span class="status-dot neutral"></span></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  /* ---------------- FILTER OPTIONS BUILD ---------------- */
+
+  function uniqueSorted(values) {
+    return Array.from(new Set(values.map(v => String(v).trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  }
+
+  function buildRoleRecruiterOptions(inventoryRows, weeklyRows) {
+    const roles = uniqueSorted([...inventoryRows, ...weeklyRows].map(r => r.role));
+    const recruiters = uniqueSorted([...inventoryRows, ...weeklyRows].map(r => getRecruiter(r)));
+
+    setFilterSelectOptions($("pipelineRoleSelect"), roles, state.selectedPipelineRole, "All roles");
+    setFilterSelectOptions($("activityRoleSelect"), roles, state.selectedActivityRole, "All roles");
+
+    setFilterSelectOptions($("pipelineRecruiterSelect"), recruiters, state.selectedPipelineRecruiter, "All recruiters");
+    setFilterSelectOptions($("activityRecruiterSelect"), recruiters, state.selectedActivityRecruiter, "All recruiters");
+
+    state.selectedPipelineRole = $("pipelineRoleSelect").value;
+    state.selectedActivityRole = $("activityRoleSelect").value;
+    state.selectedPipelineRecruiter = $("pipelineRecruiterSelect").value;
+    state.selectedActivityRecruiter = $("activityRecruiterSelect").value;
+  }
+
   /* ---------------- WEEK SELECTION SYNC ---------------- */
 
   function syncWeekSelections() {
@@ -769,28 +728,37 @@ document.addEventListener("DOMContentLoaded", () => {
     state.activityOptions = getWeekOptions(state.weeklyRows);
     state.sourcingOptions = getWeekOptions(state.sourcingRows);
 
-    const pipelineSelect = $("pipelineWeekSelect");
-    const activitySelect = $("activityWeekSelect");
-    const sourcingSelect = $("sourcingWeekSelect");
+    setWeekSelectOptions($("pipelineWeekSelect"), state.pipelineOptions, state.selectedPipelineWeek);
+    setWeekSelectOptions($("activityWeekSelect"), state.activityOptions, state.selectedActivityWeek);
+    setWeekSelectOptions($("sourcingWeekSelect"), state.sourcingOptions, state.selectedSourcingWeek);
 
-    // keep existing selections if possible
-    setSelectOptions(pipelineSelect, state.pipelineOptions, state.selectedPipelineWeek);
-    setSelectOptions(activitySelect, state.activityOptions, state.selectedActivityWeek);
-    setSelectOptions(sourcingSelect, state.sourcingOptions, state.selectedSourcingWeek);
-
-    state.selectedPipelineWeek = pipelineSelect.value;
-    state.selectedActivityWeek = activitySelect.value;
-    state.selectedSourcingWeek = sourcingSelect.value;
+    state.selectedPipelineWeek = $("pipelineWeekSelect").value;
+    state.selectedActivityWeek = $("activityWeekSelect").value;
+    state.selectedSourcingWeek = $("sourcingWeekSelect").value;
   }
 
   /* ---------------- MAIN RENDER ---------------- */
 
   function renderFromState() {
-    renderPipelineInventory(state.inventoryRows, state.targets, state.selectedPipelineWeek);
-    renderActivityWeekly(state.weeklyRows, state.selectedActivityWeek);
+    renderOverview(state.overviewRows);
+
+    renderPipelineInventory(
+      state.inventoryRows,
+      state.targets,
+      state.selectedPipelineWeek,
+      state.selectedPipelineRole,
+      state.selectedPipelineRecruiter
+    );
+
+    renderActivityWeekly(
+      state.weeklyRows,
+      state.selectedActivityWeek,
+      state.selectedActivityRole,
+      state.selectedActivityRecruiter
+    );
+
     renderSourcing(state.sourcingRows, state.selectedSourcingWeek);
     renderHires(state.hiredRows);
-    renderOverview(state.overviewRows, state.inventoryRows, state.targets, state.selectedPipelineWeek);
   }
 
   /* ---------------- MAIN LOAD ---------------- */
@@ -798,6 +766,7 @@ document.addEventListener("DOMContentLoaded", () => {
   async function refreshAll() {
     setError("overviewError", "");
     setError("pipelineError", "");
+    setError("activityError", "");
     setError("sourcingError", "");
     setError("hiresError", "");
 
@@ -815,19 +784,17 @@ document.addEventListener("DOMContentLoaded", () => {
       state.weeklyRows = weeklyRows;
       state.inventoryRows = inventoryRows;
       state.sourcingRows = sourcingRows;
-
-      // hired: tolerate header-only or totally empty
       state.hiredRows = Array.isArray(hiredRows) ? hiredRows : [];
-
       state.targets = targets;
 
       syncWeekSelections();
+      buildRoleRecruiterOptions(state.inventoryRows, state.weeklyRows);
       renderFromState();
 
       $("lastUpdated").textContent = `Last updated: ${fmtDate()}`;
     } catch (e) {
-      // show general error, but keep tabs clickable
       setError("pipelineError", `Error: ${e.message}`);
+      setError("activityError", `Error: ${e.message}`);
       setError("overviewError", `Error: ${e.message}`);
       setError("sourcingError", `Error: ${e.message}`);
       setError("hiresError", `Error: ${e.message}`);
@@ -837,18 +804,34 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /* ---------------- EVENTS ---------------- */
 
-  function handlePipelineWeekChange() {
+  function onPipelineFiltersChange() {
     state.selectedPipelineWeek = $("pipelineWeekSelect").value;
-    renderPipelineInventory(state.inventoryRows, state.targets, state.selectedPipelineWeek);
-    renderOverview(state.overviewRows, state.inventoryRows, state.targets, state.selectedPipelineWeek);
+    state.selectedPipelineRole = $("pipelineRoleSelect").value;
+    state.selectedPipelineRecruiter = $("pipelineRecruiterSelect").value;
+
+    renderPipelineInventory(
+      state.inventoryRows,
+      state.targets,
+      state.selectedPipelineWeek,
+      state.selectedPipelineRole,
+      state.selectedPipelineRecruiter
+    );
   }
 
-  function handleActivityWeekChange() {
+  function onActivityFiltersChange() {
     state.selectedActivityWeek = $("activityWeekSelect").value;
-    renderActivityWeekly(state.weeklyRows, state.selectedActivityWeek);
+    state.selectedActivityRole = $("activityRoleSelect").value;
+    state.selectedActivityRecruiter = $("activityRecruiterSelect").value;
+
+    renderActivityWeekly(
+      state.weeklyRows,
+      state.selectedActivityWeek,
+      state.selectedActivityRole,
+      state.selectedActivityRecruiter
+    );
   }
 
-  function handleSourcingWeekChange() {
+  function onSourcingWeekChange() {
     state.selectedSourcingWeek = $("sourcingWeekSelect").value;
     renderSourcing(state.sourcingRows, state.selectedSourcingWeek);
   }
@@ -858,9 +841,16 @@ document.addEventListener("DOMContentLoaded", () => {
   initTabs();
 
   $("refreshBtn").addEventListener("click", refreshAll);
-  $("pipelineWeekSelect").addEventListener("change", handlePipelineWeekChange);
-  $("activityWeekSelect").addEventListener("change", handleActivityWeekChange);
-  $("sourcingWeekSelect").addEventListener("change", handleSourcingWeekChange);
+
+  $("pipelineWeekSelect").addEventListener("change", onPipelineFiltersChange);
+  $("pipelineRoleSelect").addEventListener("change", onPipelineFiltersChange);
+  $("pipelineRecruiterSelect").addEventListener("change", onPipelineFiltersChange);
+
+  $("activityWeekSelect").addEventListener("change", onActivityFiltersChange);
+  $("activityRoleSelect").addEventListener("change", onActivityFiltersChange);
+  $("activityRecruiterSelect").addEventListener("change", onActivityFiltersChange);
+
+  $("sourcingWeekSelect").addEventListener("change", onSourcingWeekChange);
 
   refreshAll();
   setInterval(refreshAll, 60000);
