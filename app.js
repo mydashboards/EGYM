@@ -13,8 +13,8 @@ document.addEventListener("DOMContentLoaded", () => {
     targets:
       "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1524950504&single=true&output=csv",
     // NEW: pipeline_inventory (end-of-week snapshot)
-    inventory:
-      "PASTE_PIPELINE_INVENTORY_CSV_URL_HERE"
+    inventory: 
+      "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1802705167&single=true&output=csv"
   };
 
   const DATA_SOURCE_LABELS = {
