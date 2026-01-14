@@ -105,7 +105,7 @@ h2{margin:0 0 6px 0;font-size:30px;letter-spacing:.2px}
   background:var(--accent);
   box-shadow:0 0 0 6px rgba(255,106,0,.12);
 }
-.controls{display:flex;gap:10px;align-items:flex-end}
+.controls{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
 .field{display:flex;flex-direction:column;gap:6px}
 .label{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.3px;text-transform:uppercase}
 .select{
@@ -138,9 +138,7 @@ h2{margin:0 0 6px 0;font-size:30px;letter-spacing:.2px}
   color:var(--text);
 }
 .health-badge.zero{opacity:.6}
-.health-dot{
-  width:10px;height:10px;border-radius:999px;
-}
+.health-dot{width:10px;height:10px;border-radius:999px;}
 .health-dot.good{background:var(--good)}
 .health-dot.warn{background:var(--warn)}
 .health-dot.bad{background:var(--bad)}
@@ -186,32 +184,15 @@ tbody tr:hover td{background:rgba(255,255,255,.03)}
   border:1px solid rgba(255,77,79,.35);
 }
 
-/* ------------------------------
-   Activity KPI grid overrides
-   Goal: 7 KPI cards fit in 2 rows (4 + 3)
---------------------------------- */
-
+/* Activity widgets: fit into 2 rows nicely */
 #activitySummary.cards{
   grid-template-columns:repeat(4,minmax(0,1fr));
   gap:10px;
 }
+#activitySummary .kpi{padding:12px;border-radius:16px}
+#activitySummary .kpi .label{font-size:11px;letter-spacing:.35px}
+#activitySummary .kpi .value{font-size:26px}
 
-/* slightly more compact cards so they don't feel cramped */
-#activitySummary .kpi{
-  padding:12px 12px;
-  border-radius:16px;
-}
-
-#activitySummary .kpi .label{
-  font-size:11px;
-  letter-spacing:.35px;
-}
-
-#activitySummary .kpi .value{
-  font-size:26px;
-}
-
-/* responsive fallbacks */
 @media (max-width: 980px){
   #activitySummary.cards{grid-template-columns:repeat(3,minmax(0,1fr));}
 }
