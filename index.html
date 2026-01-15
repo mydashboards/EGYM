@@ -1,369 +1,296 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Recruiting Dashboard – EGYM</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Recruiting Dashboard · EGYM</title>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Chart.js (Management view donuts) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="topbar">
-    <div class="container">
-      <div class="brand">
-        <div class="brand-title">Recruiting Dashboard</div>
+    <div class="topbar-left">
+      <div class="title">
+        <h1>Recruiting Dashboard</h1>
         <span class="pill">EGYM</span>
       </div>
+    </div>
 
-      <div class="meta">
-        <div class="view-toggle" role="group" aria-label="Dashboard view">
-          <button id="viewContributor" class="toggle-btn active" type="button">Contributor</button>
-          <button id="viewManagement" class="toggle-btn" type="button">Management</button>
-        </div>
-        <span id="lastUpdated" class="muted">Last updated: —</span>
-        <button id="refreshBtn" class="btn">Refresh</button>
+    <div class="topbar-right">
+      <div class="view-toggle" role="tablist" aria-label="View toggle">
+        <button id="viewContributor" class="vt-btn active" type="button" aria-selected="true">Contributor</button>
+        <button id="viewManagement" class="vt-btn" type="button" aria-selected="false">Management</button>
       </div>
+
+      <div class="last-updated">
+        <span id="lastUpdatedLabel">Last updated:</span>
+        <strong id="lastUpdatedValue">—</strong>
+      </div>
+
+      <button id="refreshBtn" class="btn" type="button">Refresh</button>
     </div>
   </header>
 
   <main class="container">
-    <nav class="tabs" role="tablist" aria-label="Dashboard pages">
-      <button class="tab active" data-tab="overview" role="tab" aria-selected="true">Overview</button>
-      <button class="tab" data-tab="pipeline" role="tab" aria-selected="false">Pipeline</button>
-      <button class="tab" data-tab="sourcing" role="tab" aria-selected="false">Sourcing</button>
-      <button class="tab" data-tab="hires" role="tab" aria-selected="false">Hires & KPIs</button>
-    </nav>
-  <div class="container">
-    <div id="dataErrors" class="data-alerts hidden" role="status" aria-live="polite"></div>
-  </div>
+    <div id="dataErrors" class="banner hidden" role="status" aria-live="polite"></div>
 
-    <section id="overview" class="panel active" role="tabpanel">
-      <div class="card">
-        <h2>Overview</h2>
-        <p class="muted">Current role status and quick summary.</p>
-  <div id="contributorView">
-    <main class="container">
-      <nav class="tabs" role="tablist" aria-label="Dashboard pages">
-        <button class="tab active" data-tab="overview" role="tab" aria-selected="true">Overview</button>
-        <button class="tab" data-tab="pipeline" role="tab" aria-selected="false">Pipeline</button>
-        <button class="tab" data-tab="activity" role="tab" aria-selected="false">Activity</button>
-        <button class="tab" data-tab="sourcing" role="tab" aria-selected="false">Sourcing</button>
-        <button class="tab" data-tab="hires" role="tab" aria-selected="false">Hires &amp; KPIs</button>
+    <!-- CONTRIBUTOR VIEW -->
+    <section id="contributorView">
+      <nav class="tabs" aria-label="Dashboard tabs">
+        <button class="tab active" data-tab="overview" type="button" aria-selected="true">Overview</button>
+        <button class="tab" data-tab="pipeline" type="button" aria-selected="false">Pipeline</button>
+        <button class="tab" data-tab="sourcing" type="button" aria-selected="false">Sourcing</button>
+        <button class="tab" data-tab="hires" type="button" aria-selected="false">Hires & KPIs</button>
       </nav>
 
-        <div class="cards" id="overviewCards">
-          <!-- filled by JS -->
-      <section id="overview" class="panel active" role="tabpanel">
+      <!-- Overview panel -->
+      <section id="overview" class="panel active" aria-label="Overview panel">
+        <div class="panel-head">
+          <div class="panel-title">
+            <h2>Overview</h2>
+            <div id="overviewHealthSummary" class="health-summary"></div>
+          </div>
+        </div>
+
+        <div id="overviewCards" class="kpi-grid"></div>
+
         <div class="card">
-          <div class="card-header">
-            <div>
-              <h2 class="title"><span class="health-icon" aria-hidden="true"></span>Overview</h2>
-              <p class="muted">Current role status and quick summary.</p>
-            </div>
+          <div class="card-head">
+            <h3>Roles</h3>
+            <div class="hint">Health is shown as a traffic-light dot only.</div>
           </div>
 
-          <div class="cards" id="overviewCards">
-            <!-- filled by JS -->
-          </div>
-
-          <div class="health-summary" id="overviewHealthSummary"></div>
-
-          <div class="spacer"></div>
-
-          <div class="tablewrap">
-            <table>
+          <div class="table-wrap">
+            <table class="table">
               <thead>
                 <tr>
                   <th>Role</th>
                   <th>Status</th>
                   <th>Location</th>
                   <th>Openings</th>
-                  <th>Owner</th>
+                  <th>Recruiter</th>
                   <th>Health</th>
                 </tr>
               </thead>
               <tbody id="overviewTable"></tbody>
             </table>
           </div>
-
-          <div id="overviewError" class="error hidden"></div>
         </div>
       </section>
 
-        <div class="spacer"></div>
-      <section id="pipeline" class="panel" role="tabpanel">
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <h2>Pipeline Health</h2>
-              <p class="muted">Health is computed from the selected week and role targets.</p>
-            </div>
+      <!-- Pipeline panel -->
+      <section id="pipeline" class="panel" aria-label="Pipeline panel">
+        <div class="panel-head">
+          <div class="panel-title">
+            <h2>Pipeline</h2>
             <div class="controls">
-              <label class="field">
-                <span class="label">Week</span>
-                <select id="pipelineWeekSelect" class="select"></select>
+              <label class="control">
+                <span>Week</span>
+                <select id="pipelineWeekSelect"></select>
               </label>
             </div>
           </div>
-
-        <div class="tablewrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Location</th>
-                <th>Openings</th>
-                <th>Owner</th>
-                <th>Health</th>
-              </tr>
-            </thead>
-            <tbody id="overviewTable"></tbody>
-          </table>
-          <div class="tablewrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Role</th>
-                  <th>Sourced</th>
-                  <th>Step1</th>
-                  <th>Tech Light</th>
-                  <th>Tech IV</th>
-                  <th>Final</th>
-                  <th>Offer</th>
-                  <th>Hired</th>
-                  <th>Health</th>
-                </tr>
-              </thead>
-              <tbody id="pipelineTable"></tbody>
-            </table>
-          </div>
-
-          <div id="pipelineError" class="error hidden"></div>
         </div>
-      </section>
 
-      <section id="activity" class="panel" role="tabpanel">
         <div class="card">
-          <div class="card-header">
-            <div>
-              <h2>Activity</h2>
-              <p class="muted">Weekly stage activity from pipeline flow data.</p>
-            </div>
-            <div class="controls">
-              <label class="field">
-                <span class="label">Week</span>
-                <select id="activityWeekSelect" class="select"></select>
-              </label>
-            </div>
+          <div class="card-head">
+            <h3>End-of-week inventory</h3>
+            <div class="hint">Stages shown for the selected calendar week.</div>
           </div>
 
-          <div class="tablewrap">
-            <table>
-              <thead id="activityHead">
-                <tr>
-                  <th>Role</th>
-                  <th>Health</th>
-                </tr>
-              </thead>
-              <tbody id="activityTable"></tbody>
+          <div class="table-wrap">
+            <table class="table">
+              <thead id="pipelineThead"></thead>
+              <tbody id="pipelineTbody"></tbody>
             </table>
           </div>
         </div>
       </section>
 
-      <section id="sourcing" class="panel" role="tabpanel">
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <h2>Sourcing</h2>
-              <p class="muted">Weekly outreach and recruiter screens by role.</p>
-            </div>
+      <!-- Sourcing panel -->
+      <section id="sourcing" class="panel" aria-label="Sourcing panel">
+        <div class="panel-head">
+          <div class="panel-title">
+            <h2>Sourcing</h2>
             <div class="controls">
-              <label class="field">
-                <span class="label">Week</span>
-                <select id="sourcingWeekSelect" class="select"></select>
+              <label class="control">
+                <span>Week</span>
+                <select id="sourcingWeekSelect"></select>
               </label>
             </div>
           </div>
+        </div>
 
-          <div class="cards" id="sourcingSummary"></div>
+        <div id="sourcingSummary" class="kpi-grid"></div>
 
-          <div class="tablewrap">
-            <table>
+        <div class="card">
+          <div class="card-head">
+            <h3>Weekly sourcing activity</h3>
+            <div class="hint">KPIs based on contacted + recruiter_screen.</div>
+          </div>
+
+          <div class="table-wrap">
+            <table class="table">
               <thead>
                 <tr>
                   <th>Role</th>
+                  <th>Recruiter</th>
                   <th>Contacted</th>
                   <th>Replied</th>
-                  <th>Recruiter Screen</th>
-                  <th>Conv. Rate</th>
+                  <th>Recruiter screens</th>
+                  <th>Conversion</th>
                 </tr>
               </thead>
-              <tbody id="sourcingTable"></tbody>
+              <tbody id="sourcingTbody"></tbody>
             </table>
           </div>
-
-          <div id="sourcingError" class="error hidden"></div>
         </div>
       </section>
 
-        <div id="overviewError" class="error hidden"></div>
-      <section id="hires" class="panel" role="tabpanel">
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <h2>Hires &amp; KPIs</h2>
-              <p class="muted">All-time hiring KPIs and individual hires.</p>
+      <!-- Hires panel -->
+      <section id="hires" class="panel" aria-label="Hires panel">
+        <div class="panel-head">
+          <div class="panel-title">
+            <h2>Hires & KPIs</h2>
+            <div class="hint">Password protected.</div>
+          </div>
+        </div>
+
+        <div id="hiresLocked" class="card">
+          <div class="card-head">
+            <h3>Locked</h3>
+            <div class="hint">Enter password to view hires & KPIs.</div>
+          </div>
+          <div class="row">
+            <button id="unlockHiresBtn" class="btn" type="button">Unlock</button>
+            <span id="unlockHint" class="muted"></span>
+          </div>
+        </div>
+
+        <div id="hiresContent" class="hidden">
+          <div id="hiresKpis" class="kpi-grid"></div>
+
+          <div class="card">
+            <div class="card-head">
+              <h3>Hires (all time)</h3>
+              <div class="hint">hired_data can be empty (no error).</div>
+            </div>
+
+            <div id="hiresEmptyState" class="placeholder hidden">No hires data yet.</div>
+
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Role</th>
+                    <th>First name</th>
+                    <th>Last name</th>
+                    <th>Source</th>
+                    <th>Live date</th>
+                    <th>1st contact</th>
+                    <th>Signature date</th>
+                    <th>Start date</th>
+                    <th>TTH (days)</th>
+                    <th>TTF (days)</th>
+                    <th>Days in process</th>
+                  </tr>
+                </thead>
+                <tbody id="hiresTbody"></tbody>
+              </table>
             </div>
           </div>
-
-          <div class="cards" id="hiresKpis"></div>
-
-          <div class="tablewrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Role</th>
-                  <th>First Name</th>
-                  <th>Last Name</th>
-                  <th>Source</th>
-                  <th>Salary</th>
-                  <th>Live Date</th>
-                  <th>1st Contact</th>
-                  <th>Signature Date</th>
-                  <th>Start Date</th>
-                  <th>TTH</th>
-                  <th>TTF</th>
-                  <th>Days in Process</th>
-                </tr>
-              </thead>
-              <tbody id="hiresTable"></tbody>
-            </table>
-          </div>
-
-          <div id="hiresError" class="error hidden"></div>
         </div>
       </section>
-    </main>
-  </div>
-
-  <section id="managementView" class="management-view hidden">
-    <div class="container">
-      <div class="card management-hero">
-        <div class="card-header">
-          <div>
-            <h2 class="title"><span class="health-icon" aria-hidden="true"></span>Management View</h2>
-            <p class="muted">Condensed executive summary and key signals.</p>
-          </div>
-          <div class="controls management-controls">
-            <label class="field">
-              <span class="label">Week</span>
-              <select id="managementWeekSelect" class="select"></select>
-            </label>
-            <label class="field">
-              <span class="label">Role</span>
-              <select id="managementRoleSelect" class="select"></select>
-            </label>
-            <label class="field">
-              <span class="label">Recruiter</span>
-              <select id="managementRecruiterSelect" class="select"></select>
-            </label>
-          </div>
-        </div>
-
-        <div class="cards management-kpis" id="managementKpis">
-          <!-- filled by JS -->
-        </div>
-      </div>
     </section>
 
-    <section id="pipeline" class="panel" role="tabpanel">
-      <div class="card">
-        <h2>Pipeline Health</h2>
-        <p class="muted">Health is computed from last weeks’ funnel conversions vs role targets.</p>
-      <div class="management-grid">
-        <div class="card">
-          <h3 class="section-title">Health Summary</h3>
-          <div class="health-summary" id="managementHealthSummary"></div>
-        </div>
-        <div class="card">
-          <h3 class="section-title">Pipeline Health Distribution</h3>
-          <div class="chart-wrap">
-            <canvas id="pipelineHealthChart" height="220"></canvas>
-            <div id="pipelineHealthEmpty" class="placeholder hidden">No pipeline health data available.</div>
-          </div>
-        </div>
-        <div class="card">
-          <h3 class="section-title">Source Mix</h3>
-          <div class="chart-wrap">
-            <canvas id="sourceMixChart" height="220"></canvas>
-            <div id="sourceMixEmpty" class="placeholder hidden">No source mix data available.</div>
+    <!-- MANAGEMENT VIEW -->
+    <section id="managementView" class="hidden">
+      <div class="panel-head">
+        <div class="panel-title">
+          <h2>Management Overview</h2>
+          <div class="controls">
+            <label class="control">
+              <span>Week</span>
+              <select id="managementWeekSelect"></select>
+            </label>
+            <label class="control">
+              <span>Role</span>
+              <select id="managementRoleSelect"></select>
+            </label>
+            <label class="control">
+              <span>Recruiter</span>
+              <select id="managementRecruiterSelect"></select>
+            </label>
           </div>
         </div>
       </div>
 
+      <div id="managementKpis" class="kpi-grid"></div>
+
       <div class="card">
-        <div class="card-header">
-          <div>
-            <h3 class="section-title">Recruiter Utilization</h3>
-            <p class="muted">Screens + contacted vs weekly target.</p>
-          </div>
+        <div class="card-head">
+          <h3>Health Summary</h3>
+          <div class="hint">Badges show role counts by health.</div>
         </div>
-        <div class="tablewrap">
-          <table>
+        <div id="managementHealthSummary" class="health-summary"></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head">
+            <h3>Pipeline health distribution</h3>
+          </div>
+          <div id="pipelineHealthEmpty" class="placeholder hidden">No health data available for the current filters.</div>
+          <canvas id="pipelineHealthChart" height="160"></canvas>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3>Source mix</h3>
+            <div class="hint">Top 3 sources by contacted + Other.</div>
+          </div>
+          <div id="sourceMixEmpty" class="placeholder hidden">No sourcing data for the current week/filters.</div>
+          <canvas id="sourceMixChart" height="160"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>Recruiter utilization</h3>
+          <div class="hint">Based on screens + contacted for selected week.</div>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
             <thead>
               <tr>
-                <th>Role</th>
-                <th>Health</th>
-                <th>Bottleneck</th>
-                <th>Lookback</th>
                 <th>Recruiter</th>
                 <th>Screens</th>
                 <th>Contacted</th>
                 <th>Utilization</th>
               </tr>
             </thead>
-            <tbody id="pipelineTable"></tbody>
-            <tbody id="managementUtilizationTable"></tbody>
+            <tbody id="managementUtilizationTbody"></tbody>
           </table>
         </div>
-
-        <div id="pipelineError" class="error hidden"></div>
       </div>
-    </section>
 
-    <section id="sourcing" class="panel" role="tabpanel">
       <div class="card">
-        <h2>Sourcing</h2>
-        <p class="muted">Coming next: outreach, replies and screen conversions by week.</p>
-        <div class="placeholder">We’ll wire <code>sourcing_data</code> here next.</div>
-      </div>
-    </section>
-
-    <section id="hires" class="panel" role="tabpanel">
-      <div class="card">
-        <h2>Hires & KPIs</h2>
-        <p class="muted">Coming next: TTH / TTF / Offer acceptance and hires.</p>
-        <div class="placeholder">We’ll wire <code>hired_data</code> here next.</div>
-        <div class="card-header">
-          <div>
-            <h3 class="section-title">Role Insights</h3>
-            <p class="muted">Challenges, highlights, and big wins from recruiters.</p>
-          </div>
+        <div class="card-head">
+          <h3>Role insights</h3>
+          <div class="hint">Challenges / Highlights / Big wins from role_notes.</div>
         </div>
-        <div id="roleInsights" class="role-insights"></div>
+        <div id="roleInsights" class="insights"></div>
       </div>
     </section>
   </main>
-    </div>
-  </section>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="app.js"></script>
+  <script defer src="app.js"></script>
 </body>
 </html>
