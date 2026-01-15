@@ -1042,4 +1042,228 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Map role -> health from overview
     const healthByRole = {};
-    state.overviewRows.forEach
+    state.overviewRows.forEach(r => { if (r.role) healthByRole[r.role] = r.health || ""; });
+
+    notes.sort((a, b) => {
+      const ah = healthByRole[a.role] || "";
+      const bh = healthByRole[b.role] || "";
+      return (severityOrder[ah] ?? 4) - (severityOrder[bh] ?? 4);
+    });
+
+    notes.forEach(n => {
+      const health = healthByRole[n.role] || "";
+      const open = health === "critical" || health === "warning";
+
+      const challenges = splitNotes(n.challenges);
+      const highlights = splitNotes(n.highlights);
+      const wins = splitNotes(n.big_wins);
+
+      const card = document.createElement("details");
+      card.className = "insight-card";
+      card.open = open;
+
+      card.innerHTML = `
+        <summary>
+          <div class="insight-meta">
+            <strong>${escapeHtml(n.role || "Role")}</strong>
+            ${health ? healthDotHTML(health) : ""}
+          </div>
+          <span class="muted">${escapeHtml(n.recruiter || "")}</span>
+        </summary>
+        ${challenges.length ? `
+          <div class="insight-section">
+            <h4>Challenges</h4>
+            <ul>${challenges.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>
+          </div>
+        ` : ""}
+        ${highlights.length ? `
+          <div class="insight-section">
+            <h4>Highlights</h4>
+            <ul>${highlights.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>
+          </div>
+        ` : ""}
+        ${wins.length ? `
+          <div class="insight-section">
+            <h4>Big wins</h4>
+            <ul>${wins.map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul>
+          </div>
+        ` : ""}
+      `;
+
+      container.appendChild(card);
+    });
+  }
+
+  /* ---------------- SELECT HELPERS ---------------- */
+
+  function fillWeekSelect(selectEl, weekIds, current) {
+    const prev = current || selectEl.value || "";
+    selectEl.innerHTML = "";
+
+    weekIds.forEach(id => {
+      const p = parseWeekId(id);
+      const label = `KW ${String(p.kw).padStart(2, "0")}`;
+      const opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = label;
+      selectEl.appendChild(opt);
+    });
+
+    if (prev && weekIds.includes(prev)) selectEl.value = prev;
+    else if (weekIds.length) selectEl.value = weekIds[0];
+  }
+
+  function fillSelectWithAll(selectEl, values, allLabel, current) {
+    const prev = current || selectEl.value || "all";
+    selectEl.innerHTML = "";
+
+    const allOpt = document.createElement("option");
+    allOpt.value = "all";
+    allOpt.textContent = allLabel;
+    selectEl.appendChild(allOpt);
+
+    values.forEach(v => {
+      const opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = v;
+      selectEl.appendChild(opt);
+    });
+
+    if (prev === "all" || values.includes(prev)) selectEl.value = prev;
+    else selectEl.value = "all";
+  }
+
+  /* ---------------- MAIN RENDER ---------------- */
+
+  function renderAll() {
+    renderOverview();
+    renderPipeline();
+    renderSourcing();
+    renderHires();
+    renderManagement();
+    $("lastUpdatedValue").textContent = fmtDate();
+  }
+
+  /* ---------------- DATA LOAD ---------------- */
+
+  async function refreshAll() {
+    try {
+      const [
+        overviewRaw,
+        weeklyRaw,
+        inventoryRaw,
+        sourcingRaw,
+        hiredRaw,
+        targetsRaw,
+        roleNotesRaw
+      ] = await Promise.all([
+        loadCSV("overview", CSV.overview),
+        loadCSV("pipelineWeekly", CSV.pipelineWeekly),
+        loadCSV("pipelineInventory", CSV.pipelineInventory),
+        loadCSV("sourcing", CSV.sourcing),
+        loadCSV("hired", CSV.hired, { allowEmpty: true }),         // header-only OK
+        loadCSV("roleTargets", CSV.roleTargets, { allowEmpty: true }),
+        loadCSV("roleNotes", CSV.roleNotes, { allowEmpty: true })
+      ]);
+
+      state.overviewRows = normalizeOverview(overviewRaw);
+      state.pipelineWeeklyRows = normalizePipelineWeekly(weeklyRaw);
+      state.pipelineInventoryRows = normalizePipelineInventory(inventoryRaw);
+      state.sourcingRows = normalizeSourcing(sourcingRaw);
+      state.hiredRows = hiredRaw; // keep raw mapping (fields vary)
+      state.roleTargetsRows = normalizeRoleTargets(targetsRaw);
+      state.roleNotesRows = normalizeRoleNotes(roleNotesRaw);
+
+      // Week selects: default to latest week from data (not system date)
+      const pipelineWeekIds = uniqueWeekIds(state.pipelineInventoryRows.length ? state.pipelineInventoryRows : state.pipelineWeeklyRows);
+      const sourcingWeekIds = uniqueWeekIds(state.sourcingRows);
+      const mgmtWeekIds = uniqueWeekIds(state.pipelineWeeklyRows.length ? state.pipelineWeeklyRows : state.pipelineInventoryRows);
+
+      if (!state.pipelineWeekId) state.pipelineWeekId = latestWeekId(state.pipelineInventoryRows.length ? state.pipelineInventoryRows : state.pipelineWeeklyRows);
+      if (!state.sourcingWeekId) state.sourcingWeekId = latestWeekId(state.sourcingRows);
+      if (!state.managementWeekId) state.managementWeekId = latestWeekId(state.pipelineWeeklyRows.length ? state.pipelineWeeklyRows : state.pipelineInventoryRows);
+
+      // Ensure still valid
+      if (pipelineWeekIds.length && !pipelineWeekIds.includes(state.pipelineWeekId)) state.pipelineWeekId = pipelineWeekIds[0];
+      if (sourcingWeekIds.length && !sourcingWeekIds.includes(state.sourcingWeekId)) state.sourcingWeekId = sourcingWeekIds[0];
+      if (mgmtWeekIds.length && !mgmtWeekIds.includes(state.managementWeekId)) state.managementWeekId = mgmtWeekIds[0];
+
+      fillWeekSelect($("pipelineWeekSelect"), pipelineWeekIds, state.pipelineWeekId);
+      fillWeekSelect($("sourcingWeekSelect"), sourcingWeekIds, state.sourcingWeekId);
+      fillWeekSelect($("managementWeekSelect"), mgmtWeekIds, state.managementWeekId);
+
+      renderAll();
+    } catch (err) {
+      // errors already surfaced via banner; keep console for debugging
+      console.error(err);
+    }
+  }
+
+  /* ---------------- EVENTS ---------------- */
+
+  function wireEvents() {
+    // Tabs
+    initTabs();
+
+    // View toggle
+    $("viewContributor").addEventListener("click", () => setView("contributor"));
+    $("viewManagement").addEventListener("click", () => setView("management"));
+
+    // Refresh
+    $("refreshBtn").addEventListener("click", refreshAll);
+
+    // Contributor selects
+    $("pipelineWeekSelect").addEventListener("change", (e) => {
+      state.pipelineWeekId = e.target.value;
+      renderPipeline();
+    });
+
+    $("sourcingWeekSelect").addEventListener("change", (e) => {
+      state.sourcingWeekId = e.target.value;
+      renderSourcing();
+    });
+
+    // Management selects
+    $("managementWeekSelect").addEventListener("change", (e) => {
+      state.managementWeekId = e.target.value;
+      renderManagement();
+    });
+
+    $("managementRoleSelect").addEventListener("change", (e) => {
+      state.managementRole = e.target.value;
+      renderManagement();
+    });
+
+    $("managementRecruiterSelect").addEventListener("change", (e) => {
+      state.managementRecruiter = e.target.value;
+      renderManagement();
+    });
+
+    // Hires unlock
+    $("unlockHiresBtn").addEventListener("click", () => {
+      const input = window.prompt("Enter password to access Hires & KPIs:");
+      if (input === HIRES_PASSWORD) {
+        setHiresUnlocked(true);
+        $("unlockHint").textContent = "";
+      } else {
+        $("unlockHint").textContent = "Wrong password.";
+      }
+    });
+  }
+
+  /* ---------------- INIT ---------------- */
+
+  // restore view
+  const storedView = localStorage.getItem(VIEW_STORAGE_KEY);
+  if (storedView === "management") state.view = "management";
+
+  wireEvents();
+  setView(state.view);
+
+  // default: hires locked
+  setHiresUnlocked(false);
+
+  // initial load + refresh interval
+  refreshAll();
+  setInterval(refreshAll, 60000);
+});
