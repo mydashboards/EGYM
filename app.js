@@ -1,1076 +1,1180 @@
-document.addEventListener("DOMContentLoaded", () => {
-  /* ---------------- CONFIG ---------------- */
+/* =========================
+   CONFIG: CSV endpoints
+   ========================= */
+const CSV = {
+  overview: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=780337575&single=true&output=csv",
+  pipeline: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=565686110&single=true&output=csv",
+  sourcing: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1825170360&single=true&output=csv",
+  hired: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=756634566&single=true&output=csv",
+  roleTargets: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1524950504&single=true&output=csv"
+};
 
-  // “Current calendar week” preference for default selection (as requested).
-  // If present in data, Activity & Sourcing will default to KW 03.
-  const PREFERRED_KW = 3;
+/* =========================
+   State
+   ========================= */
+const state = {
+  data: {
+    overview: [],
+    pipeline: [],
+    sourcing: [],
+    hired: [],
+    roleTargets: []
+  },
+  filters: {
+    mgmtWeek: "All time",
+    mgmtRole: "All roles",
+    mgmtRecruiter: "All recruiters",
 
-  const CSV = {
-    overview: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=780337575&single=true&output=csv",
-    pipelineWeekly: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=565686110&single=true&output=csv",
-    pipelineInventory: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1802705167&single=true&output=csv",
-    sourcing: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1825170360&single=true&output=csv",
-    hired: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=756634566&single=true&output=csv",
-    roleTargets: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1524950504&single=true&output=csv",
-    roleNotes: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1004956410&single=true&output=csv"
-  };
+    plWeek: "All time",
+    plRole: "All roles",
+    plRecruiter: "All recruiters",
 
-  const DATA_SOURCE_LABELS = {
-    overview: "overview_data",
-    pipelineWeekly: "pipeline_weekly",
-    pipelineInventory: "pipeline_inventory",
-    sourcing: "sourcing_data",
-    hired: "hired_data",
-    roleTargets: "role_targets",
-    roleNotes: "role_notes"
-  };
+    acWeek: "All time",
+    acRole: "All roles",
+    acRecruiter: "All recruiters",
 
-  const HIRES_PASSWORD = "EGYM2026";
-  const VIEW_STORAGE_KEY = "dashboard_view";
+    soWeek: "All time",
+    soRole: "All roles",
+    soRecruiter: "All recruiters",
 
-  const state = {
-    view: "contributor",
+    ovRole: "All roles",
+    ovRecruiter: "All recruiters",
 
-    overviewRows: [],
-    pipelineWeeklyRows: [],   // long-form normalized: {year,kw,role,stage,count,week_start?}
-    pipelineInventoryRows: [],// normalized: {year,kw,role,stage,count,stage_order?}
-    sourcingRows: [],
-    hiredRows: [],
-    roleTargets: [],
-    roleNotesRows: [],
-
-    pipelineOptions: [],
-    activityOptions: [],
-    sourcingOptions: [],
-
-    selectedPipelineWeek: "",
-    selectedActivityWeek: "",
-    selectedSourcingWeek: ""
-  };
-
-  /* ---------------- HELPERS ---------------- */
-
-  const $ = (id) => document.getElementById(id);
-  const dataErrors = new Map();
-
-  function updateDataErrorBanner() {
-    const banner = $("dataErrors");
-    if (!banner) return;
-    if (dataErrors.size === 0) {
-      banner.classList.add("hidden");
-      banner.innerHTML = "";
-      return;
-    }
-    banner.classList.remove("hidden");
-    banner.innerHTML = Array.from(dataErrors.values()).map(m => `<div>${m}</div>`).join("");
+    hiRole: "All roles",
+    hiRecruiter: "All recruiters"
+  },
+  charts: {
+    mgmtHealth: null,
+    mgmtSource: null
   }
+};
 
-  function setDataError(key, message) {
-    if (message) dataErrors.set(key, message);
-    else dataErrors.delete(key);
-    updateDataErrorBanner();
-  }
+/* =========================
+   Utilities: DOM
+   ========================= */
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-  function normalizeHeader(value) {
-    return String(value || "")
-      .trim()
-      .toLowerCase()
-      .replace(/[\s\-]+/g, "_")
-      .replace(/[^\w]/g, "");
-  }
+function showBanner(msg) {
+  const el = $("#globalBanner");
+  el.textContent = msg;
+  el.classList.remove("is-hidden");
+}
+function hideBanner() {
+  const el = $("#globalBanner");
+  el.textContent = "";
+  el.classList.add("is-hidden");
+}
 
-  function num(v) {
-    if (v === null || v === undefined || v === "") return 0;
-    const n = Number(String(v).replace(",", "."));
-    return Number.isFinite(n) ? n : 0;
-  }
+/* =========================
+   Robust CSV parser (RFC-ish)
+   - handles quotes, commas, newlines
+   ========================= */
+function parseCSV(text) {
+  // Normalize line endings
+  const s = (text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
-  function getField(row, keys) {
-    for (const k of keys) {
-      const nk = normalizeHeader(k);
-      if (row[nk] !== undefined && row[nk] !== null && String(row[nk]).trim() !== "") return row[nk];
-      if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== "") return row[k];
-    }
-    return "";
-  }
+  // If empty / header-only tolerated
+  if (!s.trim()) return { headers: [], rows: [] };
 
-  function parseCSV(text) {
-    const cleaned = String(text || "").replace(/^\uFEFF/, "");
-    const trimmed = cleaned.trim();
-    if (!trimmed) return { headers: [], rows: [], isHtml: false };
+  const rows = [];
+  let row = [];
+  let cur = "";
+  let inQuotes = false;
 
-    const lower = trimmed.toLowerCase();
-    if (lower.startsWith("<!doctype") || lower.startsWith("<html")) {
-      return { headers: [], rows: [], isHtml: true };
-    }
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    const next = s[i + 1];
 
-    const rows = [];
-    let current = [];
-    let field = "";
-    let inQuotes = false;
-
-    for (let i = 0; i < cleaned.length; i += 1) {
-      const ch = cleaned[i];
-      const next = cleaned[i + 1];
-
-      if (ch === "\"") {
-        if (inQuotes && next === "\"") {
-          field += "\"";
-          i += 1;
-        } else {
-          inQuotes = !inQuotes;
-        }
-        continue;
+    if (inQuotes) {
+      if (ch === '"' && next === '"') {
+        cur += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        cur += ch;
       }
-
-      if (ch === "," && !inQuotes) {
-        current.push(field);
-        field = "";
-        continue;
-      }
-
-      if ((ch === "\n" || ch === "\r") && !inQuotes) {
-        if (ch === "\r" && next === "\n") i += 1;
-        current.push(field);
-        if (current.some(v => v !== "")) rows.push(current);
-        current = [];
-        field = "";
-        continue;
-      }
-
-      field += ch;
+      continue;
     }
 
-    if (field.length || current.length) {
-      current.push(field);
-      if (current.some(v => v !== "")) rows.push(current);
+    if (ch === '"') {
+      inQuotes = true;
+      continue;
     }
 
-    const headerRow = rows.shift() || [];
-    const headers = headerRow.map(h => normalizeHeader(h));
+    if (ch === ",") {
+      row.push(cur);
+      cur = "";
+      continue;
+    }
 
-    const mappedRows = rows.map(line => {
+    if (ch === "\n") {
+      row.push(cur);
+      rows.push(row);
+      row = [];
+      cur = "";
+      continue;
+    }
+
+    cur += ch;
+  }
+
+  // push last cell
+  row.push(cur);
+  rows.push(row);
+
+  // Remove trailing completely empty rows
+  while (rows.length && rows[rows.length - 1].every(v => String(v || "").trim() === "")) {
+    rows.pop();
+  }
+  if (!rows.length) return { headers: [], rows: [] };
+
+  const headers = rows[0].map(h => String(h || "").trim());
+  const dataRows = rows.slice(1);
+
+  // If header-only (no data rows), return empty rows
+  const cleanedRows = dataRows
+    .filter(r => r.some(v => String(v || "").trim() !== ""))
+    .map(r => {
       const obj = {};
-      headers.forEach((h, idx) => {
-        obj[h] = (line[idx] || "").trim();
-      });
+      for (let c = 0; c < headers.length; c++) {
+        obj[headers[c] || `col_${c}`] = (r[c] ?? "").toString().trim();
+      }
       return obj;
     });
 
-    return { headers, rows: mappedRows, isHtml: false };
+  return { headers, rows: cleanedRows };
+}
+
+/* =========================
+   Normalize keys + helpers
+   ========================= */
+function normKey(k) {
+  return String(k || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^\w]/g, "");
+}
+
+function normalizeRow(row) {
+  const out = {};
+  for (const k of Object.keys(row)) out[normKey(k)] = row[k];
+  return out;
+}
+
+function toNum(v) {
+  const s = String(v ?? "").trim();
+  if (!s) return 0;
+  const n = Number(s.replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function uniq(arr) {
+  return Array.from(new Set(arr.filter(v => v !== null && v !== undefined && String(v).trim() !== "")));
+}
+
+function sortWeeksNumeric(weeks) {
+  // accepts "KW 3", "3", "w3", "2026-W03", etc.
+  const parse = (w) => {
+    const s = String(w).toLowerCase();
+    const m = s.match(/(\d{1,2})\b/);
+    return m ? Number(m[1]) : NaN;
+  };
+  return [...weeks].sort((a,b) => (parse(a) - parse(b)));
+}
+
+function isoWeekNumber(date = new Date()) {
+  // ISO week, stable for "current calendar week" default
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1)/7);
+  return weekNo;
+}
+
+/* =========================
+   Column picking (tolerant)
+   ========================= */
+function pickKey(row, candidates) {
+  const keys = Object.keys(row);
+  for (const cand of candidates) {
+    const c = normKey(cand);
+    if (keys.includes(c)) return c;
+  }
+  // partial contains fallback
+  for (const cand of candidates) {
+    const c = normKey(cand);
+    const hit = keys.find(k => k.includes(c));
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function rowGet(row, key, fallback = "") {
+  if (!key) return fallback;
+  return row[key] ?? fallback;
+}
+
+/* =========================
+   Fetch CSV with cache busting
+   ========================= */
+async function fetchCSV(url, { tolerateEmpty = false } = {}) {
+  const u = url + (url.includes("?") ? "&" : "?") + "cb=" + Date.now();
+  const res = await fetch(u, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(`Fetch failed (${res.status}) for ${url}`);
+  }
+  const text = await res.text();
+  const parsed = parseCSV(text);
+
+  // tolerate header-only or empty
+  if (tolerateEmpty) {
+    const rows = (parsed.rows || []).map(normalizeRow);
+    return rows;
   }
 
-  function logLoadFailure({ key, url, status, text, error }) {
-    console.log("Data source failed", {
-      key,
-      url,
-      status,
-      snippet: (text || "").slice(0, 240),
-      error
-    });
+  // Non-tolerant: header exists but no rows still ok (just empty dataset)
+  const rows = (parsed.rows || []).map(normalizeRow);
+  return rows;
+}
+
+/* =========================
+   Build filter option lists
+   ========================= */
+function buildOptions(selectEl, items, { includeAll = true, allLabel = "All time" } = {}) {
+  const el = selectEl;
+  el.innerHTML = "";
+  const add = (v, t) => {
+    const opt = document.createElement("option");
+    opt.value = v;
+    opt.textContent = t ?? v;
+    el.appendChild(opt);
+  };
+  if (includeAll) add(allLabel, allLabel);
+  items.forEach(v => add(v, v));
+}
+
+function setSelectValue(sel, value, fallback) {
+  const el = sel;
+  const exists = Array.from(el.options).some(o => o.value === value);
+  el.value = exists ? value : (fallback ?? el.options[0]?.value ?? "");
+}
+
+/* =========================
+   Health dot (traffic light)
+   ========================= */
+function healthToColor(hRaw) {
+  const h = String(hRaw || "").toLowerCase();
+  if (["green","g","healthy","good","ok"].some(x => h.includes(x))) return "var(--good)";
+  if (["amber","yellow","warn","risk","at_risk","atrisk"].some(x => h.includes(x))) return "var(--warn)";
+  if (["red","bad","critical","block","blocking"].some(x => h.includes(x))) return "var(--bad)";
+  // If data uses 1/2/3 or similar
+  if (h === "1") return "var(--good)";
+  if (h === "2") return "var(--warn)";
+  if (h === "3") return "var(--bad)";
+  return "rgba(255,255,255,0.35)";
+}
+
+function healthDotHTML(h) {
+  const color = healthToColor(h);
+  return `<span class="dot" style="background:${color}"></span>`;
+}
+
+function fmtPct(n) {
+  if (!Number.isFinite(n)) return "–";
+  return `${Math.round(n * 100)}%`;
+}
+
+/* =========================
+   Data extractors per dataset
+   ========================= */
+function getWeeksFromRows(rows) {
+  // Find a likely "week" key
+  const sample = rows[0] || {};
+  const wkKey = pickKey(sample, ["week", "kw", "calendar_week", "cw", "woche"]);
+  if (!wkKey) return [];
+  return uniq(rows.map(r => rowGet(r, wkKey, "")).filter(Boolean));
+}
+
+function getRolesFromRows(rows) {
+  const sample = rows[0] || {};
+  const roleKey = pickKey(sample, ["role", "job", "position", "req", "requisition", "title"]);
+  if (!roleKey) return [];
+  return uniq(rows.map(r => rowGet(r, roleKey, "")));
+}
+
+function getRecruitersFromRows(rows) {
+  const sample = rows[0] || {};
+  const recKey = pickKey(sample, ["recruiter", "owner", "tap", "pplwise_tap", "pplwise_sourcer"]);
+  if (!recKey) return [];
+  return uniq(rows.map(r => rowGet(r, recKey, "")));
+}
+
+/* =========================
+   Filter application
+   ========================= */
+function applyCommonFilters(rows, { week, role, recruiter }, { weekKeyCandidates, roleKeyCandidates, recruiterKeyCandidates }) {
+  if (!rows || !rows.length) return [];
+
+  const sample = rows[0] || {};
+  const weekKey = pickKey(sample, weekKeyCandidates);
+  const roleKey = pickKey(sample, roleKeyCandidates);
+  const recruiterKey = pickKey(sample, recruiterKeyCandidates);
+
+  return rows.filter(r => {
+    const wOk = !week || week === "All time" ? true : (weekKey ? String(rowGet(r, weekKey, "")) === String(week) : true);
+    const roleOk = !role || role === "All roles" ? true : (roleKey ? String(rowGet(r, roleKey, "")) === String(role) : true);
+    const recOk = !recruiter || recruiter === "All recruiters" ? true : (recruiterKey ? String(rowGet(r, recruiterKey, "")) === String(recruiter) : true);
+    return wOk && roleOk && recOk;
+  });
+}
+
+/* =========================
+   Rendering helpers
+   ========================= */
+function renderTable(tbodyEl, rows, renderRowFn, emptyEl) {
+  tbodyEl.innerHTML = "";
+  if (!rows.length) {
+    if (emptyEl) emptyEl.style.display = "block";
+    return;
   }
+  if (emptyEl) emptyEl.style.display = "none";
+  const frag = document.createDocumentFragment();
+  rows.forEach(r => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = renderRowFn(r);
+    frag.appendChild(tr);
+  });
+  tbodyEl.appendChild(frag);
+}
 
-  async function loadCSV(key, url) {
-    const cacheBuster = `cb=${Date.now()}`;
-    const joiner = url.includes("?") ? "&" : "?";
-    const fullUrl = `${url}${joiner}${cacheBuster}`;
+function sumBy(rows, key) {
+  return rows.reduce((acc, r) => acc + toNum(r[key]), 0);
+}
 
-    let status = "unknown";
-    let text = "";
+function upsertLegend(el, items) {
+  el.innerHTML = "";
+  const frag = document.createDocumentFragment();
+  items.forEach(it => {
+    const d = document.createElement("div");
+    d.className = "item";
+    d.innerHTML = `<span class="dot" style="background:${it.color}"></span><span>${it.label}: <b>${it.value}</b></span>`;
+    frag.appendChild(d);
+  });
+  el.appendChild(frag);
+}
 
-    try {
-      const res = await fetch(fullUrl, { cache: "no-store" });
-      status = res.status;
-      text = await res.text();
-
-      if (!res.ok) {
-        logLoadFailure({ key, url: fullUrl, status, text, error: new Error(`HTTP ${res.status}`) });
-        throw new Error(`HTTP ${res.status}`);
-      }
-
-      const parsed = parseCSV(text);
-      if (parsed.isHtml) {
-        logLoadFailure({ key, url: fullUrl, status, text, error: new Error("HTML returned (not CSV)") });
-        throw new Error("Invalid CSV (HTML returned)");
-      }
-
-      // hired_data may be header-only (valid empty)
-      if (key === "hired") {
-        setDataError(key, "");
-        return parsed.rows || [];
-      }
-
-      if (!parsed.headers.length) {
-        logLoadFailure({ key, url: fullUrl, status, text, error: new Error("Empty or invalid CSV") });
-        throw new Error("Empty or invalid CSV");
-      }
-
-      setDataError(key, "");
-      return parsed.rows;
-    } catch (error) {
-      setDataError(key, `Data source unavailable: ${DATA_SOURCE_LABELS[key]}`);
-      if (!text || status === "unknown") logLoadFailure({ key, url: fullUrl, status, text, error });
-      throw error;
-    }
-  }
-
-  function weekKey(row) {
-    const y = num(getField(row, ["year"]));
-    const k = num(getField(row, ["kw"]));
-    if (!y || !k) return "";
-    return `${y}-KW${String(k).padStart(2, "0")}`;
-  }
-
-  function getWeekNumberFromKey(value) {
-    if (!value) return null;
-    const m = String(value).match(/KW(\d+)/i);
-    return m ? num(m[1]) : null;
-  }
-
-  function isWeekMatch(row, selectedWeekKey) {
-    if (selectedWeekKey === "all") return true;
-    const selectedKw = getWeekNumberFromKey(selectedWeekKey);
-    if (!selectedKw) return false;
-    const rowYear = num(getField(row, ["year"]));
-    const rowKw = num(getField(row, ["kw"]));
-    if (rowYear && rowKw) return weekKey(row) === selectedWeekKey;
-    return rowKw === selectedKw;
-  }
-
-  function getWeekOptions(rows) {
-    const map = new Map();
-    rows.forEach(r => {
-      const key = weekKey(r);
-      if (!key) return;
-      if (!map.has(key)) {
-        map.set(key, { key, year: num(getField(r, ["year"])), kw: num(getField(r, ["kw"])) });
-      }
-    });
-
-    return Array.from(map.values()).sort((a, b) => {
-      if (a.year !== b.year) return b.year - a.year;
-      return b.kw - a.kw;
-    });
-  }
-
-  function pickPreferredWeekKey(options, preferredKw) {
-    if (!options.length) return "";
-    const candidates = options.filter(o => o.kw === preferredKw);
-    if (candidates.length) {
-      // choose the highest year that has preferred KW
-      candidates.sort((a, b) => b.year - a.year);
-      return candidates[0].key;
-    }
-    return options[0].key; // fallback latest
-  }
-
-  function setSelectOptions(select, options, includeAllTime = false) {
-    const current = select.value;
-    select.innerHTML = "";
-
-    if (includeAllTime) {
-      const opt = document.createElement("option");
-      opt.value = "all";
-      opt.textContent = "All time";
-      select.appendChild(opt);
-    }
-
-    options.forEach(o => {
-      const opt = document.createElement("option");
-      opt.value = o.key;
-      opt.textContent = `KW ${String(o.kw).padStart(2, "0")}`;
-      select.appendChild(opt);
-    });
-
-    // preserve if possible
-    const allowed = new Set([...(includeAllTime ? ["all"] : []), ...options.map(o => o.key)]);
-    if (current && allowed.has(current)) select.value = current;
-    else if (includeAllTime) select.value = "all";
-    else if (options.length) select.value = options[0].key;
-  }
-
-  function formatNumber(v) {
-    const n = Number(v);
-    if (!Number.isFinite(n)) return String(v ?? "");
-    return n.toLocaleString();
-  }
-
-  function formatPercent(v) {
-    if (v === null || v === undefined || Number.isNaN(v)) return "—";
-    return `${(v * 100).toFixed(0)}%`;
-  }
-
-  function normalizeStageValue(value) {
-    return normalizeHeader(String(value || ""));
-  }
-
-  function formatStageLabel(stage) {
-    const original = String(stage || "").trim();
-    if (!original) return "";
-    if (/[A-Z]/.test(original)) return original;
-    return original
-      .replace(/[_-]+/g, " ")
-      .replace(/\b\w/g, m => m.toUpperCase());
-  }
-
-  function healthDotHTML(health) {
-    if (health === "healthy") return `<span class="status-dot good" title="Healthy"></span>`;
-    if (health === "warning") return `<span class="status-dot warn" title="At risk"></span>`;
-    if (health === "critical") return `<span class="status-dot bad" title="Critical"></span>`;
-    return `<span class="status-dot neutral" title="New"></span>`;
-  }
-
-  function normalizeHealthValue(value) {
-    const normalized = normalizeHeader(String(value || ""));
-    if (normalized.includes("critical")) return "critical";
-    if (normalized.includes("warning") || normalized.includes("risk") || normalized.includes("at_risk")) return "warning";
-    if (normalized.includes("healthy") || normalized.includes("good")) return "healthy";
-    return "";
-  }
-
-  /* ---------------- NORMALIZERS ---------------- */
-
-  function normalizePipelineWeekly(rows) {
-    if (!rows.length) return [];
-    // “wide” form sample you showed: role, kw, year, recruiter, step1, tech_light, tech_iv, final, offer, hired
-    // We convert to long-form {year,kw,role,stage,count}
-    const coreKeys = new Set(["role", "kw", "year", "week_start", "recruiter", "health"]);
-    const long = [];
-
-    rows.forEach(r => {
-      const year = num(getField(r, ["year"]));
-      const kw = num(getField(r, ["kw"]));
-      const role = getField(r, ["role"]);
-      if (!year || !kw || !role) return;
-
-      Object.keys(r).forEach(k => {
-        const nk = normalizeHeader(k);
-        if (coreKeys.has(nk)) return;
-        const count = num(r[k]);
-        if (!Number.isFinite(count)) return;
-        // keep even 0? we can skip 0 to reduce noise:
-        if (count === 0) return;
-        long.push({
-          year,
-          kw,
-          role,
-          stage: nk,
-          count
-        });
-      });
-    });
-
-    // If the sheet is already long-form (has stage/count), keep it:
-    const looksLong = rows.length && ("stage" in rows[0] || "count" in rows[0]);
-    if (looksLong) {
-      return rows.map(r => ({
-        year: num(getField(r, ["year"])),
-        kw: num(getField(r, ["kw"])),
-        role: getField(r, ["role"]),
-        stage: normalizeStageValue(getField(r, ["stage"])),
-        count: num(getField(r, ["count"]))
-      })).filter(r => r.year && r.kw && r.role && r.stage);
-    }
-
-    return long;
-  }
-
-  function normalizePipelineInventory(rows) {
-    // expected long-form: year,kw,role,stage,count,(optional stage_order)
-    // if wide-form, we’ll also support by converting similar to weekly.
-    if (!rows.length) return [];
-
-    const hasStage = Object.prototype.hasOwnProperty.call(rows[0], "stage");
-    const hasCount = Object.prototype.hasOwnProperty.call(rows[0], "count");
-
-    if (hasStage && hasCount) {
-      return rows.map(r => ({
-        year: num(getField(r, ["year"])),
-        kw: num(getField(r, ["kw"])),
-        role: getField(r, ["role"]),
-        stage: getField(r, ["stage"]),
-        count: num(getField(r, ["count"])),
-        stage_order: getField(r, ["stage_order"])
-      })).filter(r => r.year && r.kw && r.role && r.stage);
-    }
-
-    // wide -> long
-    const coreKeys = new Set(["role", "kw", "year", "week_start", "recruiter", "health", "stage_order"]);
-    const long = [];
-    rows.forEach(r => {
-      const year = num(getField(r, ["year"]));
-      const kw = num(getField(r, ["kw"]));
-      const role = getField(r, ["role"]);
-      if (!year || !kw || !role) return;
-
-      Object.keys(r).forEach(k => {
-        const nk = normalizeHeader(k);
-        if (coreKeys.has(nk)) return;
-        const count = num(r[k]);
-        if (count === 0) return;
-        long.push({
-          year,
-          kw,
-          role,
-          stage: nk,
-          count,
-          stage_order: null
-        });
-      });
-    });
-    return long;
-  }
-
-  function normalizeSourcing(rows) {
-    return rows.map(r => ({
-      year: num(getField(r, ["year"])),
-      kw: num(getField(r, ["kw"])),
-      role: getField(r, ["role"]),
-      contacted: num(getField(r, ["contacted"])),
-      replied: num(getField(r, ["replied"])),
-      recruiter_screen: num(getField(r, ["recruiter_screen", "recruiter_screened"]))
-    })).filter(r => r.year && r.kw && r.role);
-  }
-
-  function normalizeTargets(rows) {
-    return rows.map(r => ({
-      role: getField(r, ["role"]),
-      lookback_weeks: num(getField(r, ["lookback_weeks", "lookback"])),
-      min_prev_stage_n: num(getField(r, ["min_prev_stage_n", "min_n"])),
-      from_stage: normalizeStageValue(getField(r, ["from_stage"])),
-      to_stage: normalizeStageValue(getField(r, ["to_stage"])),
-      expected_rate: num(getField(r, ["expected_rate"]))
-    })).filter(r => r.role && r.from_stage && r.to_stage);
-  }
-
-  function normalizeRoleNotes(rows) {
-    return rows.map(r => ({
-      role: getField(r, ["role"]),
-      kw: num(getField(r, ["kw"])),
-      year: num(getField(r, ["year"])), // optional
-      recruiter: getField(r, ["recruiter"]),
-      challenges: getField(r, ["challenges"]),
-      highlights: getField(r, ["highlights"]),
-      big_wins: getField(r, ["big_wins"])
-    })).filter(r => r.role && r.kw);
-  }
-
-  /* ---------------- HEALTH (RAG) ---------------- */
-
-  function computeHealth(weeklyLongRowsForRole, transitions, endWeekKey) {
-    if (!transitions.length) return { health: "new", reason: "Not enough data" };
-
-    const weeks = Array.from(new Set(weeklyLongRowsForRole.map(r => weekKey(r)).filter(Boolean))).sort();
-    const eligible = endWeekKey && endWeekKey !== "all" ? weeks.filter(w => w <= endWeekKey) : weeks;
-    if (!eligible.length) return { health: "new", reason: "Not enough data" };
-
-    const rowsByWeek = new Map();
-    weeklyLongRowsForRole.forEach(r => {
-      const wk = weekKey(r);
-      if (!wk) return;
-      if (!rowsByWeek.has(wk)) rowsByWeek.set(wk, []);
-      rowsByWeek.get(wk).push(r);
-    });
-
-    let evaluated = 0;
-    let worstScore = Infinity;
-    let bottleneck = "—";
-
-    transitions.forEach(t => {
-      const lookback = Math.max(1, num(t.lookback_weeks));
-      const minN = Math.max(1, num(t.min_prev_stage_n));
-      const expected = num(t.expected_rate);
-      const fromStage = normalizeStageValue(t.from_stage);
-      const toStage = normalizeStageValue(t.to_stage);
-
-      const recentWeeks = eligible.slice(-lookback);
-      let fromCount = 0;
-      let toCount = 0;
-
-      recentWeeks.forEach(w => {
-        (rowsByWeek.get(w) || []).forEach(r => {
-          const sk = normalizeStageValue(r.stage);
-          if (sk === fromStage) fromCount += num(r.count);
-          if (sk === toStage) toCount += num(r.count);
-        });
-      });
-
-      if (fromCount >= minN && expected > 0) {
-        const actual = fromCount > 0 ? toCount / fromCount : 0;
-        const score = actual / expected;
-        evaluated += 1;
-
-        if (score < worstScore) {
-          worstScore = score;
-          bottleneck = `${t.from_stage} → ${t.to_stage} (${formatPercent(actual)} vs ${formatPercent(expected)})`;
+/* =========================
+   Charts (stable recreation)
+   ========================= */
+function buildDonut(canvas, labels, data, colors) {
+  if (!canvas) return null;
+  return new Chart(canvas.getContext("2d"), {
+    type: "doughnut",
+    data: {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: colors,
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.label}: ${ctx.parsed}`
+          }
         }
-      }
-    });
-
-    if (!evaluated) return { health: "new", reason: "Not enough data" };
-
-    // Thresholds (simple, stable)
-    if (worstScore < 0.33) return { health: "critical", reason: bottleneck };
-    if (worstScore < 0.66) return { health: "warning", reason: bottleneck };
-    return { health: "healthy", reason: bottleneck };
-  }
-
-  function getHealthByRole(weeklyRows, targets, endWeekKey) {
-    const byRole = {};
-    weeklyRows.forEach(r => {
-      if (!r.role) return;
-      if (!byRole[r.role]) byRole[r.role] = [];
-      byRole[r.role].push(r);
-    });
-
-    const targetsByRole = {};
-    targets.forEach(t => {
-      if (!t.role) return;
-      if (!targetsByRole[t.role]) targetsByRole[t.role] = [];
-      targetsByRole[t.role].push(t);
-    });
-
-    const health = {};
-    Object.keys(byRole).forEach(role => {
-      const trs = targetsByRole[role] || [];
-      health[role] = computeHealth(byRole[role], trs, endWeekKey).health;
-    });
-    return health;
-  }
-
-  /* ---------------- TABS ---------------- */
-
-  function activateTab(tabId) {
-    const tabs = document.querySelectorAll(".tab");
-    const panels = document.querySelectorAll("#contributorView .panel");
-    const target = tabId || "overview";
-
-    tabs.forEach(t => {
-      const active = t.dataset.tab === target;
-      t.classList.toggle("active", active);
-      t.setAttribute("aria-selected", String(active));
-    });
-
-    panels.forEach(p => p.classList.toggle("active", p.id === target));
-  }
-
-  function initTabs() {
-    const tabs = document.querySelectorAll(".tab");
-    let hiresUnlocked = false;
-
-    tabs.forEach(btn => {
-      btn.addEventListener("click", () => {
-        const id = btn.dataset.tab;
-        if (id === "hires" && !hiresUnlocked) {
-          const input = window.prompt("Enter password to access Hires & KPIs:");
-          if (input !== HIRES_PASSWORD) return;
-          hiresUnlocked = true;
-        }
-        window.location.hash = id;
-        activateTab(id);
-      });
-    });
-
-    window.addEventListener("hashchange", () => {
-      const id = window.location.hash.replace("#", "") || "overview";
-      activateTab(id);
-    });
-
-    activateTab(window.location.hash.replace("#", "") || "overview");
-  }
-
-  /* ---------------- RENDER: OVERVIEW ---------------- */
-
-  function renderOverview() {
-    const rows = state.overviewRows || [];
-    const healthByRole = getHealthByRole(
-      state.pipelineWeeklyRows,
-      state.roleTargets,
-      state.selectedPipelineWeek === "all" ? "" : state.selectedPipelineWeek
-    );
-
-    const openRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
-    const filledRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "filled").length;
-    const totalOpenings = rows.reduce((s, r) => s + num(getField(r, ["openings"])), 0);
-
-    const counts = { healthy: 0, warning: 0, critical: 0 };
-    rows.forEach(r => {
-      const role = getField(r, ["role"]);
-      const h = normalizeHealthValue(getField(r, ["health"])) || healthByRole[role] || "new";
-      if (h === "healthy") counts.healthy += 1;
-      else if (h === "warning") counts.warning += 1;
-      else if (h === "critical") counts.critical += 1;
-    });
-
-    $("overviewCards").innerHTML = `
-      <div class="kpi"><div class="label">Open Roles</div><div class="value">${openRoles}</div></div>
-      <div class="kpi"><div class="label">Filled Roles</div><div class="value">${filledRoles}</div></div>
-      <div class="kpi"><div class="label">Total Openings</div><div class="value">${totalOpenings}</div></div>
-      <div class="kpi"><div class="label">RAG (🟢/🟡/🔴)</div><div class="value">${counts.healthy}/${counts.warning}/${counts.critical}</div></div>
-    `;
-
-    $("overviewHealthSummary").innerHTML = `
-      <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
-      <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} At risk</span></div>
-      <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Critical</span></div>
-    `;
-
-    const tbody = $("overviewTable");
-    tbody.innerHTML = "";
-
-    rows.forEach(r => {
-      const role = getField(r, ["role"]);
-      const status = getField(r, ["status"]);
-      const location = getField(r, ["location"]);
-      const openings = getField(r, ["openings"]);
-      const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap", "owner", "recruiter"]);
-      const h = normalizeHealthValue(getField(r, ["health"])) || healthByRole[role] || "new";
-
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${role}</td>
-        <td>${status}</td>
-        <td>${location}</td>
-        <td class="num">${openings}</td>
-        <td>${owner}</td>
-        <td class="center">${healthDotHTML(h)}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-  }
-
-  /* ---------------- RENDER: PIPELINE ---------------- */
-
-  function getStagesForInventory(rows, selectedWeekKey) {
-    const stageMap = new Map();
-    rows.forEach(r => {
-      if (!isWeekMatch(r, selectedWeekKey)) return;
-      const label = String(getField(r, ["stage"]) || r.stage || "").trim();
-      if (!label) return;
-      if (!stageMap.has(label)) {
-        const so = getField(r, ["stage_order"]);
-        stageMap.set(label, { label, order: so === "" ? null : num(so) });
-      }
-    });
-
-    return Array.from(stageMap.values()).sort((a, b) => {
-      const ao = Number.isFinite(a.order) ? a.order : null;
-      const bo = Number.isFinite(b.order) ? b.order : null;
-      if (ao !== null && bo !== null && ao !== bo) return ao - bo;
-      if (ao !== null && bo === null) return -1;
-      if (ao === null && bo !== null) return 1;
-      return a.label.localeCompare(b.label);
-    });
-  }
-
-  function renderPipeline() {
-    const inv = state.pipelineInventoryRows || [];
-    const weekly = state.pipelineWeeklyRows || [];
-    const targets = state.roleTargets || [];
-    const selectedWeekKey = state.selectedPipelineWeek || "";
-
-    const emptyEl = $("pipelineEmpty");
-    const thead = document.querySelector("#pipeline table thead");
-    const tbody = $("pipelineTable");
-    tbody.innerHTML = "";
-
-    const stages = getStagesForInventory(inv, selectedWeekKey);
-
-    // Aggregate inventory counts for the selected week (or all time)
-    const roles = new Set();
-    const countsByRole = new Map();
-
-    inv.forEach(r => {
-      if (!isWeekMatch(r, selectedWeekKey)) return;
-      const role = getField(r, ["role"]) || r.role;
-      const stage = getField(r, ["stage"]) || r.stage;
-      if (!role || !stage) return;
-      roles.add(role);
-
-      if (!countsByRole.has(role)) countsByRole.set(role, new Map());
-      const sm = countsByRole.get(role);
-      sm.set(stage, (sm.get(stage) || 0) + num(getField(r, ["count"]) || r.count));
-    });
-
-    // Header
-    if (thead) {
-      const stageHeaders = stages.map(s => `<th>${formatStageLabel(s.label)}</th>`).join("");
-      thead.innerHTML = `
-        <tr>
-          <th>Role</th>
-          ${stageHeaders}
-          <th class="center">Health</th>
-        </tr>
-      `;
+      },
+      cutout: "70%"
     }
+  });
+}
 
-    // Health per role (based on weekly, endWeekKey = selected week unless all time then latest)
-    const healthByRole = getHealthByRole(
-      weekly,
-      targets,
-      selectedWeekKey === "all" ? "" : selectedWeekKey
-    );
+function destroyChart(ch) {
+  try { ch?.destroy(); } catch(_) {}
+}
 
-    const roleList = Array.from(roles).sort();
-    if (!roleList.length) {
-      emptyEl.classList.remove("hidden");
-      return;
-    }
-    emptyEl.classList.add("hidden");
+/* =========================
+   Tabs
+   ========================= */
+function setupTabs() {
+  $$(".tab").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const tab = btn.getAttribute("data-tab");
+      $$(".tab").forEach(b => b.classList.remove("is-active"));
+      btn.classList.add("is-active");
 
-    roleList.forEach(role => {
-      const sm = countsByRole.get(role) || new Map();
-      const stageCells = stages.map(s => `<td class="num">${formatNumber(sm.get(s.label) || 0)}</td>`).join("");
-      const h = healthByRole[role] || "new";
+      $$(".panel").forEach(p => p.classList.remove("is-active"));
+      $("#tab-" + tab).classList.add("is-active");
 
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${role}</td>
-        ${stageCells}
-        <td class="center">${healthDotHTML(h)}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-  }
-
-  /* ---------------- RENDER: ACTIVITY ---------------- */
-
-  function getActivityStages(weeklyRows, selectedWeekKey) {
-    const set = new Set();
-    weeklyRows.forEach(r => {
-      if (!isWeekMatch(r, selectedWeekKey)) return;
-      if (!r.stage) return;
-      set.add(r.stage);
-    });
-
-    const preferred = ["sourced", "step1", "tech_light", "tech_iv", "final", "offer", "hired"];
-    const presentPreferred = preferred.filter(s => set.has(s));
-    const remaining = Array.from(set).filter(s => !preferred.includes(s)).sort();
-    return [...presentPreferred, ...remaining];
-  }
-
-  function renderActivity() {
-    const weekly = state.pipelineWeeklyRows || [];
-    const targets = state.roleTargets || [];
-    const selectedWeekKey = state.selectedActivityWeek || "";
-
-    const stages = getActivityStages(weekly, selectedWeekKey);
-    const roles = new Set();
-    const countsByRole = new Map();
-
-    weekly.forEach(r => {
-      if (!isWeekMatch(r, selectedWeekKey)) return;
-      if (!r.role || !r.stage) return;
-      roles.add(r.role);
-      if (!countsByRole.has(r.role)) countsByRole.set(r.role, new Map());
-      const sm = countsByRole.get(r.role);
-      sm.set(r.stage, (sm.get(r.stage) || 0) + num(r.count));
-    });
-
-    const thead = document.querySelector("#activity table thead");
-    if (thead) {
-      const stageHeaders = stages.map(s => `<th>${formatStageLabel(s)}</th>`).join("");
-      thead.innerHTML = `
-        <tr>
-          <th>Role</th>
-          ${stageHeaders}
-          <th class="center">Health</th>
-        </tr>
-      `;
-    }
-
-    const healthByRole = getHealthByRole(weekly, targets, selectedWeekKey === "all" ? "" : selectedWeekKey);
-
-    const tbody = $("activityTable");
-    tbody.innerHTML = "";
-
-    Array.from(roles).sort().forEach(role => {
-      const sm = countsByRole.get(role) || new Map();
-      const stageCells = stages.map(s => `<td class="num">${formatNumber(sm.get(s) || 0)}</td>`).join("");
-      const h = healthByRole[role] || "new";
-
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${role}</td>
-        ${stageCells}
-        <td class="center">${healthDotHTML(h)}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-  }
-
-  /* ---------------- RENDER: SOURCING ---------------- */
-
-  function renderSourcing() {
-    const rows = state.sourcingRows || [];
-    const selectedWeekKey = state.selectedSourcingWeek || "";
-
-    const filtered = rows.filter(r => isWeekMatch(r, selectedWeekKey));
-
-    const tbody = $("sourcingTable");
-    tbody.innerHTML = "";
-
-    let totalContacted = 0;
-    let totalReplied = 0;
-    let totalScreen = 0;
-
-    // aggregate by role for all time (or still by role for week)
-    const byRole = new Map();
-    filtered.forEach(r => {
-      if (!byRole.has(r.role)) byRole.set(r.role, { contacted: 0, replied: 0, screen: 0 });
-      const agg = byRole.get(r.role);
-      agg.contacted += num(r.contacted);
-      agg.replied += num(r.replied);
-      agg.screen += num(r.recruiter_screen);
-
-      totalContacted += num(r.contacted);
-      totalReplied += num(r.replied);
-      totalScreen += num(r.recruiter_screen);
-    });
-
-    Array.from(byRole.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([role, agg]) => {
-      const conv = agg.contacted > 0 ? agg.screen / agg.contacted : null;
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${role}</td>
-        <td class="num">${formatNumber(agg.contacted)}</td>
-        <td class="num">${formatNumber(agg.replied)}</td>
-        <td class="num">${formatNumber(agg.screen)}</td>
-        <td class="num">${formatPercent(conv)}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-
-    const overallConv = totalContacted > 0 ? totalScreen / totalContacted : null;
-
-    $("sourcingSummary").innerHTML = `
-      <div class="kpi"><div class="label">Total Contacted</div><div class="value">${formatNumber(totalContacted)}</div></div>
-      <div class="kpi"><div class="label">Total Replied</div><div class="value">${formatNumber(totalReplied)}</div></div>
-      <div class="kpi"><div class="label">Total Recruiter Screens</div><div class="value">${formatNumber(totalScreen)}</div><div class="sub">${formatPercent(overallConv)} conversion</div></div>
-      <div class="kpi"><div class="label">Scope</div><div class="value">${selectedWeekKey === "all" ? "All time" : selectedWeekKey.replace("-", " ")}</div></div>
-    `;
-  }
-
-  /* ---------------- RENDER: HIRES ---------------- */
-
-  function parseDate(value) {
-    if (!value) return null;
-    const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? null : d;
-  }
-
-  function dayDiff(start, end) {
-    if (!start || !end) return null;
-    const ms = end - start;
-    return Number.isFinite(ms) ? Math.round(ms / (1000 * 60 * 60 * 24)) : null;
-  }
-
-  function average(values) {
-    if (!values.length) return null;
-    return values.reduce((s, v) => s + v, 0) / values.length;
-  }
-
-  function renderHires() {
-    const rows = state.hiredRows || [];
-    const tbody = $("hiresTable");
-    const empty = $("hiresEmpty");
-
-    tbody.innerHTML = "";
-
-    if (!rows.length) {
-      empty.classList.remove("hidden");
-    } else {
-      empty.classList.add("hidden");
-    }
-
-    const tthValues = [];
-    const ttfValues = [];
-    const processValues = [];
-
-    rows.forEach(r => {
-      const liveDate = parseDate(getField(r, ["live_date", "live date"]));
-      const signatureDate = parseDate(getField(r, ["signature_date", "signature date"]));
-      const startDate = parseDate(getField(r, ["start_date", "start date"]));
-      const firstContact = parseDate(getField(r, ["1st_contact", "first_contact", "1st contact", "first contact"]));
-
-      const tth = dayDiff(liveDate, signatureDate);
-      const ttf = dayDiff(liveDate, startDate);
-      const daysInProcess = dayDiff(firstContact, signatureDate);
-
-      if (tth !== null) tthValues.push(tth);
-      if (ttf !== null) ttfValues.push(ttf);
-      if (daysInProcess !== null) processValues.push(daysInProcess);
-
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${getField(r, ["role"])}</td>
-        <td>${getField(r, ["first_name", "first name"])}</td>
-        <td>${getField(r, ["last_name", "last name"])}</td>
-        <td>${getField(r, ["source"])}</td>
-        <td>${getField(r, ["salary"])}</td>
-        <td>${getField(r, ["live_date", "live date"])}</td>
-        <td>${getField(r, ["1st_contact", "first_contact", "1st contact", "first contact"])}</td>
-        <td>${getField(r, ["signature_date", "signature date"])}</td>
-        <td>${getField(r, ["start_date", "start date"])}</td>
-        <td class="num">${tth !== null ? tth : "—"}</td>
-        <td class="num">${ttf !== null ? ttf : "—"}</td>
-        <td class="num">${daysInProcess !== null ? daysInProcess : "—"}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-
-    const avgTth = average(tthValues);
-    const avgTtf = average(ttfValues);
-
-    $("hiresKpis").innerHTML = `
-      <div class="kpi"><div class="label">Total Hires</div><div class="value">${formatNumber(rows.length)}</div></div>
-      <div class="kpi"><div class="label">Avg TTH</div><div class="value">${avgTth !== null ? avgTth.toFixed(1) : "—"}</div></div>
-      <div class="kpi"><div class="label">Avg TTF</div><div class="value">${avgTtf !== null ? avgTtf.toFixed(1) : "—"}</div></div>
-      <div class="kpi"><div class="label">Scope</div><div class="value">All time</div></div>
-    `;
-  }
-
-  /* ---------------- VIEW SWITCH ---------------- */
-
-  function setView(view) {
-    state.view = view;
-    localStorage.setItem(VIEW_STORAGE_KEY, view);
-
-    const contributorBtn = $("viewContributor");
-    const managementBtn = $("viewManagement");
-    const contributorView = $("contributorView");
-    const managementView = $("managementView");
-
-    const isContributor = view === "contributor";
-    contributorBtn.classList.toggle("active", isContributor);
-    managementBtn.classList.toggle("active", !isContributor);
-    contributorView.classList.toggle("hidden", !isContributor);
-    managementView.classList.toggle("hidden", isContributor);
-  }
-
-  /* ---------------- WEEK SELECTIONS ---------------- */
-
-  function syncWeekSelections() {
-    state.pipelineOptions = getWeekOptions(state.pipelineInventoryRows.length ? state.pipelineInventoryRows : state.pipelineWeeklyRows);
-    state.activityOptions = getWeekOptions(state.pipelineWeeklyRows);
-    state.sourcingOptions = getWeekOptions(state.sourcingRows);
-
-    // pipeline includes All time option
-    setSelectOptions($("pipelineWeekSelect"), state.pipelineOptions, true);
-    // activity includes All time option
-    setSelectOptions($("activityWeekSelect"), state.activityOptions, true);
-    // sourcing includes All time option
-    setSelectOptions($("sourcingWeekSelect"), state.sourcingOptions, true);
-
-    // Defaults:
-    // Pipeline: keep current, else "all" is okay but prefer latest week (more useful)
-    if (!state.selectedPipelineWeek || (!["all", ...state.pipelineOptions.map(o => o.key)].includes(state.selectedPipelineWeek))) {
-      state.selectedPipelineWeek = state.pipelineOptions.length ? state.pipelineOptions[0].key : "all";
-    }
-
-    // Activity & Sourcing: prefer KW 03 if present, else latest
-    if (!state.selectedActivityWeek || (!["all", ...state.activityOptions.map(o => o.key)].includes(state.selectedActivityWeek))) {
-      state.selectedActivityWeek = pickPreferredWeekKey(state.activityOptions, PREFERRED_KW) || "all";
-    }
-    if (!state.selectedSourcingWeek || (!["all", ...state.sourcingOptions.map(o => o.key)].includes(state.selectedSourcingWeek))) {
-      state.selectedSourcingWeek = pickPreferredWeekKey(state.sourcingOptions, PREFERRED_KW) || "all";
-    }
-
-    $("pipelineWeekSelect").value = state.selectedPipelineWeek;
-    $("activityWeekSelect").value = state.selectedActivityWeek;
-    $("sourcingWeekSelect").value = state.selectedSourcingWeek;
-  }
-
-  function renderAll() {
-    renderOverview();
-    renderPipeline();
-    renderActivity();
-    renderSourcing();
-    renderHires();
-  }
-
-  /* ---------------- MAIN LOAD ---------------- */
-
-  function fmtDate(d = new Date()) {
-    return d.toLocaleString(undefined, {
-      year: "numeric", month: "2-digit", day: "2-digit",
-      hour: "2-digit", minute: "2-digit"
-    });
-  }
-
-  async function refreshAll() {
-    try {
-      const [
-        overviewRows,
-        pipelineWeeklyRaw,
-        pipelineInventoryRaw,
-        sourcingRaw,
-        hiredRaw,
-        targetsRaw,
-        roleNotesRaw
-      ] = await Promise.all([
-        loadCSV("overview", CSV.overview),
-        loadCSV("pipelineWeekly", CSV.pipelineWeekly),
-        loadCSV("pipelineInventory", CSV.pipelineInventory),
-        loadCSV("sourcing", CSV.sourcing),
-        loadCSV("hired", CSV.hired),
-        loadCSV("roleTargets", CSV.roleTargets),
-        loadCSV("roleNotes", CSV.roleNotes)
-      ]);
-
-      state.overviewRows = overviewRows || [];
-      state.pipelineWeeklyRows = normalizePipelineWeekly(pipelineWeeklyRaw || []);
-      state.pipelineInventoryRows = normalizePipelineInventory(pipelineInventoryRaw || []);
-      state.sourcingRows = normalizeSourcing(sourcingRaw || []);
-      state.hiredRows = hiredRaw || [];
-      state.roleTargets = normalizeTargets(targetsRaw || []);
-      state.roleNotesRows = normalizeRoleNotes(roleNotesRaw || []);
-
-      syncWeekSelections();
+      // Re-render the active view to avoid stale UI
       renderAll();
+    });
+  });
+}
 
-      $("lastUpdated").textContent = `Last updated: ${fmtDate()}`;
-    } catch (e) {
-      console.error(e);
-      // errors are shown via data error banner; keep UI responsive
+/* =========================
+   Initialize filters & defaults
+   ========================= */
+function initFilterControls() {
+  // Management
+  $("#mgmtWeek").addEventListener("change", (e) => { state.filters.mgmtWeek = e.target.value; renderAll(); });
+  $("#mgmtRole").addEventListener("change", (e) => { state.filters.mgmtRole = e.target.value; renderAll(); });
+  $("#mgmtRecruiter").addEventListener("change", (e) => { state.filters.mgmtRecruiter = e.target.value; renderAll(); });
+
+  // Overview
+  $("#ovRole").addEventListener("change", (e) => { state.filters.ovRole = e.target.value; renderAll(); });
+  $("#ovRecruiter").addEventListener("change", (e) => { state.filters.ovRecruiter = e.target.value; renderAll(); });
+
+  // Pipeline
+  $("#plWeek").addEventListener("change", (e) => { state.filters.plWeek = e.target.value; renderAll(); });
+  $("#plRole").addEventListener("change", (e) => { state.filters.plRole = e.target.value; renderAll(); });
+  $("#plRecruiter").addEventListener("change", (e) => { state.filters.plRecruiter = e.target.value; renderAll(); });
+
+  // Activity
+  $("#acWeek").addEventListener("change", (e) => { state.filters.acWeek = e.target.value; renderAll(); });
+  $("#acRole").addEventListener("change", (e) => { state.filters.acRole = e.target.value; renderAll(); });
+  $("#acRecruiter").addEventListener("change", (e) => { state.filters.acRecruiter = e.target.value; renderAll(); });
+
+  // Sourcing
+  $("#soWeek").addEventListener("change", (e) => { state.filters.soWeek = e.target.value; renderAll(); });
+  $("#soRole").addEventListener("change", (e) => { state.filters.soRole = e.target.value; renderAll(); });
+  $("#soRecruiter").addEventListener("change", (e) => { state.filters.soRecruiter = e.target.value; renderAll(); });
+
+  // Hires
+  $("#hiRole").addEventListener("change", (e) => { state.filters.hiRole = e.target.value; renderAll(); });
+  $("#hiRecruiter").addEventListener("change", (e) => { state.filters.hiRecruiter = e.target.value; renderAll(); });
+}
+
+/* =========================
+   Populate dropdowns (from loaded data)
+   ========================= */
+function populateDropdowns() {
+  const ov = state.data.overview;
+  const pl = state.data.pipeline;
+  const ac = state.data.pipeline;   // activity uses same sheet: pipeline_weekly (weekly stage activity)
+  const so = state.data.sourcing;
+  const hi = state.data.hired;
+
+  const weeksPipeline = sortWeeksNumeric(getWeeksFromRows(pl));
+  const weeksSourcing = sortWeeksNumeric(getWeeksFromRows(so));
+  const weeksActivity = sortWeeksNumeric(getWeeksFromRows(ac));
+
+  const rolesAll = uniq([
+    ...getRolesFromRows(ov),
+    ...getRolesFromRows(pl),
+    ...getRolesFromRows(so),
+    ...getRolesFromRows(hi)
+  ]).sort((a,b) => String(a).localeCompare(String(b)));
+
+  const recruitersAll = uniq([
+    ...getRecruitersFromRows(ov),
+    ...getRecruitersFromRows(pl),
+    ...getRecruitersFromRows(so),
+    ...getRecruitersFromRows(hi)
+  ]).sort((a,b) => String(a).localeCompare(String(b)));
+
+  // Weeks
+  buildOptions($("#plWeek"), weeksPipeline, { includeAll: true, allLabel: "All time" });
+  buildOptions($("#mgmtWeek"), weeksPipeline, { includeAll: true, allLabel: "All time" });
+
+  buildOptions($("#acWeek"), weeksActivity, { includeAll: true, allLabel: "All time" });
+  buildOptions($("#soWeek"), weeksSourcing, { includeAll: true, allLabel: "All time" });
+
+  // Roles
+  buildOptions($("#plRole"), rolesAll, { includeAll: true, allLabel: "All roles" });
+  buildOptions($("#acRole"), rolesAll, { includeAll: true, allLabel: "All roles" });
+  buildOptions($("#soRole"), rolesAll, { includeAll: true, allLabel: "All roles" });
+  buildOptions($("#mgmtRole"), rolesAll, { includeAll: true, allLabel: "All roles" });
+  buildOptions($("#ovRole"), rolesAll, { includeAll: true, allLabel: "All roles" });
+  buildOptions($("#hiRole"), rolesAll, { includeAll: true, allLabel: "All roles" });
+
+  // Recruiters
+  buildOptions($("#plRecruiter"), recruitersAll, { includeAll: true, allLabel: "All recruiters" });
+  buildOptions($("#acRecruiter"), recruitersAll, { includeAll: true, allLabel: "All recruiters" });
+  buildOptions($("#soRecruiter"), recruitersAll, { includeAll: true, allLabel: "All recruiters" });
+  buildOptions($("#mgmtRecruiter"), recruitersAll, { includeAll: true, allLabel: "All recruiters" });
+  buildOptions($("#ovRecruiter"), recruitersAll, { includeAll: true, allLabel: "All recruiters" });
+  buildOptions($("#hiRecruiter"), recruitersAll, { includeAll: true, allLabel: "All recruiters" });
+
+  // Defaults:
+  // Pipeline + Management: latest week from data (if present)
+  const latestPipelineWeek = weeksPipeline.length ? weeksPipeline[weeksPipeline.length - 1] : "All time";
+
+  // Activity + Sourcing: current calendar week (KW) if present; else latest from data
+  const currentWeek = isoWeekNumber(new Date());
+  const currentWeekStr = String(currentWeek);
+  const pickWeek = (weeks) => {
+    if (!weeks.length) return "All time";
+    const exact = weeks.find(w => String(w).match(/\d{1,2}/)?.[0] === currentWeekStr) || weeks.find(w => String(w) === currentWeekStr);
+    return exact || weeks[weeks.length - 1];
+  };
+
+  const activityDefault = pickWeek(weeksActivity);
+  const sourcingDefault = pickWeek(weeksSourcing);
+
+  state.filters.plWeek = latestPipelineWeek;
+  state.filters.mgmtWeek = latestPipelineWeek;
+
+  state.filters.acWeek = activityDefault;
+  state.filters.soWeek = sourcingDefault;
+
+  // Apply to selects (if option exists)
+  setSelectValue($("#plWeek"), state.filters.plWeek, "All time");
+  setSelectValue($("#mgmtWeek"), state.filters.mgmtWeek, "All time");
+  setSelectValue($("#acWeek"), state.filters.acWeek, "All time");
+  setSelectValue($("#soWeek"), state.filters.soWeek, "All time");
+
+  // Keep current selections for role/recruiter if still exist
+  setSelectValue($("#plRole"), state.filters.plRole, "All roles");
+  setSelectValue($("#plRecruiter"), state.filters.plRecruiter, "All recruiters");
+
+  setSelectValue($("#acRole"), state.filters.acRole, "All roles");
+  setSelectValue($("#acRecruiter"), state.filters.acRecruiter, "All recruiters");
+
+  setSelectValue($("#soRole"), state.filters.soRole, "All roles");
+  setSelectValue($("#soRecruiter"), state.filters.soRecruiter, "All recruiters");
+
+  setSelectValue($("#mgmtRole"), state.filters.mgmtRole, "All roles");
+  setSelectValue($("#mgmtRecruiter"), state.filters.mgmtRecruiter, "All recruiters");
+
+  setSelectValue($("#ovRole"), state.filters.ovRole, "All roles");
+  setSelectValue($("#ovRecruiter"), state.filters.ovRecruiter, "All recruiters");
+
+  setSelectValue($("#hiRole"), state.filters.hiRole, "All roles");
+  setSelectValue($("#hiRecruiter"), state.filters.hiRecruiter, "All recruiters");
+}
+
+/* =========================
+   OVERVIEW render
+   ========================= */
+function renderOverview() {
+  const rows = state.data.overview || [];
+  const hires = state.data.hired || [];
+
+  const filtered = applyCommonFilters(
+    rows,
+    { week: null, role: state.filters.ovRole, recruiter: state.filters.ovRecruiter },
+    {
+      weekKeyCandidates: ["week","kw","calendar_week","cw","woche"],
+      roleKeyCandidates: ["role","job","position","title"],
+      recruiterKeyCandidates: ["recruiter","pplwise_tap","pplwise_sourcer","tap","owner"]
     }
+  );
+
+  // keys
+  const sample = filtered[0] || rows[0] || {};
+  const roleKey = pickKey(sample, ["role","job","position","title"]);
+  const openingsKey = pickKey(sample, ["openings","open_roles","open_positions","headcount","hc","#openings"]);
+  const healthKey = pickKey(sample, ["health","rag","status"]);
+  const ownerKey = pickKey(sample, ["pplwise_tap","pplwise_sourcer","tap","owner","hiring_manager"]);
+  const recruiterKey = pickKey(sample, ["recruiter","pplwise_tap","pplwise_sourcer","tap","owner"]);
+
+  // Open roles = unique roles count (or sum openings if available)
+  const openRoles = uniq(filtered.map(r => rowGet(r, roleKey, ""))).length;
+  $("#ovOpenRoles").textContent = openRoles ? String(openRoles) : "0";
+  $("#ovOpenRolesMeta").textContent = (state.filters.ovRole !== "All roles" || state.filters.ovRecruiter !== "All recruiters")
+    ? "Filtered"
+    : "All roles";
+
+  // Health badges
+  const healthCounts = { green:0, amber:0, red:0 };
+  filtered.forEach(r => {
+    const h = String(rowGet(r, healthKey, "")).toLowerCase();
+    if (healthToColor(h) === "var(--good)") healthCounts.green++;
+    else if (healthToColor(h) === "var(--warn)") healthCounts.amber++;
+    else if (healthToColor(h) === "var(--bad)") healthCounts.red++;
+  });
+
+  const badges = $("#ovHealthBadges");
+  badges.innerHTML = "";
+  const makeBadge = (label, count, colorVar) => {
+    const div = document.createElement("div");
+    div.className = "badge";
+    div.innerHTML = `<span class="dot" style="background:${colorVar}"></span><span>${label}: <b>${count}</b></span>`;
+    badges.appendChild(div);
+  };
+  makeBadge("Healthy", healthCounts.green, "var(--good)");
+  makeBadge("At risk", healthCounts.amber, "var(--warn)");
+  makeBadge("Critical", healthCounts.red, "var(--bad)");
+
+  // Avg TTH (if available in overview)
+  const tthKey = pickKey(sample, ["time_to_hire","tth","days_to_hire","avg_time_to_hire"]);
+  const tthVals = tthKey ? filtered.map(r => toNum(rowGet(r, tthKey, ""))).filter(n => n > 0) : [];
+  const tthAvg = tthVals.length ? (tthVals.reduce((a,b)=>a+b,0)/tthVals.length) : null;
+  $("#ovTTH").textContent = tthAvg ? `${Math.round(tthAvg)}d` : "–";
+
+  // Hires all-time count (rows)
+  $("#ovHires").textContent = String(hires.length || 0);
+  $("#ovHiresMeta").textContent = hires.length ? "From hired_data" : "No hires rows (empty source is ok)";
+
+  // Roles table
+  const tbody = $("#ovRolesTable tbody");
+  const grouped = new Map();
+
+  filtered.forEach(r => {
+    const role = rowGet(r, roleKey, "—");
+    const owner = rowGet(r, ownerKey, "");
+    const recruiter = rowGet(r, recruiterKey, "");
+    const health = rowGet(r, healthKey, "");
+    const openings = openingsKey ? toNum(rowGet(r, openingsKey, "0")) : 0;
+
+    const key = `${role}||${recruiter}`;
+    if (!grouped.has(key)) grouped.set(key, { role, owner, recruiter, health, openings });
+    else {
+      const g = grouped.get(key);
+      g.openings += openings;
+      if (!g.health && health) g.health = health;
+      if (!g.owner && owner) g.owner = owner;
+    }
+  });
+
+  const rowsOut = Array.from(grouped.values()).sort((a,b) => String(a.role).localeCompare(String(b.role)));
+
+  renderTable(
+    tbody,
+    rowsOut,
+    (r) => `
+      <td>${r.role}</td>
+      <td>${r.owner || "—"}</td>
+      <td>${r.recruiter || "—"}</td>
+      <td>${healthDotHTML(r.health)} <span style="opacity:.0">.</span></td>
+      <td class="right">${r.openings ? r.openings : "—"}</td>
+    `,
+    $("#ovRolesEmpty")
+  );
+}
+
+/* =========================
+   PIPELINE render (Inventory)
+   ========================= */
+function renderPipeline() {
+  const rows = state.data.pipeline || [];
+
+  const filtered = applyCommonFilters(
+    rows,
+    { week: state.filters.plWeek, role: state.filters.plRole, recruiter: state.filters.plRecruiter },
+    {
+      weekKeyCandidates: ["week","kw","calendar_week","cw","woche"],
+      roleKeyCandidates: ["role","job","position","title"],
+      recruiterKeyCandidates: ["recruiter","owner","tap","pplwise_tap","pplwise_sourcer"]
+    }
+  );
+
+  const sample = filtered[0] || rows[0] || {};
+  const roleKey = pickKey(sample, ["role","job","position","title"]);
+  const recruiterKey = pickKey(sample, ["recruiter","owner","tap","pplwise_tap","pplwise_sourcer"]);
+  const stageKey = pickKey(sample, ["stage","pipeline_stage","step","status"]);
+  const countKey = pickKey(sample, ["count","candidates","n","#","volume"]);
+
+  // Inventory table: role+recruiter+stage => sum(count)
+  const map = new Map();
+  filtered.forEach(r => {
+    const role = rowGet(r, roleKey, "—");
+    const recruiter = rowGet(r, recruiterKey, "—");
+    const stage = rowGet(r, stageKey, "—");
+    const cnt = countKey ? toNum(rowGet(r, countKey, "0")) : 0;
+
+    const k = `${role}||${recruiter}||${stage}`;
+    map.set(k, (map.get(k) || 0) + cnt);
+  });
+
+  const out = Array.from(map.entries())
+    .map(([k,v]) => {
+      const [role,recruiter,stage] = k.split("||");
+      return { role, recruiter, stage, count: v };
+    })
+    .sort((a,b) => (a.role.localeCompare(b.role) || a.stage.localeCompare(b.stage)));
+
+  renderTable(
+    $("#plTable tbody"),
+    out,
+    (r) => `
+      <td>${r.role}</td>
+      <td>${r.recruiter}</td>
+      <td>${r.stage}</td>
+      <td class="right">${r.count}</td>
+    `,
+    $("#plEmpty")
+  );
+}
+
+/* =========================
+   ACTIVITY render (Weekly stage activity)
+   ========================= */
+function renderActivity() {
+  // Using pipeline_weekly source as "activity" table
+  const rows = state.data.pipeline || [];
+
+  const filtered = applyCommonFilters(
+    rows,
+    { week: state.filters.acWeek, role: state.filters.acRole, recruiter: state.filters.acRecruiter },
+    {
+      weekKeyCandidates: ["week","kw","calendar_week","cw","woche"],
+      roleKeyCandidates: ["role","job","position","title"],
+      recruiterKeyCandidates: ["recruiter","owner","tap","pplwise_tap","pplwise_sourcer"]
+    }
+  );
+
+  const sample = filtered[0] || rows[0] || {};
+  const roleKey = pickKey(sample, ["role","job","position","title"]);
+  const recruiterKey = pickKey(sample, ["recruiter","owner","tap","pplwise_tap","pplwise_sourcer"]);
+  const stageKey = pickKey(sample, ["stage","pipeline_stage","step","status"]);
+  const countKey = pickKey(sample, ["count","moved","activity","delta","n","#","volume"]);
+
+  // Same grouping as pipeline (role+recruiter+stage => sum count)
+  const map = new Map();
+  filtered.forEach(r => {
+    const role = rowGet(r, roleKey, "—");
+    const recruiter = rowGet(r, recruiterKey, "—");
+    const stage = rowGet(r, stageKey, "—");
+    const cnt = countKey ? toNum(rowGet(r, countKey, "0")) : 0;
+
+    const k = `${role}||${recruiter}||${stage}`;
+    map.set(k, (map.get(k) || 0) + cnt);
+  });
+
+  const out = Array.from(map.entries())
+    .map(([k,v]) => {
+      const [role,recruiter,stage] = k.split("||");
+      return { role, recruiter, stage, count: v };
+    })
+    .sort((a,b) => (a.role.localeCompare(b.role) || a.stage.localeCompare(b.stage)));
+
+  renderTable(
+    $("#acTable tbody"),
+    out,
+    (r) => `
+      <td>${r.role}</td>
+      <td>${r.recruiter}</td>
+      <td>${r.stage}</td>
+      <td class="right">${r.count}</td>
+    `,
+    $("#acEmpty")
+  );
+}
+
+/* =========================
+   SOURCING render
+   ========================= */
+function renderSourcing() {
+  const rows = state.data.sourcing || [];
+
+  const filtered = applyCommonFilters(
+    rows,
+    { week: state.filters.soWeek, role: state.filters.soRole, recruiter: state.filters.soRecruiter },
+    {
+      weekKeyCandidates: ["week","kw","calendar_week","cw","woche"],
+      roleKeyCandidates: ["role","job","position","title"],
+      recruiterKeyCandidates: ["recruiter","owner","tap","pplwise_tap","pplwise_sourcer"]
+    }
+  );
+
+  const sample = filtered[0] || rows[0] || {};
+  const roleKey = pickKey(sample, ["role","job","position","title"]);
+  const recruiterKey = pickKey(sample, ["recruiter","owner","tap","pplwise_tap","pplwise_sourcer"]);
+  const sourceKey = pickKey(sample, ["source","channel","origin"]);
+  const countKey = pickKey(sample, ["count","candidates","n","#","volume","touches"]);
+
+  // KPI fields if present
+  const screenedKey = pickKey(sample, ["recruiter_screen","screened","screens"]);
+  const contactedKey = pickKey(sample, ["contacted","outreach","messages"]);
+  const repliesKey = pickKey(sample, ["replies","reply","responses","inmail_replies"]);
+
+  // Totals (prefer explicit columns, fallback sum(count))
+  const totalCount = countKey ? filtered.reduce((a,r)=>a+toNum(rowGet(r,countKey,"0")),0) : 0;
+  const totalScreened = screenedKey ? filtered.reduce((a,r)=>a+toNum(rowGet(r,screenedKey,"0")),0) : null;
+  const totalContacted = contactedKey ? filtered.reduce((a,r)=>a+toNum(rowGet(r,contactedKey,"0")),0) : null;
+  const totalReplies = repliesKey ? filtered.reduce((a,r)=>a+toNum(rowGet(r,repliesKey,"0")),0) : null;
+
+  $("#soScreened").textContent = totalScreened !== null ? String(totalScreened) : String(totalCount);
+  $("#soContacted").textContent = totalContacted !== null ? String(totalContacted) : "–";
+  $("#soReplies").textContent = totalReplies !== null ? String(totalReplies) : "–";
+
+  // Source top 3
+  const sourceMap = new Map();
+  filtered.forEach(r => {
+    const src = rowGet(r, sourceKey, "Unknown");
+    const cnt = countKey ? toNum(rowGet(r, countKey, "0")) : 0;
+    sourceMap.set(src, (sourceMap.get(src) || 0) + cnt);
+  });
+  const topSources = Array.from(sourceMap.entries())
+    .sort((a,b)=>b[1]-a[1])
+    .slice(0,3)
+    .map(([s,c]) => `${s} (${c})`);
+  $("#soMainSources").textContent = topSources.length ? topSources.join(" · ") : "–";
+
+  // Table
+  const map = new Map();
+  filtered.forEach(r => {
+    const role = rowGet(r, roleKey, "—");
+    const recruiter = rowGet(r, recruiterKey, "—");
+    const src = rowGet(r, sourceKey, "—");
+    const cnt = countKey ? toNum(rowGet(r, countKey, "0")) : 0;
+
+    const k = `${role}||${recruiter}||${src}`;
+    map.set(k, (map.get(k) || 0) + cnt);
+  });
+
+  const out = Array.from(map.entries())
+    .map(([k,v]) => {
+      const [role,recruiter,source] = k.split("||");
+      return { role, recruiter, source, count: v };
+    })
+    .sort((a,b) => (a.role.localeCompare(b.role) || a.source.localeCompare(b.source)));
+
+  renderTable(
+    $("#soTable tbody"),
+    out,
+    (r) => `
+      <td>${r.role}</td>
+      <td>${r.recruiter}</td>
+      <td>${r.source}</td>
+      <td class="right">${r.count}</td>
+    `,
+    $("#soEmpty")
+  );
+}
+
+/* =========================
+   HIRES render (tolerant empty source)
+   ========================= */
+function renderHires() {
+  const rows = state.data.hired || [];
+
+  // If empty, show KPIs as 0 and keep empty state visible
+  $("#hiTotal").textContent = String(rows.length || 0);
+
+  const sample = rows[0] || {};
+  const roleKey = pickKey(sample, ["role","job","position","title"]);
+  const recruiterKey = pickKey(sample, ["recruiter","owner","tap","pplwise_tap","pplwise_sourcer"]);
+  const nameKey = pickKey(sample, ["candidate","name","candidate_name","full_name"]);
+  const startKey = pickKey(sample, ["start_date","start","hire_date","date"]);
+
+  const filtered = applyCommonFilters(
+    rows,
+    { week: null, role: state.filters.hiRole, recruiter: state.filters.hiRecruiter },
+    {
+      weekKeyCandidates: ["week","kw","calendar_week","cw","woche"],
+      roleKeyCandidates: ["role","job","position","title"],
+      recruiterKeyCandidates: ["recruiter","owner","tap","pplwise_tap","pplwise_sourcer"]
+    }
+  );
+
+  // Optional KPIs if exist
+  const tthKey = pickKey(sample, ["time_to_hire","tth","days_to_hire"]);
+  const oarKey = pickKey(sample, ["offer_accept_rate","oar","accept_rate"]);
+
+  const tthVals = tthKey ? filtered.map(r => toNum(rowGet(r,tthKey,""))).filter(n => n>0) : [];
+  const tthAvg = tthVals.length ? (tthVals.reduce((a,b)=>a+b,0)/tthVals.length) : null;
+  $("#hiTTH").textContent = tthAvg ? `${Math.round(tthAvg)}d` : "–";
+
+  const oarVals = oarKey ? filtered.map(r => toNum(rowGet(r,oarKey,""))).filter(n => n>0) : [];
+  const oarAvg = oarVals.length ? (oarVals.reduce((a,b)=>a+b,0)/oarVals.length) : null;
+  $("#hiOAR").textContent = oarAvg ? fmtPct(Math.min(1, oarAvg)) : "–";
+
+  renderTable(
+    $("#hiTable tbody"),
+    filtered,
+    (r) => `
+      <td>${rowGet(r, nameKey, "—")}</td>
+      <td>${rowGet(r, roleKey, "—")}</td>
+      <td>${rowGet(r, recruiterKey, "—")}</td>
+      <td>${rowGet(r, startKey, "—")}</td>
+    `,
+    $("#hiEmpty")
+  );
+}
+
+/* =========================
+   MANAGEMENT overview render (functional)
+   ========================= */
+function renderManagement() {
+  const overview = state.data.overview || [];
+  const pipeline = state.data.pipeline || [];
+  const sourcing = state.data.sourcing || [];
+
+  // Filter base (mgmt) uses pipeline week (inventory week) + optional role/recruiter
+  const plFiltered = applyCommonFilters(
+    pipeline,
+    { week: state.filters.mgmtWeek, role: state.filters.mgmtRole, recruiter: state.filters.mgmtRecruiter },
+    {
+      weekKeyCandidates: ["week","kw","calendar_week","cw","woche"],
+      roleKeyCandidates: ["role","job","position","title"],
+      recruiterKeyCandidates: ["recruiter","owner","tap","pplwise_tap","pplwise_sourcer"]
+    }
+  );
+
+  // Open roles from overview (role-level rows)
+  const ovFiltered = applyCommonFilters(
+    overview,
+    { week: null, role: state.filters.mgmtRole, recruiter: state.filters.mgmtRecruiter },
+    {
+      weekKeyCandidates: ["week","kw","calendar_week","cw","woche"],
+      roleKeyCandidates: ["role","job","position","title"],
+      recruiterKeyCandidates: ["recruiter","pplwise_tap","pplwise_sourcer","tap","owner"]
+    }
+  );
+
+  // Activity: use pipeline_weekly too, but *current calendar week* in Activity tab already.
+  // For management we use selected mgmtWeek as "weekly activity reference".
+  const acFiltered = applyCommonFilters(
+    pipeline,
+    { week: state.filters.mgmtWeek, role: state.filters.mgmtRole, recruiter: state.filters.mgmtRecruiter },
+    {
+      weekKeyCandidates: ["week","kw","calendar_week","cw","woche"],
+      roleKeyCandidates: ["role","job","position","title"],
+      recruiterKeyCandidates: ["recruiter","owner","tap","pplwise_tap","pplwise_sourcer"]
+    }
+  );
+
+  // Sourcing: use same mgmtWeek (if present there). If not, will just filter by week anyway.
+  const soFiltered = applyCommonFilters(
+    sourcing,
+    { week: state.filters.mgmtWeek, role: state.filters.mgmtRole, recruiter: state.filters.mgmtRecruiter },
+    {
+      weekKeyCandidates: ["week","kw","calendar_week","cw","woche"],
+      roleKeyCandidates: ["role","job","position","title"],
+      recruiterKeyCandidates: ["recruiter","owner","tap","pplwise_tap","pplwise_sourcer"]
+    }
+  );
+
+  // Keys
+  const plSample = plFiltered[0] || pipeline[0] || {};
+  const plRoleKey = pickKey(plSample, ["role","job","position","title"]);
+  const plRecruiterKey = pickKey(plSample, ["recruiter","owner","tap","pplwise_tap","pplwise_sourcer"]);
+  const plStageKey = pickKey(plSample, ["stage","pipeline_stage","step","status"]);
+  const plCountKey = pickKey(plSample, ["count","candidates","n","#","volume"]);
+
+  const ovSample = ovFiltered[0] || overview[0] || {};
+  const ovRoleKey = pickKey(ovSample, ["role","job","position","title"]);
+  const ovOwnerKey = pickKey(ovSample, ["pplwise_tap","pplwise_sourcer","tap","owner","hiring_manager"]);
+  const ovRecruiterKey = pickKey(ovSample, ["recruiter","pplwise_tap","pplwise_sourcer","tap","owner"]);
+  const ovHealthKey = pickKey(ovSample, ["health","rag","status"]);
+
+  const soSample = soFiltered[0] || sourcing[0] || {};
+  const soSourceKey = pickKey(soSample, ["source","channel","origin"]);
+  const soCountKey = pickKey(soSample, ["count","candidates","n","#","volume","touches"]);
+  const soContactedKey = pickKey(soSample, ["contacted","outreach","messages"]);
+  const soScreenedKey = pickKey(soSample, ["recruiter_screen","screened","screens"]);
+
+  // KPIs
+  const openRoles = uniq(ovFiltered.map(r => rowGet(r, ovRoleKey, ""))).length;
+  $("#mgmtOpenRoles").textContent = String(openRoles || 0);
+  $("#mgmtOpenRolesMeta").textContent = state.filters.mgmtWeek !== "All time"
+    ? `Week: ${state.filters.mgmtWeek}`
+    : "All time";
+
+  const totalPipeline = plFiltered.reduce((a,r)=>a + (plCountKey ? toNum(rowGet(r,plCountKey,"0")) : 0), 0);
+  $("#mgmtTotalPipeline").textContent = String(totalPipeline || 0);
+  $("#mgmtTotalPipelineMeta").textContent = state.filters.mgmtWeek !== "All time"
+    ? `Inventory for ${state.filters.mgmtWeek}`
+    : "All time";
+
+  const weeklyActivity = acFiltered.reduce((a,r)=>a + (plCountKey ? toNum(rowGet(r,plCountKey,"0")) : 0), 0);
+  $("#mgmtWeeklyActivity").textContent = String(weeklyActivity || 0);
+  $("#mgmtWeeklyActivityMeta").textContent = state.filters.mgmtWeek !== "All time"
+    ? `Moves in ${state.filters.mgmtWeek}`
+    : "All time";
+
+  const sourcingTouches =
+    (soScreenedKey ? soFiltered.reduce((a,r)=>a+toNum(rowGet(r,soScreenedKey,"0")),0) : 0) +
+    (soContactedKey ? soFiltered.reduce((a,r)=>a+toNum(rowGet(r,soContactedKey,"0")),0) : 0) ||
+    (soCountKey ? soFiltered.reduce((a,r)=>a+toNum(rowGet(r,soCountKey,"0")),0) : 0);
+
+  $("#mgmtSourcingTouches").textContent = String(sourcingTouches || 0);
+  $("#mgmtSourcingTouchesMeta").textContent = state.filters.mgmtWeek !== "All time"
+    ? `Week: ${state.filters.mgmtWeek}`
+    : "All time";
+
+  // Donut: health counts from overview
+  const hc = { healthy:0, risk:0, critical:0 };
+  ovFiltered.forEach(r => {
+    const h = rowGet(r, ovHealthKey, "");
+    const c = healthToColor(h);
+    if (c === "var(--good)") hc.healthy++;
+    else if (c === "var(--warn)") hc.risk++;
+    else if (c === "var(--bad)") hc.critical++;
+  });
+
+  const healthLabels = ["Healthy", "At risk", "Critical"];
+  const healthData = [hc.healthy, hc.risk, hc.critical];
+  const healthColors = ["#1fc16b", "#f5b301", "#ff3b30"];
+
+  destroyChart(state.charts.mgmtHealth);
+  state.charts.mgmtHealth = buildDonut($("#mgmtHealthDonut"), healthLabels, healthData, healthColors);
+
+  upsertLegend($("#mgmtHealthLegend"), [
+    { label: "Healthy", value: hc.healthy, color: "var(--good)" },
+    { label: "At risk", value: hc.risk, color: "var(--warn)" },
+    { label: "Critical", value: hc.critical, color: "var(--bad)" }
+  ]);
+
+  // Donut: source mix from sourcing
+  const srcMap = new Map();
+  soFiltered.forEach(r => {
+    const src = rowGet(r, soSourceKey, "Unknown");
+    const cnt = soCountKey ? toNum(rowGet(r, soCountKey, "0")) : 0;
+    srcMap.set(src, (srcMap.get(src) || 0) + cnt);
+  });
+
+  const srcEntries = Array.from(srcMap.entries()).sort((a,b)=>b[1]-a[1]);
+  const topN = 6;
+  const top = srcEntries.slice(0, topN);
+  const rest = srcEntries.slice(topN);
+  const restSum = rest.reduce((a, [,v]) => a + v, 0);
+
+  const srcLabels = top.map(([s]) => s).concat(restSum ? ["Other"] : []);
+  const srcData = top.map(([,v]) => v).concat(restSum ? [restSum] : []);
+  const srcColors = srcLabels.map((_,i) => `hsl(${(i*55)%360} 80% 55%)`);
+
+  destroyChart(state.charts.mgmtSource);
+  state.charts.mgmtSource = buildDonut($("#mgmtSourceDonut"), srcLabels, srcData, srcColors);
+
+  upsertLegend($("#mgmtSourceLegend"), srcLabels.slice(0,6).map((l,i)=>({
+    label: l,
+    value: srcData[i] ?? 0,
+    color: srcColors[i] ?? "rgba(255,255,255,0.35)"
+  })));
+
+  // Recruiter utilization: activity share (from pipeline_weekly counts)
+  const utilMap = new Map();
+  acFiltered.forEach(r => {
+    const rec = rowGet(r, plRecruiterKey, "—");
+    const cnt = plCountKey ? toNum(rowGet(r, plCountKey, "0")) : 0;
+    utilMap.set(rec, (utilMap.get(rec) || 0) + cnt);
+  });
+
+  const utilEntries = Array.from(utilMap.entries()).sort((a,b)=>b[1]-a[1]);
+  const utilTotal = utilEntries.reduce((a, [,v]) => a + v, 0);
+
+  const utilBody = $("#mgmtUtilTable tbody");
+  utilBody.innerHTML = "";
+  utilEntries.forEach(([rec, v]) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${rec}</td>
+      <td class="right">${v}</td>
+      <td class="right">${utilTotal ? fmtPct(v / utilTotal) : "–"}</td>
+    `;
+    utilBody.appendChild(tr);
+  });
+
+  // Top risks: critical roles (from overview health) with pipeline total
+  const rolePipelineMap = new Map();
+  plFiltered.forEach(r => {
+    const role = rowGet(r, plRoleKey, "—");
+    const cnt = plCountKey ? toNum(rowGet(r, plCountKey, "0")) : 0;
+    rolePipelineMap.set(role, (rolePipelineMap.get(role) || 0) + cnt);
+  });
+
+  const risks = ovFiltered
+    .map(r => ({
+      role: rowGet(r, ovRoleKey, "—"),
+      owner: rowGet(r, ovOwnerKey, ""),
+      recruiter: rowGet(r, ovRecruiterKey, ""),
+      health: rowGet(r, ovHealthKey, "")
+    }))
+    .filter(r => healthToColor(r.health) === "var(--bad)")
+    .map(r => ({ ...r, pipeline: rolePipelineMap.get(r.role) || 0 }))
+    .sort((a,b)=>b.pipeline - a.pipeline);
+
+  renderTable(
+    $("#mgmtRisksTable tbody"),
+    risks,
+    (r) => `
+      <td>${r.role}</td>
+      <td>${r.owner || "—"}</td>
+      <td>${r.recruiter || "—"}</td>
+      <td>${healthDotHTML(r.health)} <span style="opacity:.0">.</span></td>
+      <td class="right">${r.pipeline}</td>
+    `,
+    $("#mgmtRisksEmpty")
+  );
+}
+
+/* =========================
+   Render all (safe)
+   ========================= */
+function renderAll() {
+  // sync UI selects -> state (in case options were rebuilt)
+  const sync = (id, key) => {
+    const el = $(id);
+    if (el) state.filters[key] = el.value;
+  };
+
+  sync("#mgmtWeek", "mgmtWeek");
+  sync("#mgmtRole", "mgmtRole");
+  sync("#mgmtRecruiter", "mgmtRecruiter");
+
+  sync("#ovRole", "ovRole");
+  sync("#ovRecruiter", "ovRecruiter");
+
+  sync("#plWeek", "plWeek");
+  sync("#plRole", "plRole");
+  sync("#plRecruiter", "plRecruiter");
+
+  sync("#acWeek", "acWeek");
+  sync("#acRole", "acRole");
+  sync("#acRecruiter", "acRecruiter");
+
+  sync("#soWeek", "soWeek");
+  sync("#soRole", "soRole");
+  sync("#soRecruiter", "soRecruiter");
+
+  sync("#hiRole", "hiRole");
+  sync("#hiRecruiter", "hiRecruiter");
+
+  // Render each view (cheap enough)
+  renderManagement();
+  renderOverview();
+  renderPipeline();
+  renderActivity();
+  renderSourcing();
+  renderHires();
+}
+
+/* =========================
+   Boot
+   ========================= */
+async function boot() {
+  hideBanner();
+
+  setupTabs();
+  initFilterControls();
+
+  try {
+    const [overview, pipeline, sourcing, hired, roleTargets] = await Promise.all([
+      fetchCSV(CSV.overview),
+      fetchCSV(CSV.pipeline),
+      fetchCSV(CSV.sourcing),
+      fetchCSV(CSV.hired, { tolerateEmpty: true }),      // IMPORTANT: empty is valid
+      fetchCSV(CSV.roleTargets, { tolerateEmpty: true }) // also tolerate empty
+    ]);
+
+    state.data.overview = overview;
+    state.data.pipeline = pipeline;
+    state.data.sourcing = sourcing;
+    state.data.hired = hired;
+    state.data.roleTargets = roleTargets;
+
+    populateDropdowns();
+    renderAll();
+  } catch (err) {
+    // Only show banner on *real* failures
+    showBanner(`Data load error: ${err?.message || err}`);
+    // Still try to render with whatever is loaded (if any)
+    try { populateDropdowns(); } catch (_) {}
+    try { renderAll(); } catch (_) {}
   }
+}
 
-  /* ---------------- EVENT HANDLERS ---------------- */
-
-  function handlePipelineWeekChange() {
-    state.selectedPipelineWeek = $("pipelineWeekSelect").value;
-    renderOverview();
-    renderPipeline();
-  }
-
-  function handleActivityWeekChange() {
-    state.selectedActivityWeek = $("activityWeekSelect").value;
-    renderActivity();
-  }
-
-  function handleSourcingWeekChange() {
-    state.selectedSourcingWeek = $("sourcingWeekSelect").value;
-    renderSourcing();
-  }
-
-  /* ---------------- INIT ---------------- */
-
-  initTabs();
-
-  const storedView = localStorage.getItem(VIEW_STORAGE_KEY);
-  if (storedView === "management") state.view = "management";
-  setView(state.view);
-
-  $("viewContributor").addEventListener("click", () => setView("contributor"));
-  $("viewManagement").addEventListener("click", () => setView("management"));
-
-  $("refreshBtn").addEventListener("click", refreshAll);
-
-  $("pipelineWeekSelect").addEventListener("change", handlePipelineWeekChange);
-  $("activityWeekSelect").addEventListener("change", handleActivityWeekChange);
-  $("sourcingWeekSelect").addEventListener("change", handleSourcingWeekChange);
-
-  refreshAll();
-  setInterval(refreshAll, 60000);
-});
+document.addEventListener("DOMContentLoaded", boot);
