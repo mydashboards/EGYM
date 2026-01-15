@@ -1,7 +1,9 @@
 document.addEventListener("DOMContentLoaded", () => {
-  /* =========================
-     CONFIG
-  ========================= */
+  /* ---------------- CONFIG ---------------- */
+
+  // “Current calendar week” preference for default selection (as requested).
+  // If present in data, Activity & Sourcing will default to KW 03.
+  const PREFERRED_KW = 3;
 
   const CSV = {
     overview: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=780337575&single=true&output=csv",
@@ -24,56 +26,57 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const HIRES_PASSWORD = "EGYM2026";
-  const MANAGEMENT_PASSWORD = "EGYM2027";
-
   const VIEW_STORAGE_KEY = "dashboard_view";
-  const HIRES_UNLOCK_KEY = "hires_unlocked";
-  const MGMT_UNLOCK_KEY = "mgmt_unlocked";
-
-  const STAGE_ORDER = ["sourced", "step1", "tech_light", "tech_iv", "final", "offer", "hired"];
-
-  /* =========================
-     STATE
-  ========================= */
 
   const state = {
     view: "contributor",
 
     overviewRows: [],
-    weeklyRows: [],       // long format: {year, kw, role, stage, count}
-    inventoryRows: [],    // long format: {year, kw, role, stage, count}
+    pipelineWeeklyRows: [],   // long-form normalized: {year,kw,role,stage,count,week_start?}
+    pipelineInventoryRows: [],// normalized: {year,kw,role,stage,count,stage_order?}
     sourcingRows: [],
     hiredRows: [],
-    targetRows: [],
+    roleTargets: [],
     roleNotesRows: [],
 
-    pipelineWeek: "",
-    activityWeek: "all",
-    sourcingWeek: "all",
+    pipelineOptions: [],
+    activityOptions: [],
+    sourcingOptions: [],
 
-    mgmtWeek: "",
-    mgmtRole: "all",
-    mgmtRecruiter: "all",
-
-    charts: {
-      pipelineHealth: null,
-      sourceMix: null
-    }
+    selectedPipelineWeek: "",
+    selectedActivityWeek: "",
+    selectedSourcingWeek: ""
   };
 
-  /* =========================
-     DOM HELPERS
-  ========================= */
+  /* ---------------- HELPERS ---------------- */
 
   const $ = (id) => document.getElementById(id);
+  const dataErrors = new Map();
 
-  function esc(v) {
-    return String(v ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
+  function updateDataErrorBanner() {
+    const banner = $("dataErrors");
+    if (!banner) return;
+    if (dataErrors.size === 0) {
+      banner.classList.add("hidden");
+      banner.innerHTML = "";
+      return;
+    }
+    banner.classList.remove("hidden");
+    banner.innerHTML = Array.from(dataErrors.values()).map(m => `<div>${m}</div>`).join("");
+  }
+
+  function setDataError(key, message) {
+    if (message) dataErrors.set(key, message);
+    else dataErrors.delete(key);
+    updateDataErrorBanner();
+  }
+
+  function normalizeHeader(value) {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[\s\-]+/g, "_")
+      .replace(/[^\w]/g, "");
   }
 
   function num(v) {
@@ -82,93 +85,17 @@ document.addEventListener("DOMContentLoaded", () => {
     return Number.isFinite(n) ? n : 0;
   }
 
-  function normalizeHeader(v) {
-    return String(v ?? "")
-      .trim()
-      .toLowerCase()
-      .replace(/[\s\-]+/g, "_")
-      .replace(/[^\w]/g, "");
-  }
-
-  function normalizeStage(v) {
-    return normalizeHeader(v);
-  }
-
-  function weekKeyFrom(year, kw) {
-    if (!year || !kw) return "";
-    return `${year}-KW${String(kw).padStart(2, "0")}`;
-  }
-
-  function getWeekKey(row) {
-    const y = num(row.year);
-    const k = num(row.kw);
-    return weekKeyFrom(y, k);
-  }
-
-  function isRowInWeek(row, selectedKey) {
-    if (selectedKey === "all") return true;
-    return getWeekKey(row) === selectedKey;
-  }
-
-  function uniq(arr) {
-    return Array.from(new Set(arr.filter(Boolean)));
-  }
-
-  function sortWeeksDesc(keys) {
-    return keys
-      .filter((k) => k && k !== "all")
-      .sort((a, b) => a.localeCompare(b))
-      .reverse();
-  }
-
-  function formatWeekLabel(key) {
-    if (key === "all") return "All time";
-    const m = String(key).match(/^(\d{4})-KW(\d{2})$/);
-    if (!m) return key;
-    return `KW ${Number(m[2])}`;
-  }
-
-  function fmtDate(d = new Date()) {
-    return d.toLocaleString(undefined, {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit"
-    });
-  }
-
-  /* =========================
-     ERROR BANNER
-  ========================= */
-
-  const dataErrors = new Map();
-
-  function setDataError(key, msg) {
-    if (msg) dataErrors.set(key, msg);
-    else dataErrors.delete(key);
-
-    const banner = $("dataErrors");
-    if (!banner) return;
-
-    if (dataErrors.size === 0) {
-      banner.classList.add("hidden");
-      banner.innerHTML = "";
-      return;
+  function getField(row, keys) {
+    for (const k of keys) {
+      const nk = normalizeHeader(k);
+      if (row[nk] !== undefined && row[nk] !== null && String(row[nk]).trim() !== "") return row[nk];
+      if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== "") return row[k];
     }
-
-    banner.classList.remove("hidden");
-    banner.innerHTML = Array.from(dataErrors.values())
-      .map((m) => `<div>${esc(m)}</div>`)
-      .join("");
+    return "";
   }
-
-  /* =========================
-     CSV PARSER (robust)
-  ========================= */
 
   function parseCSV(text) {
-    const cleaned = String(text ?? "").replace(/^\uFEFF/, "");
+    const cleaned = String(text || "").replace(/^\uFEFF/, "");
     const trimmed = cleaned.trim();
     if (!trimmed) return { headers: [], rows: [], isHtml: false };
 
@@ -186,9 +113,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const ch = cleaned[i];
       const next = cleaned[i + 1];
 
-      if (ch === '"') {
-        if (inQuotes && next === '"') {
-          field += '"';
+      if (ch === "\"") {
+        if (inQuotes && next === "\"") {
+          field += "\"";
           i += 1;
         } else {
           inQuotes = !inQuotes;
@@ -205,7 +132,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if ((ch === "\n" || ch === "\r") && !inQuotes) {
         if (ch === "\r" && next === "\n") i += 1;
         current.push(field);
-        if (current.some((v) => v !== "")) rows.push(current);
+        if (current.some(v => v !== "")) rows.push(current);
         current = [];
         field = "";
         continue;
@@ -216,174 +143,429 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (field.length || current.length) {
       current.push(field);
-      if (current.some((v) => v !== "")) rows.push(current);
+      if (current.some(v => v !== "")) rows.push(current);
     }
 
     const headerRow = rows.shift() || [];
-    const headers = headerRow.map((h) => normalizeHeader(h));
+    const headers = headerRow.map(h => normalizeHeader(h));
 
-    const mapped = rows.map((line) => {
+    const mappedRows = rows.map(line => {
       const obj = {};
       headers.forEach((h, idx) => {
-        obj[h] = (line[idx] ?? "").trim();
+        obj[h] = (line[idx] || "").trim();
       });
       return obj;
     });
 
-    return { headers, rows: mapped, isHtml: false };
+    return { headers, rows: mappedRows, isHtml: false };
+  }
+
+  function logLoadFailure({ key, url, status, text, error }) {
+    console.log("Data source failed", {
+      key,
+      url,
+      status,
+      snippet: (text || "").slice(0, 240),
+      error
+    });
   }
 
   async function loadCSV(key, url) {
+    const cacheBuster = `cb=${Date.now()}`;
     const joiner = url.includes("?") ? "&" : "?";
-    const fullUrl = `${url}${joiner}cb=${Date.now()}`;
-    let text = "";
+    const fullUrl = `${url}${joiner}${cacheBuster}`;
+
     let status = "unknown";
+    let text = "";
 
     try {
       const res = await fetch(fullUrl, { cache: "no-store" });
       status = res.status;
       text = await res.text();
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        logLoadFailure({ key, url: fullUrl, status, text, error: new Error(`HTTP ${res.status}`) });
+        throw new Error(`HTTP ${res.status}`);
+      }
 
       const parsed = parseCSV(text);
-      if (parsed.isHtml || !parsed.headers.length) throw new Error("Empty or invalid CSV");
+      if (parsed.isHtml) {
+        logLoadFailure({ key, url: fullUrl, status, text, error: new Error("HTML returned (not CSV)") });
+        throw new Error("Invalid CSV (HTML returned)");
+      }
+
+      // hired_data may be header-only (valid empty)
+      if (key === "hired") {
+        setDataError(key, "");
+        return parsed.rows || [];
+      }
+
+      if (!parsed.headers.length) {
+        logLoadFailure({ key, url: fullUrl, status, text, error: new Error("Empty or invalid CSV") });
+        throw new Error("Empty or invalid CSV");
+      }
 
       setDataError(key, "");
       return parsed.rows;
-    } catch (e) {
+    } catch (error) {
       setDataError(key, `Data source unavailable: ${DATA_SOURCE_LABELS[key]}`);
-      console.log("CSV load failed", {
-        key,
-        url: fullUrl,
-        status,
-        snippet: text.slice(0, 200),
-        error: e
-      });
-      throw e;
+      if (!text || status === "unknown") logLoadFailure({ key, url: fullUrl, status, text, error });
+      throw error;
     }
   }
 
-  /* =========================
-     NORMALIZERS
-  ========================= */
+  function weekKey(row) {
+    const y = num(getField(row, ["year"]));
+    const k = num(getField(row, ["kw"]));
+    if (!y || !k) return "";
+    return `${y}-KW${String(k).padStart(2, "0")}`;
+  }
 
-  // pipeline_weekly can be long (stage,count) OR wide (stages as columns)
-  function normalizeWeekly(rows) {
+  function getWeekNumberFromKey(value) {
+    if (!value) return null;
+    const m = String(value).match(/KW(\d+)/i);
+    return m ? num(m[1]) : null;
+  }
+
+  function isWeekMatch(row, selectedWeekKey) {
+    if (selectedWeekKey === "all") return true;
+    const selectedKw = getWeekNumberFromKey(selectedWeekKey);
+    if (!selectedKw) return false;
+    const rowYear = num(getField(row, ["year"]));
+    const rowKw = num(getField(row, ["kw"]));
+    if (rowYear && rowKw) return weekKey(row) === selectedWeekKey;
+    return rowKw === selectedKw;
+  }
+
+  function getWeekOptions(rows) {
+    const map = new Map();
+    rows.forEach(r => {
+      const key = weekKey(r);
+      if (!key) return;
+      if (!map.has(key)) {
+        map.set(key, { key, year: num(getField(r, ["year"])), kw: num(getField(r, ["kw"])) });
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.year !== b.year) return b.year - a.year;
+      return b.kw - a.kw;
+    });
+  }
+
+  function pickPreferredWeekKey(options, preferredKw) {
+    if (!options.length) return "";
+    const candidates = options.filter(o => o.kw === preferredKw);
+    if (candidates.length) {
+      // choose the highest year that has preferred KW
+      candidates.sort((a, b) => b.year - a.year);
+      return candidates[0].key;
+    }
+    return options[0].key; // fallback latest
+  }
+
+  function setSelectOptions(select, options, includeAllTime = false) {
+    const current = select.value;
+    select.innerHTML = "";
+
+    if (includeAllTime) {
+      const opt = document.createElement("option");
+      opt.value = "all";
+      opt.textContent = "All time";
+      select.appendChild(opt);
+    }
+
+    options.forEach(o => {
+      const opt = document.createElement("option");
+      opt.value = o.key;
+      opt.textContent = `KW ${String(o.kw).padStart(2, "0")}`;
+      select.appendChild(opt);
+    });
+
+    // preserve if possible
+    const allowed = new Set([...(includeAllTime ? ["all"] : []), ...options.map(o => o.key)]);
+    if (current && allowed.has(current)) select.value = current;
+    else if (includeAllTime) select.value = "all";
+    else if (options.length) select.value = options[0].key;
+  }
+
+  function formatNumber(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return String(v ?? "");
+    return n.toLocaleString();
+  }
+
+  function formatPercent(v) {
+    if (v === null || v === undefined || Number.isNaN(v)) return "—";
+    return `${(v * 100).toFixed(0)}%`;
+  }
+
+  function normalizeStageValue(value) {
+    return normalizeHeader(String(value || ""));
+  }
+
+  function formatStageLabel(stage) {
+    const original = String(stage || "").trim();
+    if (!original) return "";
+    if (/[A-Z]/.test(original)) return original;
+    return original
+      .replace(/[_-]+/g, " ")
+      .replace(/\b\w/g, m => m.toUpperCase());
+  }
+
+  function healthDotHTML(health) {
+    if (health === "healthy") return `<span class="status-dot good" title="Healthy"></span>`;
+    if (health === "warning") return `<span class="status-dot warn" title="At risk"></span>`;
+    if (health === "critical") return `<span class="status-dot bad" title="Critical"></span>`;
+    return `<span class="status-dot neutral" title="New"></span>`;
+  }
+
+  function normalizeHealthValue(value) {
+    const normalized = normalizeHeader(String(value || ""));
+    if (normalized.includes("critical")) return "critical";
+    if (normalized.includes("warning") || normalized.includes("risk") || normalized.includes("at_risk")) return "warning";
+    if (normalized.includes("healthy") || normalized.includes("good")) return "healthy";
+    return "";
+  }
+
+  /* ---------------- NORMALIZERS ---------------- */
+
+  function normalizePipelineWeekly(rows) {
+    if (!rows.length) return [];
+    // “wide” form sample you showed: role, kw, year, recruiter, step1, tech_light, tech_iv, final, offer, hired
+    // We convert to long-form {year,kw,role,stage,count}
+    const coreKeys = new Set(["role", "kw", "year", "week_start", "recruiter", "health"]);
+    const long = [];
+
+    rows.forEach(r => {
+      const year = num(getField(r, ["year"]));
+      const kw = num(getField(r, ["kw"]));
+      const role = getField(r, ["role"]);
+      if (!year || !kw || !role) return;
+
+      Object.keys(r).forEach(k => {
+        const nk = normalizeHeader(k);
+        if (coreKeys.has(nk)) return;
+        const count = num(r[k]);
+        if (!Number.isFinite(count)) return;
+        // keep even 0? we can skip 0 to reduce noise:
+        if (count === 0) return;
+        long.push({
+          year,
+          kw,
+          role,
+          stage: nk,
+          count
+        });
+      });
+    });
+
+    // If the sheet is already long-form (has stage/count), keep it:
+    const looksLong = rows.length && ("stage" in rows[0] || "count" in rows[0]);
+    if (looksLong) {
+      return rows.map(r => ({
+        year: num(getField(r, ["year"])),
+        kw: num(getField(r, ["kw"])),
+        role: getField(r, ["role"]),
+        stage: normalizeStageValue(getField(r, ["stage"])),
+        count: num(getField(r, ["count"]))
+      })).filter(r => r.year && r.kw && r.role && r.stage);
+    }
+
+    return long;
+  }
+
+  function normalizePipelineInventory(rows) {
+    // expected long-form: year,kw,role,stage,count,(optional stage_order)
+    // if wide-form, we’ll also support by converting similar to weekly.
     if (!rows.length) return [];
 
     const hasStage = Object.prototype.hasOwnProperty.call(rows[0], "stage");
     const hasCount = Object.prototype.hasOwnProperty.call(rows[0], "count");
 
     if (hasStage && hasCount) {
-      return rows.map((r) => ({
-        year: num(r.year),
-        kw: num(r.kw),
-        role: r.role || "",
-        stage: normalizeStage(r.stage),
-        count: num(r.count)
-      }));
+      return rows.map(r => ({
+        year: num(getField(r, ["year"])),
+        kw: num(getField(r, ["kw"])),
+        role: getField(r, ["role"]),
+        stage: getField(r, ["stage"]),
+        count: num(getField(r, ["count"])),
+        stage_order: getField(r, ["stage_order"])
+      })).filter(r => r.year && r.kw && r.role && r.stage);
     }
 
-    const core = new Set(["role", "kw", "year", "recruiter", "health", "week_start"]);
-    const out = [];
+    // wide -> long
+    const coreKeys = new Set(["role", "kw", "year", "week_start", "recruiter", "health", "stage_order"]);
+    const long = [];
+    rows.forEach(r => {
+      const year = num(getField(r, ["year"]));
+      const kw = num(getField(r, ["kw"]));
+      const role = getField(r, ["role"]);
+      if (!year || !kw || !role) return;
 
-    rows.forEach((r) => {
-      const year = num(r.year);
-      const kw = num(r.kw);
-      const role = r.role || "";
-      Object.keys(r).forEach((k) => {
-        if (core.has(k)) return;
-        const stage = normalizeStage(k);
-        if (!stage) return;
-        out.push({ year, kw, role, stage, count: num(r[k]) });
+      Object.keys(r).forEach(k => {
+        const nk = normalizeHeader(k);
+        if (coreKeys.has(nk)) return;
+        const count = num(r[k]);
+        if (count === 0) return;
+        long.push({
+          year,
+          kw,
+          role,
+          stage: nk,
+          count,
+          stage_order: null
+        });
       });
     });
-
-    return out;
+    return long;
   }
 
-  // pipeline_inventory can be long or wide (YOUR sheet is wide)
-  function normalizeInventory(rows) {
-    if (!rows.length) return [];
+  function normalizeSourcing(rows) {
+    return rows.map(r => ({
+      year: num(getField(r, ["year"])),
+      kw: num(getField(r, ["kw"])),
+      role: getField(r, ["role"]),
+      contacted: num(getField(r, ["contacted"])),
+      replied: num(getField(r, ["replied"])),
+      recruiter_screen: num(getField(r, ["recruiter_screen", "recruiter_screened"]))
+    })).filter(r => r.year && r.kw && r.role);
+  }
 
-    const hasStage = Object.prototype.hasOwnProperty.call(rows[0], "stage");
-    const hasCount = Object.prototype.hasOwnProperty.call(rows[0], "count");
-
-    if (hasStage && hasCount) {
-      return rows.map((r) => ({
-        year: num(r.year),
-        kw: num(r.kw),
-        role: r.role || "",
-        stage: normalizeStage(r.stage),
-        count: num(r.count)
-      }));
-    }
-
-    const core = new Set(["role", "kw", "year", "recruiter", "health", "week_start"]);
-    const out = [];
-
-    rows.forEach((r) => {
-      const year = num(r.year);
-      const kw = num(r.kw);
-      const role = r.role || "";
-      Object.keys(r).forEach((k) => {
-        if (core.has(k)) return;
-        const stage = normalizeStage(k);
-        if (!stage) return;
-        out.push({ year, kw, role, stage, count: num(r[k]) });
-      });
-    });
-
-    return out;
+  function normalizeTargets(rows) {
+    return rows.map(r => ({
+      role: getField(r, ["role"]),
+      lookback_weeks: num(getField(r, ["lookback_weeks", "lookback"])),
+      min_prev_stage_n: num(getField(r, ["min_prev_stage_n", "min_n"])),
+      from_stage: normalizeStageValue(getField(r, ["from_stage"])),
+      to_stage: normalizeStageValue(getField(r, ["to_stage"])),
+      expected_rate: num(getField(r, ["expected_rate"]))
+    })).filter(r => r.role && r.from_stage && r.to_stage);
   }
 
   function normalizeRoleNotes(rows) {
-    return rows.map((r) => ({
-      role: r.role || "",
-      kw: num(r.kw),
-      year: num(r.year),
-      recruiter: r.recruiter || "",
-      challenges: r.challenges || "",
-      highlights: r.highlights || "",
-      big_wins: r.big_wins || ""
-    }));
+    return rows.map(r => ({
+      role: getField(r, ["role"]),
+      kw: num(getField(r, ["kw"])),
+      year: num(getField(r, ["year"])), // optional
+      recruiter: getField(r, ["recruiter"]),
+      challenges: getField(r, ["challenges"]),
+      highlights: getField(r, ["highlights"]),
+      big_wins: getField(r, ["big_wins"])
+    })).filter(r => r.role && r.kw);
   }
 
-  /* =========================
-     TABS (Contributor)
-  ========================= */
+  /* ---------------- HEALTH (RAG) ---------------- */
+
+  function computeHealth(weeklyLongRowsForRole, transitions, endWeekKey) {
+    if (!transitions.length) return { health: "new", reason: "Not enough data" };
+
+    const weeks = Array.from(new Set(weeklyLongRowsForRole.map(r => weekKey(r)).filter(Boolean))).sort();
+    const eligible = endWeekKey && endWeekKey !== "all" ? weeks.filter(w => w <= endWeekKey) : weeks;
+    if (!eligible.length) return { health: "new", reason: "Not enough data" };
+
+    const rowsByWeek = new Map();
+    weeklyLongRowsForRole.forEach(r => {
+      const wk = weekKey(r);
+      if (!wk) return;
+      if (!rowsByWeek.has(wk)) rowsByWeek.set(wk, []);
+      rowsByWeek.get(wk).push(r);
+    });
+
+    let evaluated = 0;
+    let worstScore = Infinity;
+    let bottleneck = "—";
+
+    transitions.forEach(t => {
+      const lookback = Math.max(1, num(t.lookback_weeks));
+      const minN = Math.max(1, num(t.min_prev_stage_n));
+      const expected = num(t.expected_rate);
+      const fromStage = normalizeStageValue(t.from_stage);
+      const toStage = normalizeStageValue(t.to_stage);
+
+      const recentWeeks = eligible.slice(-lookback);
+      let fromCount = 0;
+      let toCount = 0;
+
+      recentWeeks.forEach(w => {
+        (rowsByWeek.get(w) || []).forEach(r => {
+          const sk = normalizeStageValue(r.stage);
+          if (sk === fromStage) fromCount += num(r.count);
+          if (sk === toStage) toCount += num(r.count);
+        });
+      });
+
+      if (fromCount >= minN && expected > 0) {
+        const actual = fromCount > 0 ? toCount / fromCount : 0;
+        const score = actual / expected;
+        evaluated += 1;
+
+        if (score < worstScore) {
+          worstScore = score;
+          bottleneck = `${t.from_stage} → ${t.to_stage} (${formatPercent(actual)} vs ${formatPercent(expected)})`;
+        }
+      }
+    });
+
+    if (!evaluated) return { health: "new", reason: "Not enough data" };
+
+    // Thresholds (simple, stable)
+    if (worstScore < 0.33) return { health: "critical", reason: bottleneck };
+    if (worstScore < 0.66) return { health: "warning", reason: bottleneck };
+    return { health: "healthy", reason: bottleneck };
+  }
+
+  function getHealthByRole(weeklyRows, targets, endWeekKey) {
+    const byRole = {};
+    weeklyRows.forEach(r => {
+      if (!r.role) return;
+      if (!byRole[r.role]) byRole[r.role] = [];
+      byRole[r.role].push(r);
+    });
+
+    const targetsByRole = {};
+    targets.forEach(t => {
+      if (!t.role) return;
+      if (!targetsByRole[t.role]) targetsByRole[t.role] = [];
+      targetsByRole[t.role].push(t);
+    });
+
+    const health = {};
+    Object.keys(byRole).forEach(role => {
+      const trs = targetsByRole[role] || [];
+      health[role] = computeHealth(byRole[role], trs, endWeekKey).health;
+    });
+    return health;
+  }
+
+  /* ---------------- TABS ---------------- */
 
   function activateTab(tabId) {
     const tabs = document.querySelectorAll(".tab");
     const panels = document.querySelectorAll("#contributorView .panel");
     const target = tabId || "overview";
 
-    tabs.forEach((t) => {
-      const isActive = t.dataset.tab === target;
-      t.classList.toggle("active", isActive);
-      t.setAttribute("aria-selected", String(isActive));
+    tabs.forEach(t => {
+      const active = t.dataset.tab === target;
+      t.classList.toggle("active", active);
+      t.setAttribute("aria-selected", String(active));
     });
 
-    panels.forEach((p) => p.classList.toggle("active", p.id === target));
+    panels.forEach(p => p.classList.toggle("active", p.id === target));
   }
 
   function initTabs() {
     const tabs = document.querySelectorAll(".tab");
-    tabs.forEach((btn) => {
+    let hiresUnlocked = false;
+
+    tabs.forEach(btn => {
       btn.addEventListener("click", () => {
         const id = btn.dataset.tab;
-
-        if (id === "hires" && sessionStorage.getItem(HIRES_UNLOCK_KEY) !== "1") {
+        if (id === "hires" && !hiresUnlocked) {
           const input = window.prompt("Enter password to access Hires & KPIs:");
           if (input !== HIRES_PASSWORD) return;
-          sessionStorage.setItem(HIRES_UNLOCK_KEY, "1");
-          const gate = $("hiresGate");
-          const content = $("hiresContent");
-          if (gate) gate.classList.add("hidden");
-          if (content) content.classList.remove("hidden");
+          hiresUnlocked = true;
         }
-
         window.location.hash = id;
         activateTab(id);
       });
@@ -394,680 +576,409 @@ document.addEventListener("DOMContentLoaded", () => {
       activateTab(id);
     });
 
-    const initial = window.location.hash.replace("#", "") || "overview";
-    activateTab(initial);
-
-    // restore hires gate
-    if (sessionStorage.getItem(HIRES_UNLOCK_KEY) === "1") {
-      $("hiresGate")?.classList.add("hidden");
-      $("hiresContent")?.classList.remove("hidden");
-    }
+    activateTab(window.location.hash.replace("#", "") || "overview");
   }
 
-  /* =========================
-     VIEW SWITCH + MGMT GATE
-  ========================= */
+  /* ---------------- RENDER: OVERVIEW ---------------- */
 
-  function ensureMgmtUnlockedOrKickBack() {
-    const unlocked = sessionStorage.getItem(MGMT_UNLOCK_KEY) === "1";
-    const gate = $("managementGate");
-    const content = $("managementContent");
+  function renderOverview() {
+    const rows = state.overviewRows || [];
+    const healthByRole = getHealthByRole(
+      state.pipelineWeeklyRows,
+      state.roleTargets,
+      state.selectedPipelineWeek === "all" ? "" : state.selectedPipelineWeek
+    );
 
-    if (unlocked) {
-      gate?.classList.add("hidden");
-      content?.classList.remove("hidden");
-      renderManagement();
-      return true;
-    }
+    const openRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
+    const filledRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "filled").length;
+    const totalOpenings = rows.reduce((s, r) => s + num(getField(r, ["openings"])), 0);
 
-    const input = window.prompt("Enter password to access Management View:");
-    if (input !== MANAGEMENT_PASSWORD) {
-      if (gate) {
-        gate.textContent = "Access denied.";
-        gate.classList.remove("hidden");
+    const counts = { healthy: 0, warning: 0, critical: 0 };
+    rows.forEach(r => {
+      const role = getField(r, ["role"]);
+      const h = normalizeHealthValue(getField(r, ["health"])) || healthByRole[role] || "new";
+      if (h === "healthy") counts.healthy += 1;
+      else if (h === "warning") counts.warning += 1;
+      else if (h === "critical") counts.critical += 1;
+    });
+
+    $("overviewCards").innerHTML = `
+      <div class="kpi"><div class="label">Open Roles</div><div class="value">${openRoles}</div></div>
+      <div class="kpi"><div class="label">Filled Roles</div><div class="value">${filledRoles}</div></div>
+      <div class="kpi"><div class="label">Total Openings</div><div class="value">${totalOpenings}</div></div>
+      <div class="kpi"><div class="label">RAG (🟢/🟡/🔴)</div><div class="value">${counts.healthy}/${counts.warning}/${counts.critical}</div></div>
+    `;
+
+    $("overviewHealthSummary").innerHTML = `
+      <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
+      <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} At risk</span></div>
+      <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Critical</span></div>
+    `;
+
+    const tbody = $("overviewTable");
+    tbody.innerHTML = "";
+
+    rows.forEach(r => {
+      const role = getField(r, ["role"]);
+      const status = getField(r, ["status"]);
+      const location = getField(r, ["location"]);
+      const openings = getField(r, ["openings"]);
+      const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap", "owner", "recruiter"]);
+      const h = normalizeHealthValue(getField(r, ["health"])) || healthByRole[role] || "new";
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${role}</td>
+        <td>${status}</td>
+        <td>${location}</td>
+        <td class="num">${openings}</td>
+        <td>${owner}</td>
+        <td class="center">${healthDotHTML(h)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  /* ---------------- RENDER: PIPELINE ---------------- */
+
+  function getStagesForInventory(rows, selectedWeekKey) {
+    const stageMap = new Map();
+    rows.forEach(r => {
+      if (!isWeekMatch(r, selectedWeekKey)) return;
+      const label = String(getField(r, ["stage"]) || r.stage || "").trim();
+      if (!label) return;
+      if (!stageMap.has(label)) {
+        const so = getField(r, ["stage_order"]);
+        stageMap.set(label, { label, order: so === "" ? null : num(so) });
       }
-      if (content) content.classList.add("hidden");
-      setView("contributor");
-      return false;
+    });
+
+    return Array.from(stageMap.values()).sort((a, b) => {
+      const ao = Number.isFinite(a.order) ? a.order : null;
+      const bo = Number.isFinite(b.order) ? b.order : null;
+      if (ao !== null && bo !== null && ao !== bo) return ao - bo;
+      if (ao !== null && bo === null) return -1;
+      if (ao === null && bo !== null) return 1;
+      return a.label.localeCompare(b.label);
+    });
+  }
+
+  function renderPipeline() {
+    const inv = state.pipelineInventoryRows || [];
+    const weekly = state.pipelineWeeklyRows || [];
+    const targets = state.roleTargets || [];
+    const selectedWeekKey = state.selectedPipelineWeek || "";
+
+    const emptyEl = $("pipelineEmpty");
+    const thead = document.querySelector("#pipeline table thead");
+    const tbody = $("pipelineTable");
+    tbody.innerHTML = "";
+
+    const stages = getStagesForInventory(inv, selectedWeekKey);
+
+    // Aggregate inventory counts for the selected week (or all time)
+    const roles = new Set();
+    const countsByRole = new Map();
+
+    inv.forEach(r => {
+      if (!isWeekMatch(r, selectedWeekKey)) return;
+      const role = getField(r, ["role"]) || r.role;
+      const stage = getField(r, ["stage"]) || r.stage;
+      if (!role || !stage) return;
+      roles.add(role);
+
+      if (!countsByRole.has(role)) countsByRole.set(role, new Map());
+      const sm = countsByRole.get(role);
+      sm.set(stage, (sm.get(stage) || 0) + num(getField(r, ["count"]) || r.count));
+    });
+
+    // Header
+    if (thead) {
+      const stageHeaders = stages.map(s => `<th>${formatStageLabel(s.label)}</th>`).join("");
+      thead.innerHTML = `
+        <tr>
+          <th>Role</th>
+          ${stageHeaders}
+          <th class="center">Health</th>
+        </tr>
+      `;
     }
 
-    sessionStorage.setItem(MGMT_UNLOCK_KEY, "1");
-    gate?.classList.add("hidden");
-    content?.classList.remove("hidden");
-    renderManagement();
-    return true;
+    // Health per role (based on weekly, endWeekKey = selected week unless all time then latest)
+    const healthByRole = getHealthByRole(
+      weekly,
+      targets,
+      selectedWeekKey === "all" ? "" : selectedWeekKey
+    );
+
+    const roleList = Array.from(roles).sort();
+    if (!roleList.length) {
+      emptyEl.classList.remove("hidden");
+      return;
+    }
+    emptyEl.classList.add("hidden");
+
+    roleList.forEach(role => {
+      const sm = countsByRole.get(role) || new Map();
+      const stageCells = stages.map(s => `<td class="num">${formatNumber(sm.get(s.label) || 0)}</td>`).join("");
+      const h = healthByRole[role] || "new";
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${role}</td>
+        ${stageCells}
+        <td class="center">${healthDotHTML(h)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
   }
+
+  /* ---------------- RENDER: ACTIVITY ---------------- */
+
+  function getActivityStages(weeklyRows, selectedWeekKey) {
+    const set = new Set();
+    weeklyRows.forEach(r => {
+      if (!isWeekMatch(r, selectedWeekKey)) return;
+      if (!r.stage) return;
+      set.add(r.stage);
+    });
+
+    const preferred = ["sourced", "step1", "tech_light", "tech_iv", "final", "offer", "hired"];
+    const presentPreferred = preferred.filter(s => set.has(s));
+    const remaining = Array.from(set).filter(s => !preferred.includes(s)).sort();
+    return [...presentPreferred, ...remaining];
+  }
+
+  function renderActivity() {
+    const weekly = state.pipelineWeeklyRows || [];
+    const targets = state.roleTargets || [];
+    const selectedWeekKey = state.selectedActivityWeek || "";
+
+    const stages = getActivityStages(weekly, selectedWeekKey);
+    const roles = new Set();
+    const countsByRole = new Map();
+
+    weekly.forEach(r => {
+      if (!isWeekMatch(r, selectedWeekKey)) return;
+      if (!r.role || !r.stage) return;
+      roles.add(r.role);
+      if (!countsByRole.has(r.role)) countsByRole.set(r.role, new Map());
+      const sm = countsByRole.get(r.role);
+      sm.set(r.stage, (sm.get(r.stage) || 0) + num(r.count));
+    });
+
+    const thead = document.querySelector("#activity table thead");
+    if (thead) {
+      const stageHeaders = stages.map(s => `<th>${formatStageLabel(s)}</th>`).join("");
+      thead.innerHTML = `
+        <tr>
+          <th>Role</th>
+          ${stageHeaders}
+          <th class="center">Health</th>
+        </tr>
+      `;
+    }
+
+    const healthByRole = getHealthByRole(weekly, targets, selectedWeekKey === "all" ? "" : selectedWeekKey);
+
+    const tbody = $("activityTable");
+    tbody.innerHTML = "";
+
+    Array.from(roles).sort().forEach(role => {
+      const sm = countsByRole.get(role) || new Map();
+      const stageCells = stages.map(s => `<td class="num">${formatNumber(sm.get(s) || 0)}</td>`).join("");
+      const h = healthByRole[role] || "new";
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${role}</td>
+        ${stageCells}
+        <td class="center">${healthDotHTML(h)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  /* ---------------- RENDER: SOURCING ---------------- */
+
+  function renderSourcing() {
+    const rows = state.sourcingRows || [];
+    const selectedWeekKey = state.selectedSourcingWeek || "";
+
+    const filtered = rows.filter(r => isWeekMatch(r, selectedWeekKey));
+
+    const tbody = $("sourcingTable");
+    tbody.innerHTML = "";
+
+    let totalContacted = 0;
+    let totalReplied = 0;
+    let totalScreen = 0;
+
+    // aggregate by role for all time (or still by role for week)
+    const byRole = new Map();
+    filtered.forEach(r => {
+      if (!byRole.has(r.role)) byRole.set(r.role, { contacted: 0, replied: 0, screen: 0 });
+      const agg = byRole.get(r.role);
+      agg.contacted += num(r.contacted);
+      agg.replied += num(r.replied);
+      agg.screen += num(r.recruiter_screen);
+
+      totalContacted += num(r.contacted);
+      totalReplied += num(r.replied);
+      totalScreen += num(r.recruiter_screen);
+    });
+
+    Array.from(byRole.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([role, agg]) => {
+      const conv = agg.contacted > 0 ? agg.screen / agg.contacted : null;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${role}</td>
+        <td class="num">${formatNumber(agg.contacted)}</td>
+        <td class="num">${formatNumber(agg.replied)}</td>
+        <td class="num">${formatNumber(agg.screen)}</td>
+        <td class="num">${formatPercent(conv)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    const overallConv = totalContacted > 0 ? totalScreen / totalContacted : null;
+
+    $("sourcingSummary").innerHTML = `
+      <div class="kpi"><div class="label">Total Contacted</div><div class="value">${formatNumber(totalContacted)}</div></div>
+      <div class="kpi"><div class="label">Total Replied</div><div class="value">${formatNumber(totalReplied)}</div></div>
+      <div class="kpi"><div class="label">Total Recruiter Screens</div><div class="value">${formatNumber(totalScreen)}</div><div class="sub">${formatPercent(overallConv)} conversion</div></div>
+      <div class="kpi"><div class="label">Scope</div><div class="value">${selectedWeekKey === "all" ? "All time" : selectedWeekKey.replace("-", " ")}</div></div>
+    `;
+  }
+
+  /* ---------------- RENDER: HIRES ---------------- */
+
+  function parseDate(value) {
+    if (!value) return null;
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  function dayDiff(start, end) {
+    if (!start || !end) return null;
+    const ms = end - start;
+    return Number.isFinite(ms) ? Math.round(ms / (1000 * 60 * 60 * 24)) : null;
+  }
+
+  function average(values) {
+    if (!values.length) return null;
+    return values.reduce((s, v) => s + v, 0) / values.length;
+  }
+
+  function renderHires() {
+    const rows = state.hiredRows || [];
+    const tbody = $("hiresTable");
+    const empty = $("hiresEmpty");
+
+    tbody.innerHTML = "";
+
+    if (!rows.length) {
+      empty.classList.remove("hidden");
+    } else {
+      empty.classList.add("hidden");
+    }
+
+    const tthValues = [];
+    const ttfValues = [];
+    const processValues = [];
+
+    rows.forEach(r => {
+      const liveDate = parseDate(getField(r, ["live_date", "live date"]));
+      const signatureDate = parseDate(getField(r, ["signature_date", "signature date"]));
+      const startDate = parseDate(getField(r, ["start_date", "start date"]));
+      const firstContact = parseDate(getField(r, ["1st_contact", "first_contact", "1st contact", "first contact"]));
+
+      const tth = dayDiff(liveDate, signatureDate);
+      const ttf = dayDiff(liveDate, startDate);
+      const daysInProcess = dayDiff(firstContact, signatureDate);
+
+      if (tth !== null) tthValues.push(tth);
+      if (ttf !== null) ttfValues.push(ttf);
+      if (daysInProcess !== null) processValues.push(daysInProcess);
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${getField(r, ["role"])}</td>
+        <td>${getField(r, ["first_name", "first name"])}</td>
+        <td>${getField(r, ["last_name", "last name"])}</td>
+        <td>${getField(r, ["source"])}</td>
+        <td>${getField(r, ["salary"])}</td>
+        <td>${getField(r, ["live_date", "live date"])}</td>
+        <td>${getField(r, ["1st_contact", "first_contact", "1st contact", "first contact"])}</td>
+        <td>${getField(r, ["signature_date", "signature date"])}</td>
+        <td>${getField(r, ["start_date", "start date"])}</td>
+        <td class="num">${tth !== null ? tth : "—"}</td>
+        <td class="num">${ttf !== null ? ttf : "—"}</td>
+        <td class="num">${daysInProcess !== null ? daysInProcess : "—"}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    const avgTth = average(tthValues);
+    const avgTtf = average(ttfValues);
+
+    $("hiresKpis").innerHTML = `
+      <div class="kpi"><div class="label">Total Hires</div><div class="value">${formatNumber(rows.length)}</div></div>
+      <div class="kpi"><div class="label">Avg TTH</div><div class="value">${avgTth !== null ? avgTth.toFixed(1) : "—"}</div></div>
+      <div class="kpi"><div class="label">Avg TTF</div><div class="value">${avgTtf !== null ? avgTtf.toFixed(1) : "—"}</div></div>
+      <div class="kpi"><div class="label">Scope</div><div class="value">All time</div></div>
+    `;
+  }
+
+  /* ---------------- VIEW SWITCH ---------------- */
 
   function setView(view) {
     state.view = view;
     localStorage.setItem(VIEW_STORAGE_KEY, view);
 
+    const contributorBtn = $("viewContributor");
+    const managementBtn = $("viewManagement");
+    const contributorView = $("contributorView");
+    const managementView = $("managementView");
+
     const isContributor = view === "contributor";
-
-    $("contributorView")?.classList.toggle("hidden", !isContributor);
-    $("managementView")?.classList.toggle("hidden", isContributor);
-
-    $("viewContributor")?.classList.toggle("active", isContributor);
-    $("viewManagement")?.classList.toggle("active", !isContributor);
-
-    if (!isContributor) ensureMgmtUnlockedOrKickBack();
+    contributorBtn.classList.toggle("active", isContributor);
+    managementBtn.classList.toggle("active", !isContributor);
+    contributorView.classList.toggle("hidden", !isContributor);
+    managementView.classList.toggle("hidden", isContributor);
   }
 
-  /* =========================
-     SELECT HELPERS
-  ========================= */
+  /* ---------------- WEEK SELECTIONS ---------------- */
 
-  function fillWeekSelectNoAll(select, weekKeys, selected) {
-    if (!select) return;
-    select.innerHTML = "";
+  function syncWeekSelections() {
+    state.pipelineOptions = getWeekOptions(state.pipelineInventoryRows.length ? state.pipelineInventoryRows : state.pipelineWeeklyRows);
+    state.activityOptions = getWeekOptions(state.pipelineWeeklyRows);
+    state.sourcingOptions = getWeekOptions(state.sourcingRows);
 
-    weekKeys.forEach((k) => {
-      const opt = document.createElement("option");
-      opt.value = k;
-      opt.textContent = formatWeekLabel(k);
-      select.appendChild(opt);
-    });
+    // pipeline includes All time option
+    setSelectOptions($("pipelineWeekSelect"), state.pipelineOptions, true);
+    // activity includes All time option
+    setSelectOptions($("activityWeekSelect"), state.activityOptions, true);
+    // sourcing includes All time option
+    setSelectOptions($("sourcingWeekSelect"), state.sourcingOptions, true);
 
-    select.value = selected && weekKeys.includes(selected) ? selected : (weekKeys[0] || "");
-  }
-
-  function fillWeekSelectWithAll(select, weekKeys, selected) {
-    if (!select) return;
-    select.innerHTML = "";
-
-    const allOpt = document.createElement("option");
-    allOpt.value = "all";
-    allOpt.textContent = "All time";
-    select.appendChild(allOpt);
-
-    weekKeys.forEach((k) => {
-      const opt = document.createElement("option");
-      opt.value = k;
-      opt.textContent = formatWeekLabel(k);
-      select.appendChild(opt);
-    });
-
-    if (selected === "all") select.value = "all";
-    else select.value = selected && weekKeys.includes(selected) ? selected : (weekKeys[0] || "all");
-  }
-
-  /* =========================
-     DOTS / RAG
-  ========================= */
-
-  function ragFromOverviewRow(row) {
-    const v = normalizeHeader(row.health || row.rag || "");
-    if (v.includes("critical")) return "critical";
-    if (v.includes("risk") || v.includes("warning") || v.includes("at_risk")) return "warning";
-    if (v.includes("healthy") || v.includes("good")) return "healthy";
-    return "new";
-  }
-
-  function dotHTML(status) {
-    if (status === "healthy") return `<span class="status-dot good" aria-label="Healthy"></span>`;
-    if (status === "warning") return `<span class="status-dot warn" aria-label="At risk"></span>`;
-    if (status === "critical") return `<span class="status-dot bad" aria-label="Critical"></span>`;
-    return `<span class="status-dot neutral" aria-label="New"></span>`;
-  }
-
-  /* =========================
-     RENDER: OVERVIEW
-  ========================= */
-
-  function renderOverview() {
-    const rows = state.overviewRows;
-
-    const openRoles = rows.filter((r) => normalizeHeader(r.status) === "open").length;
-    const filledRoles = rows.filter((r) => normalizeHeader(r.status) === "filled").length;
-    const openings = rows.reduce((s, r) => s + num(r.openings), 0);
-
-    let H = 0, W = 0, C = 0;
-    rows.forEach((r) => {
-      const rag = ragFromOverviewRow(r);
-      if (rag === "healthy") H += 1;
-      if (rag === "warning") W += 1;
-      if (rag === "critical") C += 1;
-    });
-
-    $("overviewKpis").innerHTML = `
-      <div class="kpi"><div class="label">Open Roles</div><div class="value">${openRoles}</div></div>
-      <div class="kpi"><div class="label">Filled Roles</div><div class="value">${filledRoles}</div></div>
-      <div class="kpi"><div class="label">Total Openings</div><div class="value">${openings}</div></div>
-      <div class="kpi"><div class="label">RAG (🟢/🟡/🔴)</div><div class="value">${H}/${W}/${C}</div></div>
-    `;
-
-    $("overviewRagBadges").innerHTML = `
-      <div class="badge good"><span class="dot"></span><span class="count">${H} Healthy</span></div>
-      <div class="badge warn"><span class="dot"></span><span class="count">${W} At risk</span></div>
-      <div class="badge bad"><span class="dot"></span><span class="count">${C} Critical</span></div>
-    `;
-
-    const tb = $("overviewTbody");
-    tb.innerHTML = "";
-
-    rows.forEach((r) => {
-      const owner = r.owner || r.recruiter || r.pplwise_tap || r.pplwise_sourcer || r.tap || "";
-      const rag = ragFromOverviewRow(r);
-
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${esc(r.role || "")}</td>
-        <td>${esc(r.status || "")}</td>
-        <td>${esc(r.location || "")}</td>
-        <td class="right">${num(r.openings).toLocaleString()}</td>
-        <td>${esc(owner)}</td>
-        <td class="right">${dotHTML(rag)}</td>
-      `;
-      tb.appendChild(tr);
-    });
-  }
-
-  /* =========================
-     RENDER: PIPELINE (inventory)
-  ========================= */
-
-  function stagesFrom(rows, weekKey) {
-    const filtered = rows.filter((r) => isRowInWeek(r, weekKey));
-    const present = uniq(filtered.map((r) => r.stage));
-    return [
-      ...STAGE_ORDER.filter((s) => present.includes(s)),
-      ...present.filter((s) => !STAGE_ORDER.includes(s)).sort((a, b) => a.localeCompare(b))
-    ];
-  }
-
-  function renderPipeline() {
-    const week = state.pipelineWeek;
-    const rows = state.inventoryRows.filter((r) => isRowInWeek(r, week));
-
-    const empty = $("pipelineEmpty");
-    const thead = $("pipelineThead");
-    const tbody = $("pipelineTbody");
-
-    if (!rows.length) {
-      empty.textContent =
-        "No inventory rows for this week. If this stays empty, check pipeline_inventory gid and that the sheet is published as CSV.";
-      empty.classList.remove("hidden");
-      thead.innerHTML = "";
-      tbody.innerHTML = "";
-      return;
+    // Defaults:
+    // Pipeline: keep current, else "all" is okay but prefer latest week (more useful)
+    if (!state.selectedPipelineWeek || (!["all", ...state.pipelineOptions.map(o => o.key)].includes(state.selectedPipelineWeek))) {
+      state.selectedPipelineWeek = state.pipelineOptions.length ? state.pipelineOptions[0].key : "all";
     }
 
-    empty.classList.add("hidden");
-
-    const stages = stagesFrom(state.inventoryRows, week);
-    const roles = uniq(rows.map((r) => r.role)).sort();
-
-    const byRole = new Map();
-    roles.forEach((role) => byRole.set(role, new Map()));
-
-    rows.forEach((r) => {
-      const m = byRole.get(r.role) || new Map();
-      m.set(r.stage, (m.get(r.stage) || 0) + num(r.count));
-      byRole.set(r.role, m);
-    });
-
-    thead.innerHTML = `
-      <tr>
-        <th>Role</th>
-        ${stages.map((s) => `<th class="right">${esc(s)}</th>`).join("")}
-      </tr>
-    `;
-
-    tbody.innerHTML = "";
-    roles.forEach((role) => {
-      const m = byRole.get(role) || new Map();
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${esc(role)}</td>
-        ${stages.map((s) => `<td class="right">${(m.get(s) || 0).toLocaleString()}</td>`).join("")}
-      `;
-      tbody.appendChild(tr);
-    });
-  }
-
-  /* =========================
-     RENDER: ACTIVITY (weekly, with All time)
-  ========================= */
-
-  function renderActivity() {
-    const week = state.activityWeek;
-    const rows = state.weeklyRows.filter((r) => isRowInWeek(r, week));
-
-    const thead = $("activityThead");
-    const tbody = $("activityTbody");
-
-    const stages = stagesFrom(state.weeklyRows, week);
-    const roles = uniq(rows.map((r) => r.role)).sort();
-
-    thead.innerHTML = `
-      <tr>
-        <th>Role</th>
-        ${stages.map((s) => `<th class="right">${esc(s)}</th>`).join("")}
-      </tr>
-    `;
-
-    tbody.innerHTML = "";
-    if (!rows.length || !roles.length) {
-      tbody.innerHTML = `<tr><td colspan="${Math.max(1, stages.length + 1)}" class="muted">No activity data for this selection.</td></tr>`;
-      return;
+    // Activity & Sourcing: prefer KW 03 if present, else latest
+    if (!state.selectedActivityWeek || (!["all", ...state.activityOptions.map(o => o.key)].includes(state.selectedActivityWeek))) {
+      state.selectedActivityWeek = pickPreferredWeekKey(state.activityOptions, PREFERRED_KW) || "all";
+    }
+    if (!state.selectedSourcingWeek || (!["all", ...state.sourcingOptions.map(o => o.key)].includes(state.selectedSourcingWeek))) {
+      state.selectedSourcingWeek = pickPreferredWeekKey(state.sourcingOptions, PREFERRED_KW) || "all";
     }
 
-    const byRole = new Map();
-    roles.forEach((role) => byRole.set(role, new Map()));
-
-    rows.forEach((r) => {
-      const m = byRole.get(r.role) || new Map();
-      m.set(r.stage, (m.get(r.stage) || 0) + num(r.count));
-      byRole.set(r.role, m);
-    });
-
-    roles.forEach((role) => {
-      const m = byRole.get(role) || new Map();
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${esc(role)}</td>
-        ${stages.map((s) => `<td class="right">${(m.get(s) || 0).toLocaleString()}</td>`).join("")}
-      `;
-      tbody.appendChild(tr);
-    });
-  }
-
-  /* =========================
-     RENDER: SOURCING (with All time)
-  ========================= */
-
-  function renderSourcing() {
-    const week = state.sourcingWeek;
-
-    const rows = state.sourcingRows.filter((r) => {
-      if (week === "all") return true;
-      return getWeekKey(r) === week;
-    });
-
-    const byRole = new Map();
-    rows.forEach((r) => {
-      const role = r.role || "";
-      if (!role) return;
-      if (!byRole.has(role)) byRole.set(role, { contacted: 0, replied: 0, screens: 0 });
-
-      const obj = byRole.get(role);
-      obj.contacted += num(r.contacted);
-      obj.replied += num(r.replied);
-      obj.screens += num(r.recruiter_screen || r.recruiter_screened || r.recruiterScreen);
-    });
-
-    const roles = Array.from(byRole.keys()).sort();
-    const tb = $("sourcingTbody");
-    tb.innerHTML = "";
-
-    let totC = 0, totR = 0, totS = 0;
-
-    roles.forEach((role) => {
-      const v = byRole.get(role);
-      totC += v.contacted;
-      totR += v.replied;
-      totS += v.screens;
-      const conv = v.contacted > 0 ? v.screens / v.contacted : null;
-
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${esc(role)}</td>
-        <td class="right">${v.contacted.toLocaleString()}</td>
-        <td class="right">${v.replied.toLocaleString()}</td>
-        <td class="right">${v.screens.toLocaleString()}</td>
-        <td class="right">${conv === null ? "—" : `${Math.round(conv * 100)}%`}</td>
-      `;
-      tb.appendChild(tr);
-    });
-
-    const overallConv = totC > 0 ? totS / totC : null;
-
-    $("sourcingKpis").innerHTML = `
-      <div class="kpi"><div class="label">Total Contacted</div><div class="value">${totC.toLocaleString()}</div><div class="sub">${week === "all" ? "All time" : "Selected week"}</div></div>
-      <div class="kpi"><div class="label">Total Replied</div><div class="value">${totR.toLocaleString()}</div><div class="sub">${week === "all" ? "All time" : "Selected week"}</div></div>
-      <div class="kpi"><div class="label">Recruiter Screens</div><div class="value">${totS.toLocaleString()}</div><div class="sub">${overallConv === null ? "—" : `${Math.round(overallConv * 100)}% conversion`}</div></div>
-      <div class="kpi"><div class="label">Scope</div><div class="value">${week === "all" ? "All time" : formatWeekLabel(week)}</div><div class="sub">Week selector</div></div>
-    `;
-  }
-
-  /* =========================
-     RENDER: HIRES (safe if empty)
-  ========================= */
-
-  function parseDate(v) {
-    if (!v) return null;
-    const d = new Date(v);
-    return Number.isNaN(d.getTime()) ? null : d;
-  }
-
-  function dayDiff(a, b) {
-    if (!a || !b) return null;
-    const ms = b - a;
-    return Number.isFinite(ms) ? Math.round(ms / (1000 * 60 * 60 * 24)) : null;
-  }
-
-  function avg(arr) {
-    if (!arr.length) return null;
-    return arr.reduce((s, v) => s + v, 0) / arr.length;
-  }
-
-  function renderHires() {
-    const rows = state.hiredRows;
-
-    const tb = $("hiresTbody");
-    tb.innerHTML = "";
-
-    const tth = [];
-    const ttf = [];
-    const dip = [];
-
-    rows.forEach((r) => {
-      const live = parseDate(r.live_date || r.live);
-      const sig = parseDate(r.signature_date || r.signature);
-      const start = parseDate(r.start_date || r.start);
-      const first = parseDate(r["1st_contact"] || r.first_contact || r.first);
-
-      const vTth = dayDiff(live, sig);
-      const vTtf = dayDiff(live, start);
-      const vDip = dayDiff(first, sig);
-
-      if (vTth !== null) tth.push(vTth);
-      if (vTtf !== null) ttf.push(vTtf);
-      if (vDip !== null) dip.push(vDip);
-
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${esc(r.role || "")}</td>
-        <td>${esc(r.first_name || "")}</td>
-        <td>${esc(r.last_name || "")}</td>
-        <td>${esc(r.source || "")}</td>
-        <td>${esc(r.live_date || "")}</td>
-        <td>${esc(r["1st_contact"] || r.first_contact || "")}</td>
-        <td>${esc(r.signature_date || "")}</td>
-        <td>${esc(r.start_date || "")}</td>
-        <td class="right">${vTth === null ? "—" : vTth}</td>
-        <td class="right">${vTtf === null ? "—" : vTtf}</td>
-        <td class="right">${vDip === null ? "—" : vDip}</td>
-      `;
-      tb.appendChild(tr);
-    });
-
-    $("hiresKpis").innerHTML = `
-      <div class="kpi"><div class="label">Total Hires</div><div class="value">${rows.length}</div><div class="sub">${rows.length === 0 ? "No hire data yet" : "All time"}</div></div>
-      <div class="kpi"><div class="label">Avg TTH</div><div class="value">${avg(tth) === null ? "—" : avg(tth).toFixed(1)}</div><div class="sub">Days</div></div>
-      <div class="kpi"><div class="label">Avg TTF</div><div class="value">${avg(ttf) === null ? "—" : avg(ttf).toFixed(1)}</div><div class="sub">Days</div></div>
-      <div class="kpi"><div class="label">Avg Days in Process</div><div class="value">${avg(dip) === null ? "—" : avg(dip).toFixed(1)}</div><div class="sub">1st contact → signature</div></div>
-    `;
-  }
-
-  /* =========================
-     MANAGEMENT (minimal + gated)
-  ========================= */
-
-  function getOwnerMap() {
-    const map = {};
-    state.overviewRows.forEach((r) => {
-      if (!r.role) return;
-      const owner = r.owner || r.recruiter || r.pplwise_tap || r.pplwise_sourcer || r.tap || "";
-      if (owner) map[r.role] = owner;
-    });
-    return map;
-  }
-
-  function fillManagementFilters() {
-    const ownerMap = getOwnerMap();
-
-    const roles = uniq(state.overviewRows.map((r) => r.role)).sort();
-    const recruiters = uniq(Object.values(ownerMap)).sort();
-
-    const roleSel = $("managementRoleSelect");
-    const recSel = $("managementRecruiterSelect");
-
-    if (roleSel) {
-      roleSel.innerHTML = `<option value="all">All Roles</option>` + roles.map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join("");
-      roleSel.value = state.mgmtRole;
-    }
-
-    if (recSel) {
-      recSel.innerHTML = `<option value="all">All Recruiters</option>` + recruiters.map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join("");
-      recSel.value = state.mgmtRecruiter;
-    }
-  }
-
-  function renderDonut(canvasId, emptyId, chartKey, labels, data) {
-    const canvas = $(canvasId);
-    const empty = $(emptyId);
-
-    const total = data.reduce((s, v) => s + v, 0);
-    if (!total) {
-      if (state.charts[chartKey]) {
-        state.charts[chartKey].destroy();
-        state.charts[chartKey] = null;
-      }
-      if (empty) empty.classList.remove("hidden");
-      if (canvas) canvas.classList.add("hidden");
-      return;
-    }
-
-    if (empty) empty.classList.add("hidden");
-    if (canvas) canvas.classList.remove("hidden");
-
-    const colors = ["#22c55e", "#f59e0b", "#ef4444", "#64748b", "#38bdf8", "#f97316"];
-
-    if (state.charts[chartKey]) {
-      state.charts[chartKey].data.labels = labels;
-      state.charts[chartKey].data.datasets[0].data = data;
-      state.charts[chartKey].update();
-      return;
-    }
-
-    state.charts[chartKey] = new Chart(canvas, {
-      type: "doughnut",
-      data: {
-        labels,
-        datasets: [{
-          data,
-          backgroundColor: labels.map((_, i) => colors[i % colors.length]),
-          borderWidth: 0
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { labels: { color: "#e5e7eb" } }
-        }
-      }
-    });
-  }
-
-  function renderManagement() {
-    if (sessionStorage.getItem(MGMT_UNLOCK_KEY) !== "1") return;
-
-    const ownerMap = getOwnerMap();
-    const week = state.mgmtWeek;
-
-    const openRoles = state.overviewRows
-      .filter((r) => normalizeHeader(r.status) === "open")
-      .filter((r) => state.mgmtRole === "all" || r.role === state.mgmtRole)
-      .filter((r) => state.mgmtRecruiter === "all" || (ownerMap[r.role] || "") === state.mgmtRecruiter)
-      .length;
-
-    const inventory = state.inventoryRows
-      .filter((r) => isRowInWeek(r, week))
-      .filter((r) => state.mgmtRole === "all" || r.role === state.mgmtRole)
-      .filter((r) => state.mgmtRecruiter === "all" || (ownerMap[r.role] || "") === state.mgmtRecruiter);
-
-    const weekly = state.weeklyRows
-      .filter((r) => isRowInWeek(r, week))
-      .filter((r) => state.mgmtRole === "all" || r.role === state.mgmtRole)
-      .filter((r) => state.mgmtRecruiter === "all" || (ownerMap[r.role] || "") === state.mgmtRecruiter);
-
-    const pipelineCandidates = inventory.reduce((s, r) => s + num(r.count), 0);
-    const weeklyActivity = weekly.reduce((s, r) => s + num(r.count), 0);
-    const hiresAll = state.hiredRows.length;
-
-    $("managementKpis").innerHTML = `
-      <div class="kpi"><div class="label">Open Roles</div><div class="value">${openRoles}</div></div>
-      <div class="kpi"><div class="label">Pipeline Candidates</div><div class="value">${pipelineCandidates.toLocaleString()}</div><div class="sub">End-of-week inventory</div></div>
-      <div class="kpi"><div class="label">Weekly Activity</div><div class="value">${weeklyActivity.toLocaleString()}</div><div class="sub">Selected week</div></div>
-      <div class="kpi"><div class="label">Hires (All time)</div><div class="value">${hiresAll.toLocaleString()}</div></div>
-    `;
-
-    // health donut from overview rag
-    let H = 0, W = 0, C = 0;
-    state.overviewRows.forEach((r) => {
-      if (state.mgmtRole !== "all" && r.role !== state.mgmtRole) return;
-      if (state.mgmtRecruiter !== "all" && (ownerMap[r.role] || "") !== state.mgmtRecruiter) return;
-      const rag = ragFromOverviewRow(r);
-      if (rag === "healthy") H += 1;
-      if (rag === "warning") W += 1;
-      if (rag === "critical") C += 1;
-    });
-    renderDonut("pipelineHealthChart", "pipelineHealthEmpty", "pipelineHealth", ["Healthy", "At risk", "Critical"], [H, W, C]);
-
-    // source mix donut
-    const src = state.sourcingRows
-      .filter((r) => getWeekKey(r) === week)
-      .filter((r) => state.mgmtRole === "all" || r.role === state.mgmtRole)
-      .filter((r) => state.mgmtRecruiter === "all" || (ownerMap[r.role] || "") === state.mgmtRecruiter);
-
-    const bySource = new Map();
-    src.forEach((r) => {
-      const s = r.source || r.channel || r.sourcing_channel || "";
-      if (!s) return;
-      bySource.set(s, (bySource.get(s) || 0) + num(r.contacted));
-    });
-
-    const sorted = Array.from(bySource.entries()).sort((a, b) => b[1] - a[1]);
-    const top = sorted.slice(0, 4);
-    renderDonut(
-      "sourceMixChart",
-      "sourceMixEmpty",
-      "sourceMix",
-      top.map((x) => x[0]),
-      top.map((x) => x[1])
-    );
-
-    // utilization table (simple)
-    const utilBody = $("managementUtilizationTbody");
-    utilBody.innerHTML = "";
-
-    const recruiters = state.mgmtRecruiter === "all" ? uniq(Object.values(ownerMap)) : [state.mgmtRecruiter];
-    if (!recruiters.length) {
-      utilBody.innerHTML = `<tr><td colspan="4" class="muted">No utilization data.</td></tr>`;
-    } else {
-      recruiters.sort().forEach((rec) => {
-        const relRoles = Object.keys(ownerMap).filter((role) => ownerMap[role] === rec);
-        const scopedRoles = state.mgmtRole === "all" ? relRoles : relRoles.filter((r) => r === state.mgmtRole);
-
-        const weekRows = state.sourcingRows
-          .filter((r) => getWeekKey(r) === week)
-          .filter((r) => scopedRoles.includes(r.role || ""));
-
-        const contacted = weekRows.reduce((s, r) => s + num(r.contacted), 0);
-        const screens = weekRows.reduce((s, r) => s + num(r.recruiter_screen || r.recruiter_screened || r.recruiterScreen), 0);
-
-        const approxTarget = 50; // fallback
-        const utilization = Math.min(100, Math.round(((contacted + screens) / approxTarget) * 100));
-
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${esc(rec)}</td>
-          <td class="right">${screens.toLocaleString()}</td>
-          <td class="right">${contacted.toLocaleString()}</td>
-          <td>
-            <div class="util-meta">
-              <div class="util-bar"><span style="width:${utilization}%"></span></div>
-              <span>${utilization}% (approx)</span>
-            </div>
-          </td>
-        `;
-        utilBody.appendChild(tr);
-      });
-    }
-
-    // role notes
-    const insights = $("roleInsights");
-    insights.innerHTML = "";
-
-    const notes = state.roleNotesRows.filter((n) => {
-      const wk = weekKeyFrom(num(n.year), num(n.kw));
-      if (wk !== week) return false;
-      if (state.mgmtRole !== "all" && n.role !== state.mgmtRole) return false;
-      if (state.mgmtRecruiter !== "all" && n.recruiter !== state.mgmtRecruiter) return false;
-      return (n.challenges || n.highlights || n.big_wins);
-    });
-
-    if (!notes.length) {
-      insights.innerHTML = `<div class="placeholder">No role insights shared for this week.</div>`;
-    } else {
-      notes.forEach((n) => {
-        const card = document.createElement("details");
-        card.className = "insight-card";
-        card.open = true;
-
-        const challenges = (n.challenges || "").split(/\r?\n|\|/).map((x) => x.trim()).filter(Boolean);
-        const highlights = (n.highlights || "").split(/\r?\n|\|/).map((x) => x.trim()).filter(Boolean);
-        const wins = (n.big_wins || "").split(/\r?\n|\|/).map((x) => x.trim()).filter(Boolean);
-
-        card.innerHTML = `
-          <summary>
-            <div class="insight-meta">
-              <strong>${esc(n.role || "Role")}</strong>
-            </div>
-            <span class="muted">${esc(n.recruiter || "")}</span>
-          </summary>
-
-          ${challenges.length ? `
-            <div class="insight-section">
-              <h4>Challenges</h4>
-              <ul>${challenges.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>
-            </div>` : ""}
-
-          ${highlights.length ? `
-            <div class="insight-section">
-              <h4>Highlights</h4>
-              <ul>${highlights.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>
-            </div>` : ""}
-
-          ${wins.length ? `
-            <div class="insight-section">
-              <h4>Big Wins</h4>
-              <ul>${wins.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>
-            </div>` : ""}
-        `;
-        insights.appendChild(card);
-      });
-    }
-  }
-
-  /* =========================
-     REFRESH + WIRING
-  ========================= */
-
-  function syncSelectors() {
-    // pipeline weeks from inventory (preferred) else weekly
-    const invWeekKeys = uniq(state.inventoryRows.map(getWeekKey));
-    const weeklyWeekKeys = uniq(state.weeklyRows.map(getWeekKey));
-    const srcWeekKeys = uniq(state.sourcingRows.map(getWeekKey));
-
-    const pipelineWeeks = sortWeeksDesc(invWeekKeys.length ? invWeekKeys : weeklyWeekKeys);
-    const activityWeeks = sortWeeksDesc(weeklyWeekKeys);
-    const sourcingWeeks = sortWeeksDesc(srcWeekKeys);
-
-    // set defaults
-    if (!state.pipelineWeek || !pipelineWeeks.includes(state.pipelineWeek)) state.pipelineWeek = pipelineWeeks[0] || "";
-    if (state.activityWeek !== "all" && !activityWeeks.includes(state.activityWeek)) state.activityWeek = "all";
-    if (state.sourcingWeek !== "all" && !sourcingWeeks.includes(state.sourcingWeek)) state.sourcingWeek = "all";
-
-    // management week defaults to latest weekly or pipeline
-    const mgmtWeeks = activityWeeks.length ? activityWeeks : pipelineWeeks;
-    if (!state.mgmtWeek || !mgmtWeeks.includes(state.mgmtWeek)) state.mgmtWeek = mgmtWeeks[0] || "";
-
-    fillWeekSelectNoAll($("pipelineWeekSelect"), pipelineWeeks, state.pipelineWeek);
-    fillWeekSelectWithAll($("activityWeekSelect"), activityWeeks, state.activityWeek);
-    fillWeekSelectWithAll($("sourcingWeekSelect"), sourcingWeeks, state.sourcingWeek);
-    fillWeekSelectNoAll($("managementWeekSelect"), mgmtWeeks, state.mgmtWeek);
+    $("pipelineWeekSelect").value = state.selectedPipelineWeek;
+    $("activityWeekSelect").value = state.selectedActivityWeek;
+    $("sourcingWeekSelect").value = state.selectedSourcingWeek;
   }
 
   function renderAll() {
@@ -1076,8 +987,15 @@ document.addEventListener("DOMContentLoaded", () => {
     renderActivity();
     renderSourcing();
     renderHires();
-    fillManagementFilters();
-    renderManagement();
+  }
+
+  /* ---------------- MAIN LOAD ---------------- */
+
+  function fmtDate(d = new Date()) {
+    return d.toLocaleString(undefined, {
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit"
+    });
   }
 
   async function refreshAll() {
@@ -1086,10 +1004,10 @@ document.addEventListener("DOMContentLoaded", () => {
         overviewRows,
         pipelineWeeklyRaw,
         pipelineInventoryRaw,
-        sourcingRows,
-        hiredRows,
-        targetRows,
-        roleNotesRows
+        sourcingRaw,
+        hiredRaw,
+        targetsRaw,
+        roleNotesRaw
       ] = await Promise.all([
         loadCSV("overview", CSV.overview),
         loadCSV("pipelineWeekly", CSV.pipelineWeekly),
@@ -1100,72 +1018,59 @@ document.addEventListener("DOMContentLoaded", () => {
         loadCSV("roleNotes", CSV.roleNotes)
       ]);
 
-      state.overviewRows = overviewRows;
-      state.weeklyRows = normalizeWeekly(pipelineWeeklyRaw);
-      state.inventoryRows = normalizeInventory(pipelineInventoryRaw);
-      state.sourcingRows = sourcingRows;
-      state.hiredRows = hiredRows; // can be empty safely
-      state.targetRows = targetRows;
-      state.roleNotesRows = normalizeRoleNotes(roleNotesRows);
+      state.overviewRows = overviewRows || [];
+      state.pipelineWeeklyRows = normalizePipelineWeekly(pipelineWeeklyRaw || []);
+      state.pipelineInventoryRows = normalizePipelineInventory(pipelineInventoryRaw || []);
+      state.sourcingRows = normalizeSourcing(sourcingRaw || []);
+      state.hiredRows = hiredRaw || [];
+      state.roleTargets = normalizeTargets(targetsRaw || []);
+      state.roleNotesRows = normalizeRoleNotes(roleNotesRaw || []);
 
-      syncSelectors();
+      syncWeekSelections();
       renderAll();
 
-      const last = $("lastUpdated");
-      if (last) last.textContent = `Last updated: ${fmtDate()}`;
+      $("lastUpdated").textContent = `Last updated: ${fmtDate()}`;
     } catch (e) {
       console.error(e);
+      // errors are shown via data error banner; keep UI responsive
     }
   }
 
-  /* =========================
-     INIT EVENT LISTENERS
-  ========================= */
+  /* ---------------- EVENT HANDLERS ---------------- */
+
+  function handlePipelineWeekChange() {
+    state.selectedPipelineWeek = $("pipelineWeekSelect").value;
+    renderOverview();
+    renderPipeline();
+  }
+
+  function handleActivityWeekChange() {
+    state.selectedActivityWeek = $("activityWeekSelect").value;
+    renderActivity();
+  }
+
+  function handleSourcingWeekChange() {
+    state.selectedSourcingWeek = $("sourcingWeekSelect").value;
+    renderSourcing();
+  }
+
+  /* ---------------- INIT ---------------- */
 
   initTabs();
 
-  // restore view
   const storedView = localStorage.getItem(VIEW_STORAGE_KEY);
   if (storedView === "management") state.view = "management";
-
   setView(state.view);
 
-  $("viewContributor")?.addEventListener("click", () => setView("contributor"));
-  $("viewManagement")?.addEventListener("click", () => setView("management"));
+  $("viewContributor").addEventListener("click", () => setView("contributor"));
+  $("viewManagement").addEventListener("click", () => setView("management"));
 
-  $("refreshBtn")?.addEventListener("click", refreshAll);
+  $("refreshBtn").addEventListener("click", refreshAll);
 
-  $("pipelineWeekSelect")?.addEventListener("change", (e) => {
-    state.pipelineWeek = e.target.value;
-    renderPipeline();
-  });
+  $("pipelineWeekSelect").addEventListener("change", handlePipelineWeekChange);
+  $("activityWeekSelect").addEventListener("change", handleActivityWeekChange);
+  $("sourcingWeekSelect").addEventListener("change", handleSourcingWeekChange);
 
-  $("activityWeekSelect")?.addEventListener("change", (e) => {
-    state.activityWeek = e.target.value;
-    renderActivity();
-  });
-
-  $("sourcingWeekSelect")?.addEventListener("change", (e) => {
-    state.sourcingWeek = e.target.value;
-    renderSourcing();
-  });
-
-  $("managementWeekSelect")?.addEventListener("change", (e) => {
-    state.mgmtWeek = e.target.value;
-    renderManagement();
-  });
-
-  $("managementRoleSelect")?.addEventListener("change", (e) => {
-    state.mgmtRole = e.target.value;
-    renderManagement();
-  });
-
-  $("managementRecruiterSelect")?.addEventListener("change", (e) => {
-    state.mgmtRecruiter = e.target.value;
-    renderManagement();
-  });
-
-  // initial load
   refreshAll();
   setInterval(refreshAll, 60000);
 });
