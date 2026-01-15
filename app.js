@@ -25,7 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const HEALTH_THRESHOLDS = {
     critical: 1 / 6,
     warning: 2 / 6,
-    healthy: 4 / 6
+    healthy: 4 / 6,
     critical: 0.33,
     warning: 0.66
   };
