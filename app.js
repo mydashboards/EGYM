@@ -62,7 +62,8 @@ document.addEventListener("DOMContentLoaded", () => {
     selectedActivityRole: "all",
     selectedActivityRecruiter: "all",
     selectedSourcingRole: "all",
-    selectedSourcingRecruiter: "all"
+    selectedSourcingRecruiter: "all",
+    managementCharts: {}
   };
 
   /* ---------------- HELPERS ---------------- */
@@ -264,6 +265,12 @@ document.addEventListener("DOMContentLoaded", () => {
     return m ? num(m[1]) : null;
   }
 
+  function getWeekYearFromKey(value) {
+    const match = String(value || "").match(/^(\d{4})-KW(\d{2})$/i);
+    if (!match) return null;
+    return { year: num(match[1]), kw: num(match[2]) };
+  }
+
   function isWeekMatch(row, selectedWeekKey) {
     if (selectedWeekKey === "all") return true;
     const selectedKw = getWeekNumberFromKey(selectedWeekKey);
@@ -459,6 +466,7 @@ document.addEventListener("DOMContentLoaded", () => {
         year: num(getField(r, ["year"])),
         kw: num(getField(r, ["kw"])),
         role: getField(r, ["role"]),
+        recruiter: getField(r, ["recruiter"]),
         stage: getField(r, ["stage"]),
         count: num(getField(r, ["count"])),
         stage_order: getField(r, ["stage_order"])
@@ -471,6 +479,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const year = num(getField(r, ["year"]));
       const kw = num(getField(r, ["kw"]));
       const role = getField(r, ["role"]);
+      const recruiter = getField(r, ["recruiter"]);
       if (!year || !kw || !role) return;
 
       Object.keys(r).forEach(k => {
@@ -481,6 +490,7 @@ document.addEventListener("DOMContentLoaded", () => {
           year,
           kw,
           role,
+          recruiter,
           stage: nk,
           count,
           stage_order: null
@@ -496,6 +506,7 @@ document.addEventListener("DOMContentLoaded", () => {
       kw: num(getField(r, ["kw"])),
       role: getField(r, ["role"]),
       recruiter: getField(r, ["recruiter"]),
+      source: getField(r, ["source"]),
       contacted: num(getField(r, ["contacted"])),
       replied: num(getField(r, ["replied"])),
       recruiter_screen: num(getField(r, ["recruiter_screen", "recruiter_screened"]))
@@ -935,14 +946,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const selectedWeekKey = state.selectedSourcingWeek || "";
     const selectedRole = state.selectedSourcingRole || "all";
     const selectedRecruiter = state.selectedSourcingRecruiter || "all";
-    const previousWeekKey = selectedWeekKey === "all" ? "" : getPreviousWeekKey(selectedWeekKey);
 
     const filtered = rows.filter(r => {
-      if (selectedWeekKey !== "all") {
-        const inSelected = isWeekMatch(r, selectedWeekKey);
-        const inPrevious = previousWeekKey ? isWeekMatch(r, previousWeekKey) : false;
-        if (!inSelected && !inPrevious) return false;
-      }
+      if (!isWeekMatch(r, selectedWeekKey)) return false;
       if (selectedRole !== "all" && r.role !== selectedRole) return false;
       if (selectedRecruiter !== "all" && r.recruiter !== selectedRecruiter) return false;
       return true;
@@ -1010,47 +1016,47 @@ document.addEventListener("DOMContentLoaded", () => {
     const weeklyRows = state.pipelineWeeklyRows || [];
     const inventoryRows = state.pipelineInventoryRows || [];
     const sourcingRows = state.sourcingRows || [];
-    const roleTargets = state.roleTargets || [];
+    const roleNotesRows = state.roleNotesRows || [];
 
-    const hiresByRole = {};
-    hiredRows.forEach(r => {
+    const selectedPipelineWeek = state.selectedPipelineWeek || "";
+    const selectedActivityWeek = state.selectedActivityWeek || "";
+    const selectedSourcingWeek = state.selectedSourcingWeek || "";
+    const selectedRole = state.selectedActivityRole || "all";
+    const selectedRecruiter = state.selectedActivityRecruiter || "all";
+    const selectedSourcingRole = state.selectedSourcingRole || "all";
+    const selectedSourcingRecruiter = state.selectedSourcingRecruiter || "all";
+
+    const healthByRole = getHealthByRole(
+      weeklyRows,
+      state.roleTargets || [],
+      selectedPipelineWeek === "all" ? "" : selectedPipelineWeek
+    );
+
+    const overviewFiltered = overviewRows.filter(r => {
       const role = getField(r, ["role"]);
-      const signatureDate = getField(r, ["signature_date", "signature date"]);
-      const startDate = getField(r, ["start_date", "start date"]);
-      if (!role) return;
-      if (!signatureDate && !startDate) return;
-      hiresByRole[role] = (hiresByRole[role] || 0) + 1;
+      if (selectedRole !== "all" && role !== selectedRole) return false;
+      if (selectedRecruiter !== "all") {
+        const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap", "owner", "recruiter"]);
+        if (owner !== selectedRecruiter) return false;
+      }
+      return true;
     });
 
-    const openRoles = overviewRows.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
-    const adjustedOpenings = overviewRows.reduce((sum, r) => {
-      const role = getField(r, ["role"]);
-      const base = num(getField(r, ["openings"]));
-      if (!hiredRows.length) return sum + base;
-      const adjusted = Math.max(0, base - (hiresByRole[role] || 0));
-      return sum + adjusted;
+    const openRoles = overviewFiltered.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
+
+    const pipelineCandidates = inventoryRows.reduce((sum, r) => {
+      if (!isWeekMatch(r, selectedPipelineWeek)) return sum;
+      if (selectedRole !== "all" && r.role !== selectedRole) return sum;
+      if (selectedRecruiter !== "all" && r.recruiter !== selectedRecruiter) return sum;
+      return sum + num(r.count);
     }, 0);
 
-    const weeklyOptions = getWeekOptions(weeklyRows);
-    const latestWeeklyKey = weeklyOptions[0]?.key || "";
-    const totalWeeklyActivity = weeklyRows.reduce((sum, r) => {
-      if (!latestWeeklyKey || !isWeekMatch(r, latestWeeklyKey)) return sum;
+    const weeklyActivity = weeklyRows.reduce((sum, r) => {
+      if (!isWeekMatch(r, selectedPipelineWeek)) return sum;
+      if (selectedRole !== "all" && r.role !== selectedRole) return sum;
+      if (selectedRecruiter !== "all" && r.recruiter !== selectedRecruiter) return sum;
       if (!r.stage || String(r.stage).startsWith("__")) return sum;
       return sum + num(r.count);
-    }, 0);
-
-    const inventoryOptions = getWeekOptions(inventoryRows);
-    const latestInventoryKey = inventoryOptions[0]?.key || "";
-    const totalInventory = inventoryRows.reduce((sum, r) => {
-      if (!latestInventoryKey || !isWeekMatch(r, latestInventoryKey)) return sum;
-      return sum + num(r.count);
-    }, 0);
-
-    const sourcingOptions = getWeekOptions(sourcingRows);
-    const latestSourcingKey = sourcingOptions[0]?.key || "";
-    const totalSourced = sourcingRows.reduce((sum, r) => {
-      if (!latestSourcingKey || !isWeekMatch(r, latestSourcingKey)) return sum;
-      return sum + num(r.contacted);
     }, 0);
 
     const totalHires = hiredRows.reduce((sum, r) => {
@@ -1061,20 +1067,280 @@ document.addEventListener("DOMContentLoaded", () => {
       return sum + 1;
     }, 0);
 
-    const targetedRoles = new Set();
-    roleTargets.forEach(r => {
-      if (r.role) targetedRoles.add(r.role);
-    });
-
     $("managementKpis").innerHTML = `
       <div class="kpi"><div class="label">Open Roles</div><div class="value">${formatNumber(openRoles)}</div></div>
-      <div class="kpi"><div class="label">Adjusted Openings</div><div class="value">${formatNumber(adjustedOpenings)}</div></div>
-      <div class="kpi"><div class="label">Latest Weekly Activity</div><div class="value">${formatNumber(totalWeeklyActivity)}</div></div>
-      <div class="kpi"><div class="label">Latest Inventory</div><div class="value">${formatNumber(totalInventory)}</div></div>
-      <div class="kpi"><div class="label">Latest Contacted</div><div class="value">${formatNumber(totalSourced)}</div></div>
-      <div class="kpi"><div class="label">Total Hires</div><div class="value">${formatNumber(totalHires)}</div></div>
-      <div class="kpi"><div class="label">Roles with Targets</div><div class="value">${formatNumber(targetedRoles.size)}</div></div>
+      <div class="kpi"><div class="label">Pipeline Candidates</div><div class="value">${formatNumber(pipelineCandidates)}</div></div>
+      <div class="kpi"><div class="label">Weekly Activity</div><div class="value">${formatNumber(weeklyActivity)}</div></div>
+      <div class="kpi"><div class="label">Hires (All time)</div><div class="value">${formatNumber(totalHires)}</div><div class="sub">${hiredRows.length ? "" : "No hire data yet."}</div></div>
     `;
+
+    const counts = { healthy: 0, warning: 0, critical: 0 };
+    overviewFiltered.forEach(r => {
+      const role = getField(r, ["role"]);
+      const value = normalizeHealthValue(getField(r, ["health"])) || healthByRole[role] || "";
+      if (value === "healthy") counts.healthy += 1;
+      else if (value === "warning") counts.warning += 1;
+      else if (value === "critical") counts.critical += 1;
+    });
+
+    $("managementHealthSummary").innerHTML = `
+      <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
+      <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} At risk</span></div>
+      <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Critical</span></div>
+    `;
+
+    renderManagementCharts({
+      counts,
+      sourcingRows,
+      selectedSourcingWeek,
+      selectedSourcingRole,
+      selectedSourcingRecruiter
+    });
+
+    renderManagementRecruiters({
+      sourcingRows,
+      selectedSourcingWeek,
+      selectedSourcingRole,
+      selectedSourcingRecruiter
+    });
+
+    renderManagementRoleInsights({
+      roleNotesRows,
+      selectedActivityWeek,
+      selectedRole,
+      selectedRecruiter,
+      healthByRole,
+      overviewRows: overviewFiltered
+    });
+  }
+
+  function renderManagementCharts({ counts, sourcingRows, selectedSourcingWeek, selectedSourcingRole, selectedSourcingRecruiter }) {
+    const chartsEmpty = $("managementChartsEmpty");
+    const pipelineCanvas = $("managementPipelineHealthChart");
+    const sourceCanvas = $("managementSourceMixChart");
+    if (!pipelineCanvas || !sourceCanvas) return;
+
+    const totalHealth = counts.healthy + counts.warning + counts.critical;
+    const hasHealth = totalHealth > 0;
+
+    const sourceMap = new Map();
+    sourcingRows.forEach(r => {
+      if (!isWeekMatch(r, selectedSourcingWeek)) return;
+      if (selectedSourcingRole !== "all" && r.role !== selectedSourcingRole) return;
+      if (selectedSourcingRecruiter !== "all" && r.recruiter !== selectedSourcingRecruiter) return;
+      if (!r.source) return;
+      sourceMap.set(r.source, (sourceMap.get(r.source) || 0) + num(r.contacted));
+    });
+
+    const sortedSources = Array.from(sourceMap.entries()).sort((a, b) => b[1] - a[1]);
+    const topSources = sortedSources.slice(0, 3);
+    const otherTotal = sortedSources.slice(3).reduce((sum, [, value]) => sum + value, 0);
+
+    const sourceLabels = topSources.map(([label]) => label);
+    const sourceValues = topSources.map(([, value]) => value);
+    if (otherTotal > 0) {
+      sourceLabels.push("Other");
+      sourceValues.push(otherTotal);
+    }
+
+    const hasSource = sourceValues.some(value => value > 0);
+
+    if (!window.Chart || (!hasHealth && !hasSource)) {
+      chartsEmpty.classList.remove("hidden");
+      pipelineCanvas.style.display = "none";
+      sourceCanvas.style.display = "none";
+      return;
+    }
+
+    chartsEmpty.classList.add("hidden");
+    pipelineCanvas.style.display = hasHealth ? "block" : "none";
+    sourceCanvas.style.display = hasSource ? "block" : "none";
+
+    if (state.managementCharts.pipeline) {
+      state.managementCharts.pipeline.destroy();
+    }
+    if (state.managementCharts.sourceMix) {
+      state.managementCharts.sourceMix.destroy();
+    }
+
+    if (hasHealth) {
+      state.managementCharts.pipeline = new Chart(pipelineCanvas, {
+        type: "doughnut",
+        data: {
+          labels: ["Healthy", "At risk", "Critical"],
+          datasets: [{
+            data: [counts.healthy, counts.warning, counts.critical],
+            backgroundColor: ["#22c55e", "#f59e0b", "#ef4444"]
+          }]
+        },
+        options: {
+          plugins: { legend: { position: "bottom" } }
+        }
+      });
+    }
+
+    if (hasSource) {
+      state.managementCharts.sourceMix = new Chart(sourceCanvas, {
+        type: "doughnut",
+        data: {
+          labels: sourceLabels,
+          datasets: [{
+            data: sourceValues,
+            backgroundColor: ["#38bdf8", "#f97316", "#a78bfa", "#64748b"]
+          }]
+        },
+        options: {
+          plugins: { legend: { position: "bottom" } }
+        }
+      });
+    }
+  }
+
+  function renderManagementRecruiters({ sourcingRows, selectedSourcingWeek, selectedSourcingRole, selectedSourcingRecruiter }) {
+    const tbody = $("managementRecruiterTable");
+    const empty = $("managementRecruiterEmpty");
+    if (!tbody || !empty) return;
+
+    const useRolling = selectedSourcingWeek !== "all";
+    const previousWeekKey = useRolling ? getPreviousWeekKey(selectedSourcingWeek) : "";
+
+    const totalsByRecruiter = new Map();
+    sourcingRows.forEach(r => {
+      if (useRolling) {
+        const inSelected = isWeekMatch(r, selectedSourcingWeek);
+        const inPrevious = previousWeekKey ? isWeekMatch(r, previousWeekKey) : false;
+        if (!inSelected && !inPrevious) return;
+      }
+      if (selectedSourcingRole !== "all" && r.role !== selectedSourcingRole) return;
+      if (selectedSourcingRecruiter !== "all" && r.recruiter !== selectedSourcingRecruiter) return;
+      if (!r.recruiter) return;
+
+      if (!totalsByRecruiter.has(r.recruiter)) {
+        totalsByRecruiter.set(r.recruiter, { screens: 0, contacted: 0 });
+      }
+      const agg = totalsByRecruiter.get(r.recruiter);
+      agg.screens += num(r.recruiter_screen);
+      agg.contacted += num(r.contacted);
+    });
+
+    tbody.innerHTML = "";
+    const rows = Array.from(totalsByRecruiter.entries());
+    if (!rows.length) {
+      empty.classList.remove("hidden");
+      return;
+    }
+    empty.classList.add("hidden");
+
+    const utilizationHeader = tbody.closest("table")?.querySelector("thead th:last-child");
+    if (utilizationHeader) utilizationHeader.textContent = "Utilization (approx)";
+
+    const target = 50;
+    rows.forEach(([recruiter, data]) => {
+      const total = data.screens + data.contacted;
+      const utilization = Math.min(100, Math.round((total / target) * 100));
+      const barWidth = `${Math.max(0, Math.min(100, utilization))}%`;
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${recruiter}</td>
+        <td class="num">${formatNumber(data.screens)}</td>
+        <td class="num">${formatNumber(data.contacted)}</td>
+        <td class="num">
+          <div style="display:flex;align-items:center;gap:8px;justify-content:flex-end;">
+            <div style="flex:1;min-width:80px;height:8px;border-radius:999px;background:rgba(255,255,255,.1);overflow:hidden;">
+              <div style="height:100%;width:${barWidth};background:rgba(249,115,22,.6);"></div>
+            </div>
+            <span>${utilization}%</span>
+          </div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderManagementRoleInsights({ roleNotesRows, selectedActivityWeek, selectedRole, selectedRecruiter, healthByRole, overviewRows }) {
+    const container = $("managementRoleInsights");
+    if (!container) return;
+
+    const selectedWeek = getWeekYearFromKey(selectedActivityWeek);
+    const hasWeekFilter = selectedActivityWeek !== "all" && selectedWeek;
+
+    const overviewHealth = new Map();
+    overviewRows.forEach(r => {
+      const role = getField(r, ["role"]);
+      if (!role) return;
+      const value = normalizeHealthValue(getField(r, ["health"])) || healthByRole[role] || "";
+      if (value) overviewHealth.set(role, value);
+    });
+
+    const grouped = new Map();
+    roleNotesRows.forEach(row => {
+      if (hasWeekFilter) {
+        if (row.year !== selectedWeek.year || row.kw !== selectedWeek.kw) return;
+      }
+      if (selectedRole !== "all" && row.role !== selectedRole) return;
+      if (selectedRecruiter !== "all" && row.recruiter !== selectedRecruiter) return;
+
+      if (!grouped.has(row.role)) grouped.set(row.role, []);
+      grouped.get(row.role).push(row);
+    });
+
+    const cards = [];
+    grouped.forEach((rows, role) => {
+      const notes = { challenges: [], highlights: [], big_wins: [] };
+
+      rows.forEach(r => {
+        const addNotes = (value, key) => {
+          if (!value) return;
+          String(value)
+            .split(/[\n\r|]+/)
+            .map(item => item.trim())
+            .filter(Boolean)
+            .forEach(item => notes[key].push(item));
+        };
+        addNotes(r.challenges, "challenges");
+        addNotes(r.highlights, "highlights");
+        addNotes(r.big_wins, "big_wins");
+      });
+
+      if (!notes.challenges.length && !notes.highlights.length && !notes.big_wins.length) return;
+
+      const health = overviewHealth.get(role) || "unknown";
+      cards.push({ role, health, notes });
+    });
+
+    const order = { critical: 0, warning: 1, healthy: 2, unknown: 3 };
+    cards.sort((a, b) => order[a.health] - order[b.health]);
+
+    if (!cards.length) {
+      container.innerHTML = `<div class="placeholder">No role insights for this week.</div>`;
+      return;
+    }
+
+    container.innerHTML = cards.map(card => {
+      const openAttr = card.health === "critical" || card.health === "warning" ? " open" : "";
+      const healthLabel = card.health === "warning" ? "At risk" : (card.health === "critical" ? "Critical" : (card.health === "healthy" ? "Healthy" : "Unknown"));
+
+      const sectionHtml = (title, items) => {
+        if (!items.length) return "";
+        const list = items.map(item => `<li>${item}</li>`).join("");
+        return `<div class="muted2 small" style="margin-top:8px;">${title}</div><ul>${list}</ul>`;
+      };
+
+      return `
+        <details class="card"${openAttr}>
+          <summary class="card-head">
+            <h3>${card.role}</h3>
+            <p class="muted small">${healthLabel}</p>
+          </summary>
+          <div style="padding:0 18px 18px;">
+            ${sectionHtml("Challenges", card.notes.challenges)}
+            ${sectionHtml("Highlights", card.notes.highlights)}
+            ${sectionHtml("Big Wins", card.notes.big_wins)}
+          </div>
+        </details>
+      `;
+    }).join("");
   }
 
   /* ---------------- RENDER: HIRES ---------------- */
