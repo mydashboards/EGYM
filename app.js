@@ -385,9 +385,9 @@ long.push({
       return rows.map(r => ({
         year: num(getField(r, ["year"])),
         kw: num(getField(r, ["kw"])),
-        role: getField(r, ["role"]),
+        role: getField(r, ["role"])),
         stage: normalizeStageValue(getField(r, ["stage"])),
-        count: num(getField(r, ["count"]))
+        count: num(getField(r, ["count"])),
       })).filter(r => r.year && r.kw && r.role && r.stage);
     }
 
