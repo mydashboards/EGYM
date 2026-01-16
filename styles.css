@@ -182,7 +182,7 @@ select:focus{border-color:rgba(249,115,22,.45)}
 }
 .health-dot.good{background:var(--good)}
 .health-dot.warn{background:var(--warn)}
-.health-dot.bad{background:var(--bad)}
+health-dot.bad{background:var(--bad)}
 .health-badge.good{border-color:rgba(34,197,94,.25)}
 .health-badge.warn{border-color:rgba(245,158,11,.25)}
 .health-badge.bad{border-color:rgba(239,68,68,.25)}
@@ -246,4 +246,3 @@ tbody tr:hover{background:rgba(255,255,255,.02)}
 .overview-top > *{
   height: 100%;
 }
-
