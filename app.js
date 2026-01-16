@@ -238,6 +238,26 @@ document.addEventListener("DOMContentLoaded", () => {
     return `${y}-KW${String(k).padStart(2, "0")}`;
   }
 
+  function getISOWeeksInYear(year) {
+    const date = new Date(Date.UTC(year, 11, 28));
+    const dayNum = date.getUTCDay() || 7;
+    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+  }
+
+  function getPreviousWeekKey(key) {
+    const match = String(key || "").match(/^(\d{4})-KW(\d{2})$/i);
+    if (!match) return "";
+    const year = num(match[1]);
+    const week = num(match[2]);
+    if (!year || !week) return "";
+    if (week > 1) return `${year}-KW${String(week - 1).padStart(2, "0")}`;
+    const prevYear = year - 1;
+    const weeksInPrevYear = getISOWeeksInYear(prevYear);
+    return `${prevYear}-KW${String(weeksInPrevYear).padStart(2, "0")}`;
+  }
+
   function getWeekNumberFromKey(value) {
     if (!value) return null;
     const m = String(value).match(/KW(\d+)/i);
@@ -673,7 +693,6 @@ document.addEventListener("DOMContentLoaded", () => {
       <div class="kpi"><div class="label">Open Roles</div><div class="value">${openRoles}</div></div>
       <div class="kpi"><div class="label">Filled Roles</div><div class="value">${filledRoles}</div></div>
       <div class="kpi"><div class="label">Total Openings</div><div class="value">${totalOpenings}</div></div>
-      <div class="kpi"><div class="label">RAG (🟢/🟡/🔴)</div><div class="value">${counts.healthy}/${counts.warning}/${counts.critical}</div></div>
     `;
 
     $("overviewHealthSummary").innerHTML = `
@@ -916,9 +935,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const selectedWeekKey = state.selectedSourcingWeek || "";
     const selectedRole = state.selectedSourcingRole || "all";
     const selectedRecruiter = state.selectedSourcingRecruiter || "all";
+    const previousWeekKey = selectedWeekKey === "all" ? "" : getPreviousWeekKey(selectedWeekKey);
 
     const filtered = rows.filter(r => {
-      if (!isWeekMatch(r, selectedWeekKey)) return false;
+      if (selectedWeekKey !== "all") {
+        const inSelected = isWeekMatch(r, selectedWeekKey);
+        const inPrevious = previousWeekKey ? isWeekMatch(r, previousWeekKey) : false;
+        if (!inSelected && !inPrevious) return false;
+      }
       if (selectedRole !== "all" && r.role !== selectedRole) return false;
       if (selectedRecruiter !== "all" && r.recruiter !== selectedRecruiter) return false;
       return true;
@@ -975,6 +999,81 @@ document.addEventListener("DOMContentLoaded", () => {
       <div class="kpi"><div class="label">Total Replied</div><div class="value">${formatNumber(totalReplied)}</div></div>
       <div class="kpi"><div class="label">Total Recruiter Screens</div><div class="value">${formatNumber(totalScreen)}</div><div class="sub">${formatPercent(overallConv)} conversion</div></div>
       <div class="kpi"><div class="label">Scope</div><div class="value">${selectedWeekKey === "all" ? "All time" : selectedWeekKey.replace("-", " ")}</div></div>
+    `;
+  }
+
+  /* ---------------- RENDER: MANAGEMENT ---------------- */
+
+  function renderManagement() {
+    const overviewRows = state.overviewRows || [];
+    const hiredRows = state.hiredRows || [];
+    const weeklyRows = state.pipelineWeeklyRows || [];
+    const inventoryRows = state.pipelineInventoryRows || [];
+    const sourcingRows = state.sourcingRows || [];
+    const roleTargets = state.roleTargets || [];
+
+    const hiresByRole = {};
+    hiredRows.forEach(r => {
+      const role = getField(r, ["role"]);
+      const signatureDate = getField(r, ["signature_date", "signature date"]);
+      const startDate = getField(r, ["start_date", "start date"]);
+      if (!role) return;
+      if (!signatureDate && !startDate) return;
+      hiresByRole[role] = (hiresByRole[role] || 0) + 1;
+    });
+
+    const openRoles = overviewRows.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
+    const adjustedOpenings = overviewRows.reduce((sum, r) => {
+      const role = getField(r, ["role"]);
+      const base = num(getField(r, ["openings"]));
+      if (!hiredRows.length) return sum + base;
+      const adjusted = Math.max(0, base - (hiresByRole[role] || 0));
+      return sum + adjusted;
+    }, 0);
+
+    const weeklyOptions = getWeekOptions(weeklyRows);
+    const latestWeeklyKey = weeklyOptions[0]?.key || "";
+    const totalWeeklyActivity = weeklyRows.reduce((sum, r) => {
+      if (!latestWeeklyKey || !isWeekMatch(r, latestWeeklyKey)) return sum;
+      if (!r.stage || String(r.stage).startsWith("__")) return sum;
+      return sum + num(r.count);
+    }, 0);
+
+    const inventoryOptions = getWeekOptions(inventoryRows);
+    const latestInventoryKey = inventoryOptions[0]?.key || "";
+    const totalInventory = inventoryRows.reduce((sum, r) => {
+      if (!latestInventoryKey || !isWeekMatch(r, latestInventoryKey)) return sum;
+      return sum + num(r.count);
+    }, 0);
+
+    const sourcingOptions = getWeekOptions(sourcingRows);
+    const latestSourcingKey = sourcingOptions[0]?.key || "";
+    const totalSourced = sourcingRows.reduce((sum, r) => {
+      if (!latestSourcingKey || !isWeekMatch(r, latestSourcingKey)) return sum;
+      return sum + num(r.contacted);
+    }, 0);
+
+    const totalHires = hiredRows.reduce((sum, r) => {
+      const role = getField(r, ["role"]);
+      const signatureDate = getField(r, ["signature_date", "signature date"]);
+      const startDate = getField(r, ["start_date", "start date"]);
+      if (!role || (!signatureDate && !startDate)) return sum;
+      return sum + 1;
+    }, 0);
+
+    const targetedRoles = new Set();
+    roleTargets.forEach(r => {
+      if (r.role) targetedRoles.add(r.role);
+    });
+
+    $("managementKpis").innerHTML = `
+      <div class="kpi"><div class="label">Open Roles</div><div class="value">${formatNumber(openRoles)}</div></div>
+      <div class="kpi"><div class="label">Adjusted Openings</div><div class="value">${formatNumber(adjustedOpenings)}</div></div>
+      <div class="kpi"><div class="label">Latest Weekly Activity</div><div class="value">${formatNumber(totalWeeklyActivity)}</div></div>
+      <div class="kpi"><div class="label">Latest Inventory</div><div class="value">${formatNumber(totalInventory)}</div></div>
+      <div class="kpi"><div class="label">Latest Contacted</div><div class="value">${formatNumber(totalSourced)}</div></div>
+      <div class="kpi"><div class="label">Total Hires</div><div class="value">${formatNumber(totalHires)}</div></div>
+      <div class="kpi"><div class="label">Roles with Targets</div><div class="value">${formatNumber(targetedRoles.size)}</div></div>
     `;
   }
 
@@ -1117,6 +1216,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderActivity();
     renderSourcing();
     renderHires();
+    renderManagement();
   }
 
   /* ---------------- MAIN LOAD ---------------- */
