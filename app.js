@@ -426,7 +426,6 @@ long.push({
         const nk = normalizeHeader(k);
         if (coreKeys.has(nk)) return;
         const count = num(r[k]);
-        if (count === 0) return;
         long.push({
           year,
           kw,
