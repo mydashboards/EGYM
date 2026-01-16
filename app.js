@@ -58,7 +58,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     selectedPipelineWeek: "",
     selectedActivityWeek: "",
-    selectedSourcingWeek: ""
+    selectedSourcingWeek: "",
+    selectedActivityRole: "all",
+    selectedActivityRecruiter: "all",
+    selectedSourcingRole: "all",
+    selectedSourcingRecruiter: "all"
   };
 
   /* ---------------- HELPERS ---------------- */
@@ -303,6 +307,40 @@ document.addEventListener("DOMContentLoaded", () => {
     else if (options.length) select.value = options[0].key;
   }
 
+  function setFilterOptions(select, values, allLabel) {
+    const current = select.value;
+    select.innerHTML = "";
+
+    const allOpt = document.createElement("option");
+    allOpt.value = "all";
+    allOpt.textContent = allLabel;
+    select.appendChild(allOpt);
+
+    values.forEach(value => {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = value;
+      select.appendChild(opt);
+    });
+
+    const allowed = new Set(["all", ...values]);
+    if (current && allowed.has(current)) select.value = current;
+    else select.value = "all";
+  }
+
+  function getOrderedValues(rows, selectedWeekKey, accessor) {
+    const ordered = [];
+    const seen = new Set();
+    rows.forEach(r => {
+      if (!isWeekMatch(r, selectedWeekKey)) return;
+      const value = accessor(r);
+      if (!value || seen.has(value)) return;
+      seen.add(value);
+      ordered.push(value);
+    });
+    return ordered;
+  }
+
   function formatNumber(v) {
     const n = Number(v);
     if (!Number.isFinite(n)) return String(v ?? "");
@@ -353,6 +391,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const year = num(getField(r, ["year"]));
       const kw = num(getField(r, ["kw"]));
       const role = getField(r, ["role"]);
+      const recruiter = getField(r, ["recruiter"]);
       if (!year || !kw || !role) return;
 
       let pushedAny = false;
@@ -364,13 +403,13 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!Number.isFinite(count)) return;
         if (count === 0) return;
         pushedAny = true;
-        long.push({ year, kw, role, stage: nk, count });
+        long.push({ year, kw, role, recruiter, stage: nk, count });
       });
 
       // IMPORTANT: keep the role visible for that week even if all counts are 0/blank
       // (so Activity/Pipeline can list all roles that exist in the KW).
       if (!pushedAny) {
-        long.push({ year, kw, role, stage: "__role__", count: 0 });
+        long.push({ year, kw, role, recruiter, stage: "__role__", count: 0 });
       }
     });
 
@@ -380,6 +419,7 @@ document.addEventListener("DOMContentLoaded", () => {
         year: num(getField(r, ["year"])),
         kw: num(getField(r, ["kw"])),
         role: getField(r, ["role"]),
+        recruiter: getField(r, ["recruiter"]),
         stage: normalizeStageValue(getField(r, ["stage"])),
         count: num(getField(r, ["count"])),
       })).filter(r => r.year && r.kw && r.role && r.stage);
@@ -435,6 +475,7 @@ document.addEventListener("DOMContentLoaded", () => {
       year: num(getField(r, ["year"])),
       kw: num(getField(r, ["kw"])),
       role: getField(r, ["role"]),
+      recruiter: getField(r, ["recruiter"]),
       contacted: num(getField(r, ["contacted"])),
       replied: num(getField(r, ["replied"])),
       recruiter_screen: num(getField(r, ["recruiter_screen", "recruiter_screened"]))
@@ -590,15 +631,34 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderOverview() {
     const rows = state.overviewRows || [];
+    const hiredRows = state.hiredRows || [];
     const healthByRole = getHealthByRole(
       state.pipelineWeeklyRows,
       state.roleTargets,
       state.selectedPipelineWeek === "all" ? "" : state.selectedPipelineWeek
     );
 
+    const hiresByRole = {};
+    if (hiredRows.length) {
+      hiredRows.forEach(r => {
+        const role = getField(r, ["role"]);
+        const signatureDate = getField(r, ["signature_date", "signature date"]);
+        const startDate = getField(r, ["start_date", "start date"]);
+        if (!role) return;
+        if (!signatureDate && !startDate) return;
+        hiresByRole[role] = (hiresByRole[role] || 0) + 1;
+      });
+    }
+
     const openRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
     const filledRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "filled").length;
-    const totalOpenings = rows.reduce((s, r) => s + num(getField(r, ["openings"])), 0);
+    const totalOpenings = rows.reduce((s, r) => {
+      const role = getField(r, ["role"]);
+      const base = num(getField(r, ["openings"]));
+      if (!hiredRows.length) return s + base;
+      const adjusted = Math.max(0, base - (hiresByRole[role] || 0));
+      return s + adjusted;
+    }, 0);
 
     const counts = { healthy: 0, warning: 0, critical: 0 };
     rows.forEach(r => {
@@ -629,7 +689,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const role = getField(r, ["role"]);
       const status = getField(r, ["status"]);
       const location = getField(r, ["location"]);
-      const openings = getField(r, ["openings"]);
+      const baseOpenings = num(getField(r, ["openings"]));
+      const openings = hiredRows.length
+        ? Math.max(0, baseOpenings - (hiresByRole[role] || 0))
+        : baseOpenings;
       const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap", "owner", "recruiter"]);
       const h = normalizeHealthValue(getField(r, ["health"])) || healthByRole[role] || "new";
 
@@ -638,7 +701,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <td>${role}</td>
         <td>${status}</td>
         <td>${location}</td>
-        <td class="num">${openings}</td>
+        <td class="num">${formatNumber(openings)}</td>
         <td>${owner}</td>
         <td class="center">${healthDotHTML(h)}</td>
       `;
@@ -716,14 +779,14 @@ document.addEventListener("DOMContentLoaded", () => {
     );
 
     const roleList = [];
-const seen = new Set();
-inv.forEach(r => {
-  if (!isWeekMatch(r, selectedWeekKey)) return;
-  const role = getField(r, ["role"]) || r.role;
-  if (!role || seen.has(role)) return;
-  seen.add(role);
-  roleList.push(role);
-});
+    const seen = new Set();
+    inv.forEach(r => {
+      if (!isWeekMatch(r, selectedWeekKey)) return;
+      const role = getField(r, ["role"]) || r.role;
+      if (!role || seen.has(role)) return;
+      seen.add(role);
+      roleList.push(role);
+    });
 
     if (!roleList.length) {
       emptyEl.classList.remove("hidden");
@@ -748,10 +811,9 @@ inv.forEach(r => {
 
   /* ---------------- RENDER: ACTIVITY ---------------- */
 
-  function getActivityStages(weeklyRows, selectedWeekKey) {
+  function getActivityStages(weeklyRows) {
     const set = new Set();
     weeklyRows.forEach(r => {
-      if (!isWeekMatch(r, selectedWeekKey)) return;
       if (!r.stage) return;
       if (String(r.stage).startsWith("__")) return; // ignore placeholder stage
       set.add(r.stage);
@@ -763,39 +825,45 @@ inv.forEach(r => {
     return [...presentPreferred, ...remaining];
   }
 
-  function renderActivity() {
-    const weekly = state.pipelineWeeklyRows || [];
-    const targets = state.roleTargets || [];
+  function updateActivityFilters() {
     const selectedWeekKey = state.selectedActivityWeek || "";
+    const weekly = state.pipelineWeeklyRows || [];
+    const roles = getOrderedValues(weekly, selectedWeekKey, r => r.role);
+    const recruiters = getOrderedValues(weekly, selectedWeekKey, r => r.recruiter);
 
-    const stages = getActivityStages(weekly, selectedWeekKey);
-    const roles = new Set();
-    const countsByRole = new Map();
+    setFilterOptions($("activityRoleSelect"), roles, "All roles");
+    setFilterOptions($("activityRecruiterSelect"), recruiters, "All recruiters");
 
-   const roles = [];
-const seen = new Set();
-
-weekly.forEach(r => {
-  if (!isWeekMatch(r, selectedWeekKey)) return;
-  if (!r.role || !r.stage) return;
-
-  if (!seen.has(r.role)) {
-    seen.add(r.role);
-    roles.push(r.role); // Sheet-Reihenfolge
+    state.selectedActivityRole = $("activityRoleSelect").value;
+    state.selectedActivityRecruiter = $("activityRecruiterSelect").value;
   }
 
-  if (!countsByRole.has(r.role)) countsByRole.set(r.role, new Map());
-  const sm = countsByRole.get(r.role);
-  sm.set(r.stage, (sm.get(r.stage) || 0) + num(r.count));
-});
+  function renderActivity() {
+    const weekly = state.pipelineWeeklyRows || [];
+    const selectedWeekKey = state.selectedActivityWeek || "";
+    const selectedRole = state.selectedActivityRole || "all";
+    const selectedRecruiter = state.selectedActivityRecruiter || "all";
 
+    const filtered = weekly.filter(r => {
+      if (!isWeekMatch(r, selectedWeekKey)) return false;
+      if (selectedRole !== "all" && r.role !== selectedRole) return false;
+      if (selectedRecruiter !== "all" && r.recruiter !== selectedRecruiter) return false;
+      return true;
+    });
 
-      // Always keep roles (including placeholder rows)
-      roles.add(r.role);
+    const stages = getActivityStages(filtered);
+    const roles = [];
+    const seen = new Set();
+    const countsByRole = new Map();
 
-      // But only aggregate real stages
-      if (String(r.stage).startsWith("__")) return;
+    filtered.forEach(r => {
+      if (!r.role) return;
+      if (!seen.has(r.role)) {
+        seen.add(r.role);
+        roles.push(r.role);
+      }
 
+      if (!r.stage || String(r.stage).startsWith("__")) return;
       if (!countsByRole.has(r.role)) countsByRole.set(r.role, new Map());
       const sm = countsByRole.get(r.role);
       sm.set(r.stage, (sm.get(r.stage) || 0) + num(r.count));
@@ -808,12 +876,9 @@ weekly.forEach(r => {
         <tr>
           <th>Role</th>
           ${stageHeaders}
-          <th class="center">Health</th>
         </tr>
       `;
     }
-
-    const healthByRole = getHealthByRole(weekly, targets, selectedWeekKey === "all" ? "" : selectedWeekKey);
 
     const tbody = $("activityTable");
     tbody.innerHTML = "";
@@ -821,13 +886,11 @@ weekly.forEach(r => {
     roles.forEach(role => {
       const sm = countsByRole.get(role) || new Map();
       const stageCells = stages.map(s => `<td class="num">${formatNumber(sm.get(s) || 0)}</td>`).join("");
-      const h = healthByRole[role] || "new";
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${role}</td>
         ${stageCells}
-        <td class="center">${healthDotHTML(h)}</td>
       `;
       tbody.appendChild(tr);
     });
@@ -835,11 +898,31 @@ weekly.forEach(r => {
 
   /* ---------------- RENDER: SOURCING ---------------- */
 
+  function updateSourcingFilters() {
+    const selectedWeekKey = state.selectedSourcingWeek || "";
+    const rows = state.sourcingRows || [];
+    const roles = getOrderedValues(rows, selectedWeekKey, r => r.role);
+    const recruiters = getOrderedValues(rows, selectedWeekKey, r => r.recruiter);
+
+    setFilterOptions($("sourcingRoleSelect"), roles, "All roles");
+    setFilterOptions($("sourcingRecruiterSelect"), recruiters, "All recruiters");
+
+    state.selectedSourcingRole = $("sourcingRoleSelect").value;
+    state.selectedSourcingRecruiter = $("sourcingRecruiterSelect").value;
+  }
+
   function renderSourcing() {
     const rows = state.sourcingRows || [];
     const selectedWeekKey = state.selectedSourcingWeek || "";
+    const selectedRole = state.selectedSourcingRole || "all";
+    const selectedRecruiter = state.selectedSourcingRecruiter || "all";
 
-    const filtered = rows.filter(r => isWeekMatch(r, selectedWeekKey));
+    const filtered = rows.filter(r => {
+      if (!isWeekMatch(r, selectedWeekKey)) return false;
+      if (selectedRole !== "all" && r.role !== selectedRole) return false;
+      if (selectedRecruiter !== "all" && r.recruiter !== selectedRecruiter) return false;
+      return true;
+    });
 
     const tbody = $("sourcingTable");
     tbody.innerHTML = "";
@@ -861,30 +944,29 @@ weekly.forEach(r => {
       totalScreen += num(r.recruiter_screen);
     });
 
-    // render roles in SHEET order (not alphabetical)
-const roleOrder = [];
-const seen = new Set();
+    const roleOrder = [];
+    const seen = new Set();
 
-filtered.forEach(r => {
-  if (!r.role || seen.has(r.role)) return;
-  seen.add(r.role);
-  roleOrder.push(r.role);
-});
+    filtered.forEach(r => {
+      if (!r.role || seen.has(r.role)) return;
+      seen.add(r.role);
+      roleOrder.push(r.role);
+    });
 
-roleOrder.forEach(role => {
-  const agg = byRole.get(role);
-  const conv = agg && agg.contacted > 0 ? agg.screen / agg.contacted : null;
+    roleOrder.forEach(role => {
+      const agg = byRole.get(role);
+      const conv = agg && agg.contacted > 0 ? agg.screen / agg.contacted : null;
 
-  const tr = document.createElement("tr");
-  tr.innerHTML = `
-    <td>${role}</td>
-    <td class="num">${formatNumber(agg?.contacted || 0)}</td>
-    <td class="num">${formatNumber(agg?.replied || 0)}</td>
-    <td class="num">${formatNumber(agg?.screen || 0)}</td>
-    <td class="num">${formatPercent(conv)}</td>
-  `;
-  tbody.appendChild(tr);
-});
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${role}</td>
+        <td class="num">${formatNumber(agg?.contacted || 0)}</td>
+        <td class="num">${formatNumber(agg?.replied || 0)}</td>
+        <td class="num">${formatNumber(agg?.screen || 0)}</td>
+        <td class="num">${formatPercent(conv)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
 
     const overallConv = totalContacted > 0 ? totalScreen / totalContacted : null;
 
@@ -1024,6 +1106,9 @@ roleOrder.forEach(role => {
     $("pipelineWeekSelect").value = state.selectedPipelineWeek;
     $("activityWeekSelect").value = state.selectedActivityWeek;
     $("sourcingWeekSelect").value = state.selectedSourcingWeek;
+
+    updateActivityFilters();
+    updateSourcingFilters();
   }
 
   function renderAll() {
@@ -1090,11 +1175,33 @@ roleOrder.forEach(role => {
 
   function handleActivityWeekChange() {
     state.selectedActivityWeek = $("activityWeekSelect").value;
+    updateActivityFilters();
     renderActivity();
   }
 
   function handleSourcingWeekChange() {
     state.selectedSourcingWeek = $("sourcingWeekSelect").value;
+    updateSourcingFilters();
+    renderSourcing();
+  }
+
+  function handleActivityRoleChange() {
+    state.selectedActivityRole = $("activityRoleSelect").value;
+    renderActivity();
+  }
+
+  function handleActivityRecruiterChange() {
+    state.selectedActivityRecruiter = $("activityRecruiterSelect").value;
+    renderActivity();
+  }
+
+  function handleSourcingRoleChange() {
+    state.selectedSourcingRole = $("sourcingRoleSelect").value;
+    renderSourcing();
+  }
+
+  function handleSourcingRecruiterChange() {
+    state.selectedSourcingRecruiter = $("sourcingRecruiterSelect").value;
     renderSourcing();
   }
 
@@ -1114,6 +1221,10 @@ roleOrder.forEach(role => {
   $("pipelineWeekSelect").addEventListener("change", handlePipelineWeekChange);
   $("activityWeekSelect").addEventListener("change", handleActivityWeekChange);
   $("sourcingWeekSelect").addEventListener("change", handleSourcingWeekChange);
+  $("activityRoleSelect").addEventListener("change", handleActivityRoleChange);
+  $("activityRecruiterSelect").addEventListener("change", handleActivityRecruiterChange);
+  $("sourcingRoleSelect").addEventListener("change", handleSourcingRoleChange);
+  $("sourcingRecruiterSelect").addEventListener("change", handleSourcingRecruiterChange);
 
   refreshAll();
   setInterval(refreshAll, 60000);
