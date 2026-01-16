@@ -861,18 +861,30 @@ weekly.forEach(r => {
       totalScreen += num(r.recruiter_screen);
     });
 
-    Array.from(byRole.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([role, agg]) => {
-      const conv = agg.contacted > 0 ? agg.screen / agg.contacted : null;
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${role}</td>
-        <td class="num">${formatNumber(agg.contacted)}</td>
-        <td class="num">${formatNumber(agg.replied)}</td>
-        <td class="num">${formatNumber(agg.screen)}</td>
-        <td class="num">${formatPercent(conv)}</td>
-      `;
-      tbody.appendChild(tr);
-    });
+    // render roles in SHEET order (not alphabetical)
+const roleOrder = [];
+const seen = new Set();
+
+filtered.forEach(r => {
+  if (!r.role || seen.has(r.role)) return;
+  seen.add(r.role);
+  roleOrder.push(r.role);
+});
+
+roleOrder.forEach(role => {
+  const agg = byRole.get(role);
+  const conv = agg && agg.contacted > 0 ? agg.screen / agg.contacted : null;
+
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td>${role}</td>
+    <td class="num">${formatNumber(agg?.contacted || 0)}</td>
+    <td class="num">${formatNumber(agg?.replied || 0)}</td>
+    <td class="num">${formatNumber(agg?.screen || 0)}</td>
+    <td class="num">${formatPercent(conv)}</td>
+  `;
+  tbody.appendChild(tr);
+});
 
     const overallConv = totalContacted > 0 ? totalScreen / totalContacted : null;
 
