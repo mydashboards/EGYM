@@ -368,18 +368,16 @@ function pickDefaultWeekKey(options) {
         const nk = normalizeHeader(k);
         if (coreKeys.has(nk)) return;
         const count = num(r[k]);
-        if (!Number.isFinite(count)) return;
-        // keep even 0? we can skip 0 to reduce noise:
-        if (count === 0) return;
-        long.push({
-          year,
-          kw,
-          role,
-          stage: nk,
-          count
-        });
-      });
-    });
+        
+long.push({
+  year,
+  kw,
+  role,
+  stage: nk,
+  count,
+  stage_order: null
+});
+
 
     // If the sheet is already long-form (has stage/count), keep it:
     const looksLong = rows.length && ("stage" in rows[0] || "count" in rows[0]);
