@@ -772,9 +772,23 @@ inv.forEach(r => {
     const roles = new Set();
     const countsByRole = new Map();
 
-    weekly.forEach(r => {
-      if (!isWeekMatch(r, selectedWeekKey)) return;
-      if (!r.role || !r.stage) return;
+   const roles = [];
+const seen = new Set();
+
+weekly.forEach(r => {
+  if (!isWeekMatch(r, selectedWeekKey)) return;
+  if (!r.role || !r.stage) return;
+
+  if (!seen.has(r.role)) {
+    seen.add(r.role);
+    roles.push(r.role); // Sheet-Reihenfolge
+  }
+
+  if (!countsByRole.has(r.role)) countsByRole.set(r.role, new Map());
+  const sm = countsByRole.get(r.role);
+  sm.set(r.stage, (sm.get(r.stage) || 0) + num(r.count));
+});
+
 
       // Always keep roles (including placeholder rows)
       roles.add(r.role);
@@ -804,7 +818,7 @@ inv.forEach(r => {
     const tbody = $("activityTable");
     tbody.innerHTML = "";
 
-    Array.from(roles).sort().forEach(role => {
+    roles.forEach(role => {
       const sm = countsByRole.get(role) || new Map();
       const stageCells = stages.map(s => `<td class="num">${formatNumber(sm.get(s) || 0)}</td>`).join("");
       const h = healthByRole[role] || "new";
