@@ -715,7 +715,16 @@ document.addEventListener("DOMContentLoaded", () => {
       selectedWeekKey === "all" ? "" : selectedWeekKey
     );
 
-    const roleList = Array.from(roles).sort();
+    const roleList = [];
+const seen = new Set();
+inv.forEach(r => {
+  if (!isWeekMatch(r, selectedWeekKey)) return;
+  const role = getField(r, ["role"]) || r.role;
+  if (!role || seen.has(role)) return;
+  seen.add(role);
+  roleList.push(role);
+});
+
     if (!roleList.length) {
       emptyEl.classList.remove("hidden");
       return;
