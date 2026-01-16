@@ -1,9 +1,22 @@
 document.addEventListener("DOMContentLoaded", () => {
   /* ---------------- CONFIG ---------------- */
 
-  // “Current calendar week” preference for default selection (as requested).
-  // If present in data, Activity & Sourcing will default to KW 03.
-  const PREFERRED_KW = 3;
+  // ISO week helper (current calendar week). Uses local time.
+  function getCurrentISOWeek() {
+    const d = new Date();
+    // Thursday in current week decides the year.
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNum = date.getUTCDay() || 7; // Mon=1..Sun=7
+    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+    return { year: date.getUTCFullYear(), kw: weekNo };
+  }
+
+  const CURRENT_ISO = getCurrentISOWeek();
+  // Default selection should start with the current calendar week if present in data.
+  const PREFERRED_KW = CURRENT_ISO.kw;
+  const PREFERRED_YEAR = CURRENT_ISO.year;
 
   const CSV = {
     overview: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=780337575&single=true&output=csv",
@@ -32,7 +45,7 @@ document.addEventListener("DOMContentLoaded", () => {
     view: "contributor",
 
     overviewRows: [],
-    pipelineWeeklyRows: [],   // long-form normalized: {year,kw,role,stage,count,week_start?}
+    pipelineWeeklyRows: [],   // long-form normalized: {year,kw,role,stage,count}
     pipelineInventoryRows: [],// normalized: {year,kw,role,stage,count,stage_order?}
     sourcingRows: [],
     hiredRows: [],
@@ -253,13 +266,15 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  function pickPreferredWeekKey(options, preferredKw) {
+  function pickPreferredWeekKey(options, preferredKw, preferredYear) {
     if (!options.length) return "";
-    const candidates = options.filter(o => o.kw === preferredKw);
-    if (candidates.length) {
-      // choose the highest year that has preferred KW
-      candidates.sort((a, b) => b.year - a.year);
-      return candidates[0].key;
+    const exact = options.filter(o => o.kw === preferredKw && o.year === preferredYear);
+    if (exact.length) return exact[0].key;
+
+    const byKw = options.filter(o => o.kw === preferredKw);
+    if (byKw.length) {
+      byKw.sort((a, b) => b.year - a.year);
+      return byKw[0].key;
     }
     return options[0].key; // fallback latest
   }
@@ -282,7 +297,6 @@ document.addEventListener("DOMContentLoaded", () => {
       select.appendChild(opt);
     });
 
-    // preserve if possible
     const allowed = new Set([...(includeAllTime ? ["all"] : []), ...options.map(o => o.key)]);
     if (current && allowed.has(current)) select.value = current;
     else if (includeAllTime) select.value = "all";
@@ -332,8 +346,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function normalizePipelineWeekly(rows) {
     if (!rows.length) return [];
-    // “wide” form sample you showed: role, kw, year, recruiter, step1, tech_light, tech_iv, final, offer, hired
-    // We convert to long-form {year,kw,role,stage,count}
     const coreKeys = new Set(["role", "kw", "year", "week_start", "recruiter", "health"]);
     const long = [];
 
@@ -343,24 +355,25 @@ document.addEventListener("DOMContentLoaded", () => {
       const role = getField(r, ["role"]);
       if (!year || !kw || !role) return;
 
+      let pushedAny = false;
+
       Object.keys(r).forEach(k => {
         const nk = normalizeHeader(k);
         if (coreKeys.has(nk)) return;
         const count = num(r[k]);
         if (!Number.isFinite(count)) return;
-        // keep even 0? we can skip 0 to reduce noise:
         if (count === 0) return;
-        long.push({
-          year,
-          kw,
-          role,
-          stage: nk,
-          count
-        });
+        pushedAny = true;
+        long.push({ year, kw, role, stage: nk, count });
       });
+
+      // IMPORTANT: keep the role visible for that week even if all counts are 0/blank
+      // (so Activity/Pipeline can list all roles that exist in the KW).
+      if (!pushedAny) {
+        long.push({ year, kw, role, stage: "__role__", count: 0 });
+      }
     });
 
-    // If the sheet is already long-form (has stage/count), keep it:
     const looksLong = rows.length && ("stage" in rows[0] || "count" in rows[0]);
     if (looksLong) {
       return rows.map(r => ({
@@ -368,16 +381,14 @@ document.addEventListener("DOMContentLoaded", () => {
         kw: num(getField(r, ["kw"])),
         role: getField(r, ["role"]),
         stage: normalizeStageValue(getField(r, ["stage"])),
-        count: num(getField(r, ["count"])), // <- comma required, fixed
+        count: num(getField(r, ["count"])),
       })).filter(r => r.year && r.kw && r.role && r.stage);
     }
 
-    return long; // <- fixed (no stray ])
+    return long;
   }
 
   function normalizePipelineInventory(rows) {
-    // expected long-form: year,kw,role,stage,count,(optional stage_order)
-    // if wide-form, we’ll also support by converting similar to weekly.
     if (!rows.length) return [];
 
     const hasStage = Object.prototype.hasOwnProperty.call(rows[0], "stage");
@@ -394,7 +405,6 @@ document.addEventListener("DOMContentLoaded", () => {
       })).filter(r => r.year && r.kw && r.role && r.stage);
     }
 
-    // wide -> long
     const coreKeys = new Set(["role", "kw", "year", "week_start", "recruiter", "health", "stage_order"]);
     const long = [];
     rows.forEach(r => {
@@ -406,8 +416,7 @@ document.addEventListener("DOMContentLoaded", () => {
       Object.keys(r).forEach(k => {
         const nk = normalizeHeader(k);
         if (coreKeys.has(nk)) return;
-        const count = num(r[k]);
-        // IMPORTANT: do NOT drop 0-counts; otherwise roles disappear entirely
+        const count = num(r[k]); // keep zeros so roles/stages remain visible
         long.push({
           year,
           kw,
@@ -447,7 +456,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return rows.map(r => ({
       role: getField(r, ["role"]),
       kw: num(getField(r, ["kw"])),
-      year: num(getField(r, ["year"])), // optional
+      year: num(getField(r, ["year"])),
       recruiter: getField(r, ["recruiter"]),
       challenges: getField(r, ["challenges"]),
       highlights: getField(r, ["highlights"]),
@@ -508,8 +517,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     if (!evaluated) return { health: "new", reason: "Not enough data" };
-
-    // Thresholds (simple, stable)
     if (worstScore < 0.33) return { health: "critical", reason: bottleneck };
     if (worstScore < 0.66) return { health: "warning", reason: bottleneck };
     return { health: "healthy", reason: bottleneck };
@@ -676,7 +683,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const stages = getStagesForInventory(inv, selectedWeekKey);
 
-    // Aggregate inventory counts for the selected week (or all time)
     const roles = new Set();
     const countsByRole = new Map();
 
@@ -692,7 +698,6 @@ document.addEventListener("DOMContentLoaded", () => {
       sm.set(stage, (sm.get(stage) || 0) + num(getField(r, ["count"]) || r.count));
     });
 
-    // Header
     if (thead) {
       const stageHeaders = stages.map(s => `<th>${formatStageLabel(s.label)}</th>`).join("");
       thead.innerHTML = `
@@ -704,7 +709,6 @@ document.addEventListener("DOMContentLoaded", () => {
       `;
     }
 
-    // Health per role (based on weekly, endWeekKey = selected week unless all time then latest)
     const healthByRole = getHealthByRole(
       weekly,
       targets,
@@ -740,6 +744,7 @@ document.addEventListener("DOMContentLoaded", () => {
     weeklyRows.forEach(r => {
       if (!isWeekMatch(r, selectedWeekKey)) return;
       if (!r.stage) return;
+      if (String(r.stage).startsWith("__")) return; // ignore placeholder stage
       set.add(r.stage);
     });
 
@@ -761,7 +766,13 @@ document.addEventListener("DOMContentLoaded", () => {
     weekly.forEach(r => {
       if (!isWeekMatch(r, selectedWeekKey)) return;
       if (!r.role || !r.stage) return;
+
+      // Always keep roles (including placeholder rows)
       roles.add(r.role);
+
+      // But only aggregate real stages
+      if (String(r.stage).startsWith("__")) return;
+
       if (!countsByRole.has(r.role)) countsByRole.set(r.role, new Map());
       const sm = countsByRole.get(r.role);
       sm.set(r.stage, (sm.get(r.stage) || 0) + num(r.count));
@@ -814,7 +825,6 @@ document.addEventListener("DOMContentLoaded", () => {
     let totalReplied = 0;
     let totalScreen = 0;
 
-    // aggregate by role for all time (or still by role for week)
     const byRole = new Map();
     filtered.forEach(r => {
       if (!byRole.has(r.role)) byRole.set(r.role, { contacted: 0, replied: 0, screen: 0 });
@@ -885,7 +895,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const tthValues = [];
     const ttfValues = [];
-    const processValues = [];
 
     rows.forEach(r => {
       const liveDate = parseDate(getField(r, ["live_date", "live date"]));
@@ -899,7 +908,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (tth !== null) tthValues.push(tth);
       if (ttf !== null) ttfValues.push(ttf);
-      if (daysInProcess !== null) processValues.push(daysInProcess);
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -955,25 +963,27 @@ document.addEventListener("DOMContentLoaded", () => {
     state.activityOptions = getWeekOptions(state.pipelineWeeklyRows);
     state.sourcingOptions = getWeekOptions(state.sourcingRows);
 
-    // pipeline includes All time option
     setSelectOptions($("pipelineWeekSelect"), state.pipelineOptions, true);
-    // activity includes All time option
     setSelectOptions($("activityWeekSelect"), state.activityOptions, true);
-    // sourcing includes All time option
     setSelectOptions($("sourcingWeekSelect"), state.sourcingOptions, true);
 
-    // Defaults:
-    // Pipeline: keep current, else "all" is okay but prefer latest week (more useful)
-    if (!state.selectedPipelineWeek || (!["all", ...state.pipelineOptions.map(o => o.key)].includes(state.selectedPipelineWeek))) {
-      state.selectedPipelineWeek = state.pipelineOptions.length ? state.pipelineOptions[0].key : "all";
+    const pipelineAllowed = ["all", ...state.pipelineOptions.map(o => o.key)];
+    const activityAllowed = ["all", ...state.activityOptions.map(o => o.key)];
+    const sourcingAllowed = ["all", ...state.sourcingOptions.map(o => o.key)];
+
+    // PIPELINE: default to current ISO week (if present), else latest, else all
+    if (!state.selectedPipelineWeek || !pipelineAllowed.includes(state.selectedPipelineWeek)) {
+      state.selectedPipelineWeek = pickPreferredWeekKey(state.pipelineOptions, PREFERRED_KW, PREFERRED_YEAR) || (state.pipelineOptions[0]?.key || "all");
     }
 
-    // Activity & Sourcing: prefer KW 03 if present, else latest
-    if (!state.selectedActivityWeek || (!["all", ...state.activityOptions.map(o => o.key)].includes(state.selectedActivityWeek))) {
-      state.selectedActivityWeek = pickPreferredWeekKey(state.activityOptions, PREFERRED_KW) || "all";
+    // ACTIVITY: default to current ISO week (if present), else latest, else all
+    if (!state.selectedActivityWeek || !activityAllowed.includes(state.selectedActivityWeek)) {
+      state.selectedActivityWeek = pickPreferredWeekKey(state.activityOptions, PREFERRED_KW, PREFERRED_YEAR) || (state.activityOptions[0]?.key || "all");
     }
-    if (!state.selectedSourcingWeek || (!["all", ...state.sourcingOptions.map(o => o.key)].includes(state.selectedSourcingWeek))) {
-      state.selectedSourcingWeek = pickPreferredWeekKey(state.sourcingOptions, PREFERRED_KW) || "all";
+
+    // SOURCING: default to current ISO week (if present), else latest, else all
+    if (!state.selectedSourcingWeek || !sourcingAllowed.includes(state.selectedSourcingWeek)) {
+      state.selectedSourcingWeek = pickPreferredWeekKey(state.sourcingOptions, PREFERRED_KW, PREFERRED_YEAR) || (state.sourcingOptions[0]?.key || "all");
     }
 
     $("pipelineWeekSelect").value = state.selectedPipelineWeek;
@@ -1032,7 +1042,6 @@ document.addEventListener("DOMContentLoaded", () => {
       $("lastUpdated").textContent = `Last updated: ${fmtDate()}`;
     } catch (e) {
       console.error(e);
-      // errors are shown via data error banner; keep UI responsive
     }
   }
 
