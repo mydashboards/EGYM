@@ -243,4 +243,7 @@ tbody tr:hover{background:rgba(255,255,255,.02)}
   align-items: stretch;
   margin-bottom: 28px; /* space before Roles table */
 }
+.overview-top > *{
+  height: 100%;
+}
 
