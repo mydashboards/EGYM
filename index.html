@@ -261,6 +261,49 @@
           </div>
           <div id="managementKpis" class="kpi-grid"></div>
         </div>
+        <div class="card">
+          <div class="card-head">
+            <h3>Pipeline Health</h3>
+          </div>
+          <div id="managementHealthSummary" class="health-row"></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h3>Distribution</h3>
+          </div>
+          <div class="table-wrap">
+            <div id="managementChartsEmpty" class="placeholder hidden">No chart data available.</div>
+            <div class="kpi-grid">
+              <canvas id="managementPipelineHealthChart" width="240" height="240"></canvas>
+              <canvas id="managementSourceMixChart" width="240" height="240"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h3>Recruiter Utilization</h3>
+          </div>
+          <div id="managementRecruiterEmpty" class="placeholder hidden">No recruiter data available.</div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Recruiter</th>
+                  <th class="num">Screens</th>
+                  <th class="num">Contacted</th>
+                  <th class="num">Utilization</th>
+                </tr>
+              </thead>
+              <tbody id="managementRecruiterTable"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h3>Role Insights</h3>
+          </div>
+          <div id="managementRoleInsights"></div>
+        </div>
       </section>
     </main>
   </div>
