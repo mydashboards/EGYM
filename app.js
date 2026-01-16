@@ -1,6 +1,10 @@
 document.addEventListener("DOMContentLoaded", () => {
   /* ---------------- CONFIG ---------------- */
 
+  // “Current calendar week” preference for default selection (as requested).
+  // If present in data, Activity & Sourcing will default to KW 03.
+  const PREFERRED_KW = 3;
+
   const CSV = {
     overview: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=780337575&single=true&output=csv",
     pipelineWeekly: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=565686110&single=true&output=csv",
@@ -222,31 +226,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const m = String(value).match(/KW(\d+)/i);
     return m ? num(m[1]) : null;
   }
-function currentISOWeek() {
-  const d = new Date();
-  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  const dayNum = date.getUTCDay() || 7;
-  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-  return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
-}
-
-function pickDefaultWeekKey(options) {
-  if (!options.length) return "";
-  const cw = currentISOWeek();
-  const cy = new Date().getFullYear();
-
-  // Prefer current year + current week if present
-  const exact = options.find(o => o.year === cy && o.kw === cw);
-  if (exact) return exact.key;
-
-  // Else prefer current week (any year) if present (use latest year)
-  const sameWeek = options.filter(o => o.kw === cw).sort((a,b) => b.year - a.year);
-  if (sameWeek.length) return sameWeek[0].key;
-
-  // Else fallback to latest in data (options already sorted desc)
-  return options[0].key;
-}
 
   function isWeekMatch(row, selectedWeekKey) {
     if (selectedWeekKey === "all") return true;
@@ -368,16 +347,18 @@ function pickDefaultWeekKey(options) {
         const nk = normalizeHeader(k);
         if (coreKeys.has(nk)) return;
         const count = num(r[k]);
-        
-long.push({
-  year,
-  kw,
-  role,
-  stage: nk,
-  count,
-  stage_order: null
-});
-
+        if (!Number.isFinite(count)) return;
+        // keep even 0? we can skip 0 to reduce noise:
+        if (count === 0) return;
+        long.push({
+          year,
+          kw,
+          role,
+          stage: nk,
+          count
+        });
+      });
+    });
 
     // If the sheet is already long-form (has stage/count), keep it:
     const looksLong = rows.length && ("stage" in rows[0] || "count" in rows[0]);
@@ -385,13 +366,13 @@ long.push({
       return rows.map(r => ({
         year: num(getField(r, ["year"])),
         kw: num(getField(r, ["kw"])),
-        role: getField(r, ["role"])),
+        role: getField(r, ["role"]),
         stage: normalizeStageValue(getField(r, ["stage"])),
-        count: num(getField(r, ["count"])),
+        count: num(getField(r, ["count"])), // <- comma required, fixed
       })).filter(r => r.year && r.kw && r.role && r.stage);
     }
 
-    return long;
+    return long; // <- fixed (no stray ])
   }
 
   function normalizePipelineInventory(rows) {
@@ -426,6 +407,7 @@ long.push({
         const nk = normalizeHeader(k);
         if (coreKeys.has(nk)) return;
         const count = num(r[k]);
+        // IMPORTANT: do NOT drop 0-counts; otherwise roles disappear entirely
         long.push({
           year,
           kw,
@@ -709,14 +691,6 @@ long.push({
       const sm = countsByRole.get(role);
       sm.set(stage, (sm.get(stage) || 0) + num(getField(r, ["count"]) || r.count));
     });
-    
-    // Fallback/Union: also include roles present in weekly data for the same week
-weekly.forEach(r => {
-  if (!isWeekMatch(r, selectedWeekKey)) return;
-  if (!r.role) return;
-  roles.add(r.role);
-  if (!countsByRole.has(r.role)) countsByRole.set(r.role, new Map());
-});
 
     // Header
     if (thead) {
@@ -786,14 +760,11 @@ weekly.forEach(r => {
 
     weekly.forEach(r => {
       if (!isWeekMatch(r, selectedWeekKey)) return;
-    const role = String(r.role || "").trim();
-const stage = String(r.stage || "").trim();
-if (!role || !stage) return;
-
-roles.add(role);
-if (!countsByRole.has(role)) countsByRole.set(role, new Map());
-const sm = countsByRole.get(role);
-sm.set(stage, (sm.get(stage) || 0) + num(r.count));
+      if (!r.role || !r.stage) return;
+      roles.add(r.role);
+      if (!countsByRole.has(r.role)) countsByRole.set(r.role, new Map());
+      const sm = countsByRole.get(r.role);
+      sm.set(r.stage, (sm.get(r.stage) || 0) + num(r.count));
     });
 
     const thead = document.querySelector("#activity table thead");
@@ -992,21 +963,18 @@ sm.set(stage, (sm.get(stage) || 0) + num(r.count));
     setSelectOptions($("sourcingWeekSelect"), state.sourcingOptions, true);
 
     // Defaults:
-// Pipeline: prefer current calendar week if present, else latest week in data
-if (!state.selectedPipelineWeek || (!["all", ...state.pipelineOptions.map(o => o.key)].includes(state.selectedPipelineWeek))) {
-  state.selectedPipelineWeek = pickDefaultWeekKey(state.pipelineOptions) || "all";
-}
+    // Pipeline: keep current, else "all" is okay but prefer latest week (more useful)
+    if (!state.selectedPipelineWeek || (!["all", ...state.pipelineOptions.map(o => o.key)].includes(state.selectedPipelineWeek))) {
+      state.selectedPipelineWeek = state.pipelineOptions.length ? state.pipelineOptions[0].key : "all";
+    }
 
-// Activity: prefer current calendar week if present, else latest week in data (or "all" if no data)
-if (!state.selectedActivityWeek || (!["all", ...state.activityOptions.map(o => o.key)].includes(state.selectedActivityWeek))) {
-  state.selectedActivityWeek = pickDefaultWeekKey(state.activityOptions) || "all";
-}
-
-// Sourcing: prefer current calendar week if present, else latest week in data (or "all" if no data)
-if (!state.selectedSourcingWeek || (!["all", ...state.sourcingOptions.map(o => o.key)].includes(state.selectedSourcingWeek))) {
-  state.selectedSourcingWeek = pickDefaultWeekKey(state.sourcingOptions) || "all";
-}
-
+    // Activity & Sourcing: prefer KW 03 if present, else latest
+    if (!state.selectedActivityWeek || (!["all", ...state.activityOptions.map(o => o.key)].includes(state.selectedActivityWeek))) {
+      state.selectedActivityWeek = pickPreferredWeekKey(state.activityOptions, PREFERRED_KW) || "all";
+    }
+    if (!state.selectedSourcingWeek || (!["all", ...state.sourcingOptions.map(o => o.key)].includes(state.selectedSourcingWeek))) {
+      state.selectedSourcingWeek = pickPreferredWeekKey(state.sourcingOptions, PREFERRED_KW) || "all";
+    }
 
     $("pipelineWeekSelect").value = state.selectedPipelineWeek;
     $("activityWeekSelect").value = state.selectedActivityWeek;
