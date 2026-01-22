@@ -47,6 +47,8 @@ document.addEventListener("DOMContentLoaded", () => {
     overviewRows: [],
     pipelineWeeklyRows: [],   // long-form normalized: {year,kw,role,stage,count}
     pipelineInventoryRows: [],// normalized: {year,kw,role,stage,count,stage_order?}
+    pipelineWeeklyStageOrder: [],
+    pipelineInventoryStageOrder: [],
     sourcingRows: [],
     hiredRows: [],
     roleTargets: [],
@@ -383,6 +385,19 @@ document.addEventListener("DOMContentLoaded", () => {
     return normalizeHeader(String(value || ""));
   }
 
+  function getStageOrderFromRows(rows, coreKeys) {
+    if (!rows.length) return [];
+    const order = [];
+    const seen = new Set();
+    Object.keys(rows[0] || {}).forEach(k => {
+      const nk = normalizeHeader(k);
+      if (!nk || coreKeys.has(nk) || seen.has(nk)) return;
+      seen.add(nk);
+      order.push(nk);
+    });
+    return order;
+  }
+
   function formatStageLabel(stage) {
     const original = String(stage || "").trim();
     if (!original) return "";
@@ -410,9 +425,27 @@ document.addEventListener("DOMContentLoaded", () => {
   /* ---------------- NORMALIZERS ---------------- */
 
   function normalizePipelineWeekly(rows) {
-    if (!rows.length) return [];
+    if (!rows.length) {
+      state.pipelineWeeklyStageOrder = [];
+      return [];
+    }
+    const looksLong = rows.length && ("stage" in rows[0] || "count" in rows[0]);
     const coreKeys = new Set(["role", "kw", "year", "week_start", "recruiter", "health"]);
     const long = [];
+
+    if (looksLong) {
+      state.pipelineWeeklyStageOrder = [];
+      return rows.map(r => ({
+        year: num(getField(r, ["year"])),
+        kw: num(getField(r, ["kw"])),
+        role: getField(r, ["role"]),
+        recruiter: getField(r, ["recruiter"]),
+        stage: normalizeStageValue(getField(r, ["stage"])),
+        count: num(getField(r, ["count"])),
+      })).filter(r => r.year && r.kw && r.role && r.stage);
+    }
+
+    state.pipelineWeeklyStageOrder = getStageOrderFromRows(rows, coreKeys);
 
     rows.forEach(r => {
       const year = num(getField(r, ["year"]));
@@ -440,28 +473,20 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    const looksLong = rows.length && ("stage" in rows[0] || "count" in rows[0]);
-    if (looksLong) {
-      return rows.map(r => ({
-        year: num(getField(r, ["year"])),
-        kw: num(getField(r, ["kw"])),
-        role: getField(r, ["role"]),
-        recruiter: getField(r, ["recruiter"]),
-        stage: normalizeStageValue(getField(r, ["stage"])),
-        count: num(getField(r, ["count"])),
-      })).filter(r => r.year && r.kw && r.role && r.stage);
-    }
-
     return long;
   }
 
   function normalizePipelineInventory(rows) {
-    if (!rows.length) return [];
+    if (!rows.length) {
+      state.pipelineInventoryStageOrder = [];
+      return [];
+    }
 
     const hasStage = Object.prototype.hasOwnProperty.call(rows[0], "stage");
     const hasCount = Object.prototype.hasOwnProperty.call(rows[0], "count");
 
     if (hasStage && hasCount) {
+      state.pipelineInventoryStageOrder = [];
       return rows.map(r => ({
         year: num(getField(r, ["year"])),
         kw: num(getField(r, ["kw"])),
@@ -474,6 +499,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const coreKeys = new Set(["role", "kw", "year", "week_start", "recruiter", "health", "stage_order"]);
+    state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys);
     const long = [];
     rows.forEach(r => {
       const year = num(getField(r, ["year"]));
@@ -741,7 +767,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /* ---------------- RENDER: PIPELINE ---------------- */
 
-  function getStagesForInventory(rows, selectedWeekKey) {
+  function getStagesForInventory(rows, selectedWeekKey, stageOrder) {
     const stageMap = new Map();
     rows.forEach(r => {
       if (!isWeekMatch(r, selectedWeekKey)) return;
@@ -752,6 +778,12 @@ document.addEventListener("DOMContentLoaded", () => {
         stageMap.set(label, { label, order: so === "" ? null : num(so) });
       }
     });
+
+    if (Array.isArray(stageOrder) && stageOrder.length) {
+      return stageOrder
+        .filter(label => stageMap.has(label))
+        .map(label => stageMap.get(label));
+    }
 
     return Array.from(stageMap.values()).sort((a, b) => {
       const ao = Number.isFinite(a.order) ? a.order : null;
@@ -774,7 +806,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const tbody = $("pipelineTable");
     tbody.innerHTML = "";
 
-    const stages = getStagesForInventory(inv, selectedWeekKey);
+    const stages = getStagesForInventory(inv, selectedWeekKey, state.pipelineInventoryStageOrder);
 
     const roles = new Set();
     const countsByRole = new Map();
@@ -841,13 +873,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /* ---------------- RENDER: ACTIVITY ---------------- */
 
-  function getActivityStages(weeklyRows) {
+  function getActivityStages(weeklyRows, stageOrder) {
     const set = new Set();
     weeklyRows.forEach(r => {
       if (!r.stage) return;
       if (String(r.stage).startsWith("__")) return; // ignore placeholder stage
       set.add(r.stage);
     });
+
+    if (Array.isArray(stageOrder) && stageOrder.length) {
+      return stageOrder.filter(stage => set.has(stage));
+    }
 
     const preferred = ["sourced", "step1", "tech_light", "tech_iv", "final", "offer", "hired"];
     const presentPreferred = preferred.filter(s => set.has(s));
@@ -881,7 +917,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return true;
     });
 
-    const stages = getActivityStages(filtered);
+    const stages = getActivityStages(filtered, state.pipelineWeeklyStageOrder);
     const roles = [];
     const seen = new Set();
     const countsByRole = new Map();
