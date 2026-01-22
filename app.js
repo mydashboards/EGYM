@@ -433,7 +433,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return [];
     }
     const looksLong = rows.length && ("stage" in rows[0] || "count" in rows[0]);
-    const coreKeys = new Set(["role", "kw", "year", "week_start", "recruiter", "health"]);
+    const coreKeys = new Set(["role", "kw", "year", "week_start", "recruiter", "health", "stage_order"]);
     const long = [];
 
     if (looksLong) {
@@ -445,6 +445,7 @@ document.addEventListener("DOMContentLoaded", () => {
         recruiter: getField(r, ["recruiter"]),
         stage: normalizeStageValue(getField(r, ["stage"])),
         count: num(getField(r, ["count"])),
+        stage_order_index: Number.isFinite(num(getField(r, ["stage_order", "stage_order_index"]))) ? num(getField(r, ["stage_order", "stage_order_index"])) : null
       })).filter(r => r.year && r.kw && r.role && r.stage);
     }
 
@@ -467,18 +468,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
       let pushedAny = false;
 
-      stageOrder.forEach(stageKey => {
+      stageOrder.forEach((stageKey, index) => {
         const count = num(r[stageKey]);
         if (!Number.isFinite(count)) return;
         if (count === 0) return;
         pushedAny = true;
-        long.push({ year, kw, role, recruiter, stage: stageKey, count });
+        long.push({ year, kw, role, recruiter, stage: stageKey, count, stage_order_index: index });
       });
 
       // IMPORTANT: keep the role visible for that week even if all counts are 0/blank
       // (so Activity/Pipeline can list all roles that exist in the KW).
       if (!pushedAny) {
-        long.push({ year, kw, role, recruiter, stage: "__role__", count: 0 });
+        long.push({ year, kw, role, recruiter, stage: "__role__", count: 0, stage_order_index: null });
       }
     });
 
@@ -551,12 +552,15 @@ document.addEventListener("DOMContentLoaded", () => {
   function normalizeTargets(rows) {
     return rows.map(r => ({
       role: getField(r, ["role"]),
-      lookback_weeks: num(getField(r, ["lookback_weeks", "lookback"])),
-      min_prev_stage_n: num(getField(r, ["min_prev_stage_n", "min_n"])),
-      from_stage: normalizeStageValue(getField(r, ["from_stage"])),
-      to_stage: normalizeStageValue(getField(r, ["to_stage"])),
-      expected_rate: num(getField(r, ["expected_rate"]))
-    })).filter(r => r.role && r.from_stage && r.to_stage);
+      lookback_weeks: num(getField(r, ["lookback_weeks"])),
+      min_prev_stage_n: num(getField(r, ["min_prev_stage_n"])),
+      step1_from_sourced: num(getField(r, ["step1_from_sourced"])),
+      step2_from_step1: num(getField(r, ["step2_from_step1"])),
+      step3_from_step2: num(getField(r, ["step3_from_step2"])),
+      final_from_step3: num(getField(r, ["final_from_step3"])),
+      offer_from_final: num(getField(r, ["offer_from_final"])),
+      hired_from_offer: num(getField(r, ["hired_from_offer"]))
+    })).filter(r => r.role);
   }
 
   function normalizeRoleNotes(rows) {
@@ -572,82 +576,99 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   /* ---------------- HEALTH (RAG) ---------------- */
+  // HEALTH MODEL v2
 
-  function computeHealth(weeklyLongRowsForRole, transitions, endWeekKey) {
-    if (!transitions.length) return { health: "new", reason: "Not enough data" };
-
-    const weeks = Array.from(new Set(weeklyLongRowsForRole.map(r => weekKey(r)).filter(Boolean))).sort();
-    const eligible = endWeekKey && endWeekKey !== "all" ? weeks.filter(w => w <= endWeekKey) : weeks;
-    if (!eligible.length) return { health: "new", reason: "Not enough data" };
-
-    const rowsByWeek = new Map();
-    weeklyLongRowsForRole.forEach(r => {
-      const wk = weekKey(r);
-      if (!wk) return;
-      if (!rowsByWeek.has(wk)) rowsByWeek.set(wk, []);
-      rowsByWeek.get(wk).push(r);
-    });
-
-    let evaluated = 0;
-    let worstScore = Infinity;
-    let bottleneck = "—";
-
-    transitions.forEach(t => {
-      const lookback = Math.max(1, num(t.lookback_weeks));
-      const minN = Math.max(1, num(t.min_prev_stage_n));
-      const expected = num(t.expected_rate);
-      const fromStage = normalizeStageValue(t.from_stage);
-      const toStage = normalizeStageValue(t.to_stage);
-
-      const recentWeeks = eligible.slice(-lookback);
-      let fromCount = 0;
-      let toCount = 0;
-
-      recentWeeks.forEach(w => {
-        (rowsByWeek.get(w) || []).forEach(r => {
-          const sk = normalizeStageValue(r.stage);
-          if (sk === fromStage) fromCount += num(r.count);
-          if (sk === toStage) toCount += num(r.count);
-        });
-      });
-
-      if (fromCount >= minN && expected > 0) {
-        const actual = fromCount > 0 ? toCount / fromCount : 0;
-        const score = actual / expected;
-        evaluated += 1;
-
-        if (score < worstScore) {
-          worstScore = score;
-          bottleneck = `${t.from_stage} → ${t.to_stage} (${formatPercent(actual)} vs ${formatPercent(expected)})`;
-        }
-      }
-    });
-
-    if (!evaluated) return { health: "new", reason: "Not enough data" };
-    if (worstScore < 0.33) return { health: "critical", reason: bottleneck };
-    if (worstScore < 0.66) return { health: "warning", reason: bottleneck };
-    return { health: "healthy", reason: bottleneck };
-  }
-
-  function getHealthByRole(weeklyRows, targets, endWeekKey) {
-    const byRole = {};
-    weeklyRows.forEach(r => {
-      if (!r.role) return;
-      if (!byRole[r.role]) byRole[r.role] = [];
-      byRole[r.role].push(r);
-    });
-
-    const targetsByRole = {};
+  function getTargetsForRole(targets, role) {
+    const byRole = new Map();
     targets.forEach(t => {
       if (!t.role) return;
-      if (!targetsByRole[t.role]) targetsByRole[t.role] = [];
-      targetsByRole[t.role].push(t);
+      byRole.set(t.role, t);
+    });
+    return byRole.get(role) || byRole.get("_default_") || null;
+  }
+
+  function getRollingWeeks(rows, endWeekKey, lookbackWeeks) {
+    const weeks = Array.from(new Set(rows.map(r => weekKey(r)).filter(Boolean))).sort();
+    const targetKey = endWeekKey && endWeekKey !== "all" ? endWeekKey : weeks[weeks.length - 1];
+    const eligible = targetKey ? weeks.filter(w => w <= targetKey) : weeks;
+    const lookback = Math.max(1, num(lookbackWeeks) || 2);
+    return eligible.slice(-lookback);
+  }
+
+  function computeRoleHealthV2({ rows, role, targets, endWeekKey, recruiterFilter }) {
+    const roleRows = rows.filter(r => r.role === role && !String(r.stage).startsWith("__"));
+    const filteredRows = recruiterFilter && recruiterFilter !== "all"
+      ? roleRows.filter(r => r.recruiter === recruiterFilter)
+      : roleRows;
+
+    const targetRow = getTargetsForRole(targets, role);
+    if (!targetRow) return "new";
+
+    const lookbackWeeks = num(targetRow.lookback_weeks) || 2;
+    const windowWeeks = getRollingWeeks(filteredRows, endWeekKey, lookbackWeeks);
+    if (windowWeeks.length < 2) return "new";
+
+    const stageOrder = state.pipelineWeeklyStageOrder || [];
+    const stageCounts = new Map(stageOrder.map(stage => [stage, 0]));
+    filteredRows.forEach(r => {
+      const wk = weekKey(r);
+      if (!wk || !windowWeeks.includes(wk)) return;
+      if (!stageCounts.has(r.stage)) return;
+      stageCounts.set(r.stage, stageCounts.get(r.stage) + num(r.count));
+    });
+
+    const minPrev = Math.max(1, num(targetRow.min_prev_stage_n));
+    const expectedByIndex = [
+      num(targetRow.step1_from_sourced),
+      num(targetRow.step2_from_step1),
+      num(targetRow.step3_from_step2),
+      num(targetRow.final_from_step3),
+      num(targetRow.offer_from_final),
+      num(targetRow.hired_from_offer)
+    ];
+
+    let evaluated = 0;
+    let worst = 0;
+    const maxStages = Math.min(stageOrder.length, 7);
+
+    for (let i = 0; i < maxStages - 1; i += 1) {
+      const expected = expectedByIndex[i];
+      if (!expected || expected <= 0) continue;
+      const prevStage = stageOrder[i];
+      const nextStage = stageOrder[i + 1];
+      const prevCount = stageCounts.get(prevStage) || 0;
+      const nextCount = stageCounts.get(nextStage) || 0;
+      if (prevCount < minPrev) continue;
+      const actual = prevCount > 0 ? nextCount / prevCount : 0;
+      const ratio = expected > 0 ? actual / expected : 0;
+      evaluated += 1;
+      if (ratio < 0.7) worst = Math.max(worst, 2);
+      else if (ratio < 0.9) worst = Math.max(worst, 1);
+      else worst = Math.max(worst, 0);
+    }
+
+    if (!evaluated) return "new";
+    if (worst === 2) return "critical";
+    if (worst === 1) return "warning";
+    return "healthy";
+  }
+
+  function getHealthByRole(weeklyRows, targets, endWeekKey, recruiterFilter = "all") {
+    const roles = new Set();
+    weeklyRows.forEach(r => {
+      if (!r.role) return;
+      roles.add(r.role);
     });
 
     const health = {};
-    Object.keys(byRole).forEach(role => {
-      const trs = targetsByRole[role] || [];
-      health[role] = computeHealth(byRole[role], trs, endWeekKey).health;
+    roles.forEach(role => {
+      health[role] = computeRoleHealthV2({
+        rows: weeklyRows,
+        role,
+        targets,
+        endWeekKey,
+        recruiterFilter
+      });
     });
     return health;
   }
@@ -701,7 +722,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const healthByRole = getHealthByRole(
       state.pipelineWeeklyRows,
       state.roleTargets,
-      state.selectedPipelineWeek === "all" ? "" : state.selectedPipelineWeek
+      state.selectedPipelineWeek === "all" ? "" : state.selectedPipelineWeek,
+      "all"
     );
 
     const hiresByRole = {};
@@ -729,7 +751,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const counts = { healthy: 0, warning: 0, critical: 0 };
     rows.forEach(r => {
       const role = getField(r, ["role"]);
-      const h = normalizeHealthValue(getField(r, ["health"])) || healthByRole[role] || "new";
+      const h = healthByRole[role] || "new";
       if (h === "healthy") counts.healthy += 1;
       else if (h === "warning") counts.warning += 1;
       else if (h === "critical") counts.critical += 1;
@@ -759,7 +781,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ? Math.max(0, baseOpenings - (hiresByRole[role] || 0))
         : baseOpenings;
       const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap", "owner", "recruiter"]);
-      const h = normalizeHealthValue(getField(r, ["health"])) || healthByRole[role] || "new";
+      const h = healthByRole[role] || "new";
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -846,7 +868,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const healthByRole = getHealthByRole(
       weekly,
       targets,
-      selectedWeekKey === "all" ? "" : selectedWeekKey
+      selectedWeekKey === "all" ? "" : selectedWeekKey,
+      "all"
     );
 
     const roleList = [];
@@ -1070,7 +1093,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const healthByRole = getHealthByRole(
       weeklyRows,
       state.roleTargets || [],
-      selectedPipelineWeek === "all" ? "" : selectedPipelineWeek
+      selectedPipelineWeek === "all" ? "" : selectedPipelineWeek,
+      selectedRecruiter
     );
 
     const overviewFiltered = overviewRows.filter(r => {
@@ -1118,7 +1142,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const counts = { healthy: 0, warning: 0, critical: 0 };
     overviewFiltered.forEach(r => {
       const role = getField(r, ["role"]);
-      const value = normalizeHealthValue(getField(r, ["health"])) || healthByRole[role] || "";
+      const value = healthByRole[role] || "";
       if (value === "healthy") counts.healthy += 1;
       else if (value === "warning") counts.warning += 1;
       else if (value === "critical") counts.critical += 1;
@@ -1310,7 +1334,7 @@ document.addEventListener("DOMContentLoaded", () => {
     overviewRows.forEach(r => {
       const role = getField(r, ["role"]);
       if (!role) return;
-      const value = normalizeHealthValue(getField(r, ["health"])) || healthByRole[role] || "";
+      const value = healthByRole[role] || "";
       if (value) overviewHealth.set(role, value);
     });
 
