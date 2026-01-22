@@ -226,6 +226,9 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       setDataError(key, "");
+      if (key === "pipelineWeekly") {
+        return { rows: parsed.rows || [], headers: parsed.headers || [] };
+      }
       return parsed.rows;
     } catch (error) {
       setDataError(key, `Data source unavailable: ${DATA_SOURCE_LABELS[key]}`);
@@ -424,7 +427,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /* ---------------- NORMALIZERS ---------------- */
 
-  function normalizePipelineWeekly(rows) {
+  function normalizePipelineWeekly(rows, headers = []) {
     if (!rows.length) {
       state.pipelineWeeklyStageOrder = [];
       return [];
@@ -445,7 +448,15 @@ document.addEventListener("DOMContentLoaded", () => {
       })).filter(r => r.year && r.kw && r.role && r.stage);
     }
 
-    state.pipelineWeeklyStageOrder = getStageOrderFromRows(rows, coreKeys);
+    const stageOrder = [];
+    const seen = new Set();
+    (headers.length ? headers : Object.keys(rows[0] || {})).forEach(k => {
+      const nk = normalizeHeader(k);
+      if (!nk || coreKeys.has(nk) || seen.has(nk)) return;
+      seen.add(nk);
+      stageOrder.push(nk);
+    });
+    state.pipelineWeeklyStageOrder = stageOrder;
 
     rows.forEach(r => {
       const year = num(getField(r, ["year"]));
@@ -456,14 +467,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
       let pushedAny = false;
 
-      Object.keys(r).forEach(k => {
-        const nk = normalizeHeader(k);
-        if (coreKeys.has(nk)) return;
-        const count = num(r[k]);
+      stageOrder.forEach(stageKey => {
+        const count = num(r[stageKey]);
         if (!Number.isFinite(count)) return;
         if (count === 0) return;
         pushedAny = true;
-        long.push({ year, kw, role, recruiter, stage: nk, count });
+        long.push({ year, kw, role, recruiter, stage: stageKey, count });
       });
 
       // IMPORTANT: keep the role visible for that week even if all counts are 0/blank
@@ -874,21 +883,17 @@ document.addEventListener("DOMContentLoaded", () => {
   /* ---------------- RENDER: ACTIVITY ---------------- */
 
   function getActivityStages(weeklyRows, stageOrder) {
-    const set = new Set();
+    if (Array.isArray(stageOrder) && stageOrder.length) return stageOrder;
+    const stages = [];
+    const seen = new Set();
     weeklyRows.forEach(r => {
       if (!r.stage) return;
       if (String(r.stage).startsWith("__")) return; // ignore placeholder stage
-      set.add(r.stage);
+      if (seen.has(r.stage)) return;
+      seen.add(r.stage);
+      stages.push(r.stage);
     });
-
-    if (Array.isArray(stageOrder) && stageOrder.length) {
-      return stageOrder.filter(stage => set.has(stage));
-    }
-
-    const preferred = ["sourced", "step1", "tech_light", "tech_iv", "final", "offer", "hired"];
-    const presentPreferred = preferred.filter(s => set.has(s));
-    const remaining = Array.from(set).filter(s => !preferred.includes(s)).sort();
-    return [...presentPreferred, ...remaining];
+    return stages;
   }
 
   function updateActivityFilters() {
@@ -1551,7 +1556,9 @@ document.addEventListener("DOMContentLoaded", () => {
       ]);
 
       state.overviewRows = overviewRows || [];
-      state.pipelineWeeklyRows = normalizePipelineWeekly(pipelineWeeklyRaw || []);
+      const pipelineWeeklyRows = pipelineWeeklyRaw?.rows || pipelineWeeklyRaw || [];
+      const pipelineWeeklyHeaders = pipelineWeeklyRaw?.headers || [];
+      state.pipelineWeeklyRows = normalizePipelineWeekly(pipelineWeeklyRows, pipelineWeeklyHeaders);
       state.pipelineInventoryRows = normalizePipelineInventory(pipelineInventoryRaw || []);
       state.sourcingRows = normalizeSourcing(sourcingRaw || []);
       state.hiredRows = hiredRaw || [];
