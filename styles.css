@@ -144,7 +144,16 @@ select:focus{border-color:rgba(249,115,22,.45)}
   gap:14px;
   align-items:stretch;
 }
-.overview-top .card{height:100%}
+
+/* IMPORTANT: In grid layout, spacing must come from `gap`, not from `.card + .card` */
+.overview-top .card + .card{margin-top:0}
+
+/* Ensure both overview cards fully stretch to equal height of the grid row */
+.overview-top > .card{
+  align-self:stretch;
+  height:100%;
+}
+
 .overview-top .card-head{padding-bottom:14px}
 
 .kpi-grid{
@@ -182,7 +191,8 @@ select:focus{border-color:rgba(249,115,22,.45)}
 }
 .health-dot.good{background:var(--good)}
 .health-dot.warn{background:var(--warn)}
-health-dot.bad{background:var(--bad)}
+.health-dot.bad{background:var(--bad)} /* FIX: missing dot in selector */
+
 .health-badge.good{border-color:rgba(34,197,94,.25)}
 .health-badge.warn{border-color:rgba(245,158,11,.25)}
 .health-badge.bad{border-color:rgba(239,68,68,.25)}
@@ -236,15 +246,4 @@ tbody tr:hover{background:rgba(255,255,255,.02)}
   .brand h1{font-size:34px}
   .overview-top{grid-template-columns:1fr}
   .kpi-grid{grid-template-columns:repeat(2, minmax(0,1fr))}
-}
-/* PATCH: Overview equal height */
-.overview-top{
-  align-items: stretch;
-}
-.overview-top > .card{
-  align-self: stretch;
-}
-/* PATCH: Overview equal height */
-.overview-top{
-  grid-auto-rows: 1fr;
 }
