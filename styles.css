@@ -237,19 +237,14 @@ tbody tr:hover{background:rgba(255,255,255,.02)}
   .overview-top{grid-template-columns:1fr}
   .kpi-grid{grid-template-columns:repeat(2, minmax(0,1fr))}
 }
-/* --- FIX: Overview widgets same height + spacing before Roles --- */
-
-.overview-top{
-  align-items: stretch;
-  margin-bottom: 28px; /* space before Roles table */
-}
-.overview-top > *{
-  height: 100%;
-}
 /* PATCH: Overview equal height */
 .overview-top{
   align-items: stretch;
 }
 .overview-top > .card{
   align-self: stretch;
+}
+/* PATCH: Overview equal height */
+.overview-top{
+  grid-auto-rows: 1fr;
 }
