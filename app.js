@@ -528,7 +528,7 @@ document.addEventListener("DOMContentLoaded", () => {
           recruiter,
           stage: nk,
           count,
-          stage_order: null
+         stage_order: null
         });
       });
     });
@@ -557,6 +557,13 @@ document.addEventListener("DOMContentLoaded", () => {
       to_stage: normalizeStageValue(getField(r, ["to_stage"])),
       expected_rate: num(getField(r, ["expected_rate"]))
     })).filter(r => r.role && r.from_stage && r.to_stage);
+      step1_from_sourced: num(getField(r, ["step1_from_sourced"])),
+      step2_from_step1: num(getField(r, ["step2_from_step1"])),
+      step3_from_step2: num(getField(r, ["step3_from_step2"])),
+      final_from_step3: num(getField(r, ["final_from_step3"])),
+      offer_from_final: num(getField(r, ["offer_from_final"])),
+      hired_from_offer: num(getField(r, ["hired_from_offer"]))
+    })).filter(r => r.role);
   }
 
   function normalizeRoleNotes(rows) {
@@ -575,10 +582,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function computeHealth(weeklyLongRowsForRole, transitions, endWeekKey) {
     if (!transitions.length) return { health: "new", reason: "Not enough data" };
+  function normalizeStageKey(value) {
+    return normalizeStageValue(value).replace(/_/g, "");
+  }
 
     const weeks = Array.from(new Set(weeklyLongRowsForRole.map(r => weekKey(r)).filter(Boolean))).sort();
     const eligible = endWeekKey && endWeekKey !== "all" ? weeks.filter(w => w <= endWeekKey) : weeks;
     if (!eligible.length) return { health: "new", reason: "Not enough data" };
+  function computeHealth(weeklyLongRowsForRole, target, eligibleWeeks) {
+    if (!target) return { health: "new", reason: "Not enough data" };
+    const lookback = Math.max(1, num(target.lookback_weeks));
+    const minN = Math.max(1, num(target.min_prev_stage_n));
+    const recentWeeks = eligibleWeeks.slice(-lookback);
+    if (!recentWeeks.length) return { health: "new", reason: "Not enough data" };
 
     const rowsByWeek = new Map();
     weeklyLongRowsForRole.forEach(r => {
@@ -609,12 +625,30 @@ document.addEventListener("DOMContentLoaded", () => {
           if (sk === fromStage) fromCount += num(r.count);
           if (sk === toStage) toCount += num(r.count);
         });
+    const stageTotals = new Map();
+    recentWeeks.forEach(w => {
+      (rowsByWeek.get(w) || []).forEach(r => {
+        if (!r.stage || String(r.stage).startsWith("__")) return;
+        const sk = normalizeStageKey(r.stage);
+        if (!sk) return;
+        stageTotals.set(sk, (stageTotals.get(sk) || 0) + num(r.count));
       });
+    });
 
       if (fromCount >= minN && expected > 0) {
         const actual = fromCount > 0 ? toCount / fromCount : 0;
         const score = actual / expected;
         evaluated += 1;
+    const evaluateStage = (prevStage, nextStage, expected) => {
+      const prevCount = stageTotals.get(prevStage) || 0;
+      const nextCount = stageTotals.get(nextStage) || 0;
+      if (prevCount < minN) return "new";
+      if (!(expected > 0)) return "new";
+      const actual = prevCount > 0 ? nextCount / prevCount : 0;
+      if (actual >= expected) return "healthy";
+      if (actual >= expected * 0.75) return "warning";
+      return "critical";
+    };
 
         if (score < worstScore) {
           worstScore = score;
@@ -622,11 +656,18 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
     });
+    const stage1 = evaluateStage("sourced", "step1", num(target.step1_from_sourced));
+    const stage2 = evaluateStage("step1", "step2", num(target.step2_from_step1));
 
     if (!evaluated) return { health: "new", reason: "Not enough data" };
     if (worstScore < 0.33) return { health: "critical", reason: bottleneck };
     if (worstScore < 0.66) return { health: "warning", reason: bottleneck };
     return { health: "healthy", reason: bottleneck };
+    if (stage1 === "new" && stage2 === "new") return { health: "new", reason: "Not enough data" };
+
+    const rank = { critical: 3, warning: 2, healthy: 1, new: 0 };
+    const worst = rank[stage1] >= rank[stage2] ? stage1 : stage2;
+    return { health: worst, reason: "—" };
   }
 
   function getHealthByRole(weeklyRows, targets, endWeekKey) {
@@ -638,16 +679,26 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     const targetsByRole = {};
+    let defaultTarget = null;
     targets.forEach(t => {
       if (!t.role) return;
       if (!targetsByRole[t.role]) targetsByRole[t.role] = [];
       targetsByRole[t.role].push(t);
+      if (t.role === "_default_") {
+        defaultTarget = t;
+      } else {
+        targetsByRole[t.role] = t;
+      }
     });
 
     const health = {};
+    const weeks = Array.from(new Set(weeklyRows.map(r => weekKey(r)).filter(Boolean))).sort();
+    const eligibleWeeks = endWeekKey && endWeekKey !== "all" ? weeks.filter(w => w <= endWeekKey) : weeks;
     Object.keys(byRole).forEach(role => {
       const trs = targetsByRole[role] || [];
       health[role] = computeHealth(byRole[role], trs, endWeekKey).health;
+      const target = targetsByRole[role] || defaultTarget;
+      health[role] = computeHealth(byRole[role], target, eligibleWeeks).health;
     });
     return health;
   }
