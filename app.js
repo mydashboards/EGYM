@@ -703,6 +703,11 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderOverview() {
     const rows = state.overviewRows || [];
     const hiredRows = state.hiredRows || [];
+    const overviewCards = $("overviewCards");
+    const overviewHealthSummary = $("overviewHealthSummary");
+    const tbody = $("overviewTable");
+    if (!overviewCards || !overviewHealthSummary || !tbody) return;
+
     const healthByRole = getHealthByRole(
       state.pipelineWeeklyRows,
       state.selectedPipelineWeek === "all" ? "" : state.selectedPipelineWeek,
@@ -721,51 +726,58 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    const totals = { green: 0, yellow: 0, red: 0 };
+    const openRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
+    const filledRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "filled").length;
+    const totalOpenings = rows.reduce((s, r) => {
+      const role = getField(r, ["role"]);
+      const base = num(getField(r, ["openings"]));
+      if (!hiredRows.length) return s + base;
+      const adjusted = Math.max(0, base - (hiresByRole[role] || 0));
+      return s + adjusted;
+    }, 0);
+
+    const counts = { green: 0, yellow: 0, red: 0 };
     rows.forEach(r => {
       const role = getField(r, ["role"]);
-      if (!role) return;
       const h = healthByRole[role] || "new";
-      if (h === "green") totals.green += 1;
-      if (h === "yellow") totals.yellow += 1;
-      if (h === "red") totals.red += 1;
+      if (h === "green") counts.green += 1;
+      else if (h === "yellow") counts.yellow += 1;
+      else if (h === "red") counts.red += 1;
     });
 
-    $("healthSummary").innerHTML = `
-      <div class="health-badge good"><span class="health-dot good"></span><span>${totals.green} Healthy</span></div>
-      <div class="health-badge warn"><span class="health-dot warn"></span><span>${totals.yellow} At risk</span></div>
-      <div class="health-badge bad"><span class="health-dot bad"></span><span>${totals.red} Critical</span></div>
+    overviewCards.innerHTML = `
+      <div class="kpi"><div class="label">Open Roles</div><div class="value">${openRoles}</div></div>
+      <div class="kpi"><div class="label">Filled Roles</div><div class="value">${filledRoles}</div></div>
+      <div class="kpi"><div class="label">Total Openings</div><div class="value">${totalOpenings}</div></div>
     `;
-    $("healthSummary").setAttribute("title", HEALTH_TOOLTIP_TEXT);
 
-    const tbody = $("overviewTable");
-    const empty = $("overviewEmpty");
+    overviewHealthSummary.innerHTML = `
+      <div class="health-badge good"><span class="health-dot good"></span><span>${counts.green} Healthy</span></div>
+      <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.yellow} At risk</span></div>
+      <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.red} Critical</span></div>
+    `;
+    overviewHealthSummary.setAttribute("title", HEALTH_TOOLTIP_TEXT);
     tbody.innerHTML = "";
 
-    const filtered = rows.filter(r => isWeekMatch(r, state.selectedPipelineWeek));
-
-    if (!filtered.length) {
-      empty.classList.remove("hidden");
-      return;
-    }
-    empty.classList.add("hidden");
-
-    filtered.forEach(row => {
-      const role = getField(row, ["role"]);
+    rows.forEach(r => {
+      const role = getField(r, ["role"]);
+      const status = getField(r, ["status"]);
+      const location = getField(r, ["location"]);
+      const baseOpenings = num(getField(r, ["openings"]));
+      const openings = hiredRows.length
+        ? Math.max(0, baseOpenings - (hiresByRole[role] || 0))
+        : baseOpenings;
+      const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap", "owner", "recruiter"]);
       const h = healthByRole[role] || "new";
-      const hires = hiresByRole[role] || 0;
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${role}</td>
+        <td>${status}</td>
+        <td>${location}</td>
+        <td class="num">${formatNumber(openings)}</td>
+        <td>${owner}</td>
         <td class="center">${healthDotHTML(h)}</td>
-        <td class="num">${formatNumber(getField(row, ["sourced"]))}</td>
-        <td class="num">${formatNumber(getField(row, ["step_1", "step1", "step_1_qualified", "qualified"]))}</td>
-        <td class="num">${formatNumber(getField(row, ["step_2", "step2"]))}</td>
-        <td class="num">${formatNumber(getField(row, ["step_3", "step3"]))}</td>
-        <td class="num">${formatNumber(getField(row, ["final"]))}</td>
-        <td class="num">${formatNumber(getField(row, ["offer"]))}</td>
-        <td class="num">${formatNumber(hires)}</td>
       `;
       tbody.appendChild(tr);
     });
