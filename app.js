@@ -576,54 +576,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /* ---------------- HEALTH (RAG) ---------------- */
 
-  function normalizeStageKey(value) {
-    return normalizeStageValue(value).replace(/_/g, "");
+  function normalizeHealthStage(value) {
+    const normalized = normalizeStageValue(value);
+    const collapsed = normalized.replace(/_/g, "");
+    if (collapsed === "step1") return "step1";
+    if (collapsed === "step2") return "step2";
+    return normalized;
   }
 
-  function computeHealth(weeklyLongRowsForRole, target, eligibleWeeks) {
-    if (!target) return { health: "new", reason: "Not enough data" };
-    const lookback = Math.max(1, num(target.lookback_weeks));
-    const minN = Math.max(1, num(target.min_prev_stage_n));
-    const recentWeeks = eligibleWeeks.slice(-lookback);
-    if (!recentWeeks.length) return { health: "new", reason: "Not enough data" };
-
-    const rowsByWeek = new Map();
-    weeklyLongRowsForRole.forEach(r => {
-      const wk = weekKey(r);
-      if (!wk) return;
-      if (!rowsByWeek.has(wk)) rowsByWeek.set(wk, []);
-      rowsByWeek.get(wk).push(r);
-    });
-
-    const stageTotals = new Map();
-    recentWeeks.forEach(w => {
-      (rowsByWeek.get(w) || []).forEach(r => {
-        if (!r.stage || String(r.stage).startsWith("__")) return;
-        const sk = normalizeStageKey(r.stage);
-        if (!sk) return;
-        stageTotals.set(sk, (stageTotals.get(sk) || 0) + num(r.count));
-      });
-    });
-
-    const evaluateStage = (prevStage, nextStage, expected) => {
-      const prevCount = stageTotals.get(prevStage) || 0;
-      const nextCount = stageTotals.get(nextStage) || 0;
-      if (prevCount < minN) return "new";
-      if (!(expected > 0)) return "new";
-      const actual = prevCount > 0 ? nextCount / prevCount : 0;
-      if (actual >= expected) return "healthy";
-      if (actual >= expected * 0.75) return "warning";
-      return "critical";
-    };
-
-    const stage1 = evaluateStage("sourced", "step1", num(target.step1_from_sourced));
-    const stage2 = evaluateStage("step1", "step2", num(target.step2_from_step1));
-
-    if (stage1 === "new" && stage2 === "new") return { health: "new", reason: "Not enough data" };
-
-    const rank = { critical: 3, warning: 2, healthy: 1, new: 0 };
-    const worst = rank[stage1] >= rank[stage2] ? stage1 : stage2;
-    return { health: worst, reason: "—" };
+  function computeHealthFromCounts(step1Count, step2Count) {
+    const s1 = num(step1Count);
+    const s2 = num(step2Count);
+    if (s1 < 3) return "critical";
+    if (s1 < 6 && s2 < 3) return "critical";
+    if (s1 < 10 && s2 >= 4) return "healthy";
+    if (s1 >= 10 && s2 < 4) return "healthy";
+    if (s1 < 10 && s2 < 4) return "warning";
+    return "healthy";
   }
 
   function getHealthByRole(weeklyRows, targets, endWeekKey) {
@@ -634,23 +603,37 @@ document.addEventListener("DOMContentLoaded", () => {
       byRole[r.role].push(r);
     });
 
-    const targetsByRole = {};
-    let defaultTarget = null;
-    targets.forEach(t => {
-      if (!t.role) return;
-      if (t.role === "_default_") {
-        defaultTarget = t;
-      } else {
-        targetsByRole[t.role] = t;
-      }
-    });
+    const availableWeeks = new Set(weeklyRows.map(r => weekKey(r)).filter(Boolean));
+    const selectedWeek = endWeekKey && endWeekKey !== "all" ? endWeekKey : "";
+    const selectedWeekMeta = selectedWeek ? getWeekYearFromKey(selectedWeek) : null;
+    let eligibleWeeks = Array.from(availableWeeks);
 
+    if (selectedWeekMeta) {
+      const selectedKey = selectedWeek;
+      const previousKey = selectedWeekMeta.kw > 1
+        ? `${selectedWeekMeta.year}-KW${String(selectedWeekMeta.kw - 1).padStart(2, "0")}`
+        : "";
+      eligibleWeeks = [selectedKey];
+      if (previousKey && availableWeeks.has(previousKey)) {
+        eligibleWeeks.push(previousKey);
+      }
+    }
+
+    const eligibleSet = new Set(eligibleWeeks);
     const health = {};
-    const weeks = Array.from(new Set(weeklyRows.map(r => weekKey(r)).filter(Boolean))).sort();
-    const eligibleWeeks = endWeekKey && endWeekKey !== "all" ? weeks.filter(w => w <= endWeekKey) : weeks;
     Object.keys(byRole).forEach(role => {
-      const target = targetsByRole[role] || defaultTarget;
-      health[role] = computeHealth(byRole[role], target, eligibleWeeks).health;
+      let s1 = 0;
+      let s2 = 0;
+      byRole[role].forEach(r => {
+        const wk = weekKey(r);
+        if (!wk) return;
+        if (selectedWeekMeta && !eligibleSet.has(wk)) return;
+        if (!r.stage || String(r.stage).startsWith("__")) return;
+        const stage = normalizeHealthStage(r.stage);
+        if (stage === "step1") s1 += num(r.count);
+        if (stage === "step2") s2 += num(r.count);
+      });
+      health[role] = computeHealthFromCounts(s1, s2);
     });
     return health;
   }
