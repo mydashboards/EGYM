@@ -411,17 +411,18 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function healthDotHTML(health) {
-    if (health === "healthy") return `<span class="status-dot good" title="Healthy"></span>`;
-    if (health === "warning") return `<span class="status-dot warn" title="At risk"></span>`;
-    if (health === "critical") return `<span class="status-dot bad" title="Critical"></span>`;
+    if (health === "ok" || health === "healthy") return `<span class="status-dot good" title="Healthy"></span>`;
+    if (health === "warn" || health === "warning") return `<span class="status-dot warn" title="At risk"></span>`;
+    if (health === "bad" || health === "critical") return `<span class="status-dot bad" title="Critical"></span>`;
     return `<span class="status-dot neutral" title="New"></span>`;
   }
 
   function normalizeHealthValue(value) {
     const normalized = normalizeHeader(String(value || ""));
-    if (normalized.includes("critical")) return "critical";
-    if (normalized.includes("warning") || normalized.includes("risk") || normalized.includes("at_risk")) return "warning";
-    if (normalized.includes("healthy") || normalized.includes("good")) return "healthy";
+    if (normalized.includes("bad") || normalized.includes("critical")) return "bad";
+    if (normalized.includes("warn") || normalized.includes("warning") || normalized.includes("risk") || normalized.includes("at_risk")) return "warn";
+    if (normalized.includes("ok") || normalized.includes("healthy") || normalized.includes("good")) return "ok";
+    if (normalized.includes("new")) return "new";
     return "";
   }
 
@@ -587,12 +588,12 @@ document.addEventListener("DOMContentLoaded", () => {
   function computeHealthFromCounts(step1Count, step2Count) {
     const s1 = num(step1Count);
     const s2 = num(step2Count);
-    if (s1 < 3) return "critical";
-    if (s1 < 6 && s2 < 3) return "critical";
-    if (s1 < 10 && s2 >= 4) return "healthy";
-    if (s1 >= 10 && s2 < 4) return "healthy";
-    if (s1 < 10 && s2 < 4) return "warning";
-    return "healthy";
+    if (s1 <= 2) return "bad";
+    if (s1 <= 5 && s2 <= 2) return "bad";
+    if (s1 <= 10 && s2 >= 5) return "ok";
+    if (s1 >= 11 && s2 <= 3) return "ok";
+    if (s1 <= 10 && s2 <= 3) return "warn";
+    return "warn";
   }
 
   function getHealthByRole(weeklyRows, targets, endWeekKey) {
@@ -624,16 +625,23 @@ document.addEventListener("DOMContentLoaded", () => {
     Object.keys(byRole).forEach(role => {
       let s1 = 0;
       let s2 = 0;
+      let totalStages = 0;
       byRole[role].forEach(r => {
         const wk = weekKey(r);
         if (!wk) return;
         if (selectedWeekMeta && !eligibleSet.has(wk)) return;
         if (!r.stage || String(r.stage).startsWith("__")) return;
         const stage = normalizeHealthStage(r.stage);
-        if (stage === "step1") s1 += num(r.count);
-        if (stage === "step2") s2 += num(r.count);
+        const count = num(r.count);
+        totalStages += count;
+        if (stage === "step1") s1 += count;
+        if (stage === "step2") s2 += count;
       });
-      health[role] = computeHealthFromCounts(s1, s2);
+      if (totalStages === 0) {
+        health[role] = "new";
+      } else {
+        health[role] = computeHealthFromCounts(s1, s2);
+      }
     });
     return health;
   }
@@ -712,13 +720,13 @@ document.addEventListener("DOMContentLoaded", () => {
       return s + adjusted;
     }, 0);
 
-    const counts = { healthy: 0, warning: 0, critical: 0 };
+    const counts = { ok: 0, warn: 0, bad: 0 };
     rows.forEach(r => {
       const role = getField(r, ["role"]);
       const h = normalizeHealthValue(getField(r, ["health"])) || healthByRole[role] || "new";
-      if (h === "healthy") counts.healthy += 1;
-      else if (h === "warning") counts.warning += 1;
-      else if (h === "critical") counts.critical += 1;
+      if (h === "ok") counts.ok += 1;
+      else if (h === "warn") counts.warn += 1;
+      else if (h === "bad") counts.bad += 1;
     });
 
     $("overviewCards").innerHTML = `
@@ -728,9 +736,9 @@ document.addEventListener("DOMContentLoaded", () => {
     `;
 
     $("overviewHealthSummary").innerHTML = `
-      <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
-      <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} At risk</span></div>
-      <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Critical</span></div>
+      <div class="health-badge good"><span class="health-dot good"></span><span>${counts.ok} Healthy</span></div>
+      <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warn} At risk</span></div>
+      <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.bad} Critical</span></div>
     `;
 
     const tbody = $("overviewTable");
@@ -1101,19 +1109,19 @@ document.addEventListener("DOMContentLoaded", () => {
       <div class="kpi"><div class="label">Hires (All time)</div><div class="value">${formatNumber(totalHires)}</div><div class="sub">${hiredRows.length ? "" : "No hire data yet."}</div></div>
     `;
 
-    const counts = { healthy: 0, warning: 0, critical: 0 };
+    const counts = { ok: 0, warn: 0, bad: 0 };
     overviewFiltered.forEach(r => {
       const role = getField(r, ["role"]);
       const value = normalizeHealthValue(getField(r, ["health"])) || healthByRole[role] || "";
-      if (value === "healthy") counts.healthy += 1;
-      else if (value === "warning") counts.warning += 1;
-      else if (value === "critical") counts.critical += 1;
+      if (value === "ok") counts.ok += 1;
+      else if (value === "warn") counts.warn += 1;
+      else if (value === "bad") counts.bad += 1;
     });
 
     $("managementHealthSummary").innerHTML = `
-      <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
-      <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} At risk</span></div>
-      <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Critical</span></div>
+      <div class="health-badge good"><span class="health-dot good"></span><span>${counts.ok} Healthy</span></div>
+      <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warn} At risk</span></div>
+      <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.bad} Critical</span></div>
     `;
 
     renderManagementCharts({
@@ -1147,7 +1155,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const sourceCanvas = $("managementSourceMixChart");
     if (!pipelineCanvas || !sourceCanvas) return;
 
-    const totalHealth = counts.healthy + counts.warning + counts.critical;
+    const totalHealth = counts.ok + counts.warn + counts.bad;
     const hasHealth = totalHealth > 0;
 
     const sourceMap = new Map();
@@ -1196,7 +1204,7 @@ document.addEventListener("DOMContentLoaded", () => {
         data: {
           labels: ["Healthy", "At risk", "Critical"],
           datasets: [{
-            data: [counts.healthy, counts.warning, counts.critical],
+            data: [counts.ok, counts.warn, counts.bad],
             backgroundColor: ["#22c55e", "#f59e0b", "#ef4444"]
           }]
         },
@@ -1336,7 +1344,7 @@ document.addEventListener("DOMContentLoaded", () => {
       cards.push({ role, health, notes });
     });
 
-    const order = { critical: 0, warning: 1, healthy: 2, unknown: 3 };
+    const order = { bad: 0, warn: 1, ok: 2, new: 3, unknown: 4 };
     cards.sort((a, b) => order[a.health] - order[b.health]);
 
     if (!cards.length) {
@@ -1345,8 +1353,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     container.innerHTML = cards.map(card => {
-      const openAttr = card.health === "critical" || card.health === "warning" ? " open" : "";
-      const healthLabel = card.health === "warning" ? "At risk" : (card.health === "critical" ? "Critical" : (card.health === "healthy" ? "Healthy" : "Unknown"));
+      const openAttr = card.health === "bad" || card.health === "warn" ? " open" : "";
+      const healthLabel = card.health === "warn" ? "At risk" : (card.health === "bad" ? "Critical" : (card.health === "ok" ? "Healthy" : "Unknown"));
 
       const sectionHtml = (title, items) => {
         if (!items.length) return "";
