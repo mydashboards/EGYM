@@ -411,18 +411,17 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function healthDotHTML(health) {
-    if (health === "ok" || health === "healthy") return `<span class="status-dot good" title="Healthy"></span>`;
-    if (health === "warn" || health === "warning") return `<span class="status-dot warn" title="At risk"></span>`;
-    if (health === "bad" || health === "critical") return `<span class="status-dot bad" title="Critical"></span>`;
+    if (health === "healthy") return `<span class="status-dot good" title="Healthy"></span>`;
+    if (health === "warning") return `<span class="status-dot warn" title="At risk"></span>`;
+    if (health === "critical") return `<span class="status-dot bad" title="Critical"></span>`;
     return `<span class="status-dot neutral" title="New"></span>`;
   }
 
   function normalizeHealthValue(value) {
     const normalized = normalizeHeader(String(value || ""));
-    if (normalized.includes("bad") || normalized.includes("critical")) return "bad";
-    if (normalized.includes("warn") || normalized.includes("warning") || normalized.includes("risk") || normalized.includes("at_risk")) return "warn";
-    if (normalized.includes("ok") || normalized.includes("healthy") || normalized.includes("good")) return "ok";
-    if (normalized.includes("new")) return "new";
+    if (normalized.includes("critical")) return "critical";
+    if (normalized.includes("warning") || normalized.includes("risk") || normalized.includes("at_risk")) return "warning";
+    if (normalized.includes("healthy") || normalized.includes("good")) return "healthy";
     return "";
   }
 
@@ -537,16 +536,28 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function normalizeSourcing(rows) {
-    return rows.map(r => ({
-      year: num(getField(r, ["year"])),
-      kw: num(getField(r, ["kw"])),
-      role: getField(r, ["role"]),
-      recruiter: getField(r, ["recruiter"]),
-      source: getField(r, ["source"]),
-      contacted: num(getField(r, ["contacted"])),
-      replied: num(getField(r, ["replied"])),
-      recruiter_screen: num(getField(r, ["recruiter_screen", "recruiter_screened"]))
-    })).filter(r => r.year && r.kw && r.role);
+    return rows.map(r => {
+      const contacted = num(getField(r, ["contacted"]));
+      const legacyReplied = num(getField(r, ["replied"]));
+      const legacyScreens = num(getField(r, ["recruiter_screen", "recruiter_screened"]));
+      const contactedScreens = num(getField(r, ["contacted_screens", "contacted_screened", "contacted_screen"])) || legacyScreens;
+      const connects = num(getField(r, ["connects"])) || legacyReplied;
+      const connectScreens = num(getField(r, ["connect_screens", "connect_screened", "connect_screen"])) || legacyScreens;
+
+      return {
+        year: num(getField(r, ["year"])),
+        kw: num(getField(r, ["kw"])),
+        role: getField(r, ["role"]),
+        recruiter: getField(r, ["recruiter"]),
+        source: getField(r, ["source"]),
+        contacted,
+        replied: legacyReplied,
+        recruiter_screen: legacyScreens,
+        contacted_screens: contactedScreens,
+        connects,
+        connect_screens: connectScreens
+      };
+    }).filter(r => r.year && r.kw && r.role);
   }
 
   function normalizeTargets(rows) {
@@ -588,12 +599,12 @@ document.addEventListener("DOMContentLoaded", () => {
   function computeHealthFromCounts(step1Count, step2Count) {
     const s1 = num(step1Count);
     const s2 = num(step2Count);
-    if (s1 <= 2) return "bad";
-    if (s1 <= 5 && s2 <= 2) return "bad";
-    if (s1 <= 10 && s2 >= 5) return "ok";
-    if (s1 >= 11 && s2 <= 3) return "ok";
-    if (s1 <= 10 && s2 <= 3) return "warn";
-    return "warn";
+    if (s1 < 3) return "critical";
+    if (s1 < 6 && s2 < 3) return "critical";
+    if (s1 < 10 && s2 >= 4) return "healthy";
+    if (s1 >= 10 && s2 < 4) return "healthy";
+    if (s1 < 10 && s2 < 4) return "warning";
+    return "healthy";
   }
 
   function getHealthByRole(weeklyRows, targets, endWeekKey) {
@@ -625,23 +636,16 @@ document.addEventListener("DOMContentLoaded", () => {
     Object.keys(byRole).forEach(role => {
       let s1 = 0;
       let s2 = 0;
-      let totalStages = 0;
       byRole[role].forEach(r => {
         const wk = weekKey(r);
         if (!wk) return;
         if (selectedWeekMeta && !eligibleSet.has(wk)) return;
         if (!r.stage || String(r.stage).startsWith("__")) return;
         const stage = normalizeHealthStage(r.stage);
-        const count = num(r.count);
-        totalStages += count;
-        if (stage === "step1") s1 += count;
-        if (stage === "step2") s2 += count;
+        if (stage === "step1") s1 += num(r.count);
+        if (stage === "step2") s2 += num(r.count);
       });
-      if (totalStages === 0) {
-        health[role] = "new";
-      } else {
-        health[role] = computeHealthFromCounts(s1, s2);
-      }
+      health[role] = computeHealthFromCounts(s1, s2);
     });
     return health;
   }
@@ -720,13 +724,13 @@ document.addEventListener("DOMContentLoaded", () => {
       return s + adjusted;
     }, 0);
 
-    const counts = { ok: 0, warn: 0, bad: 0 };
+    const counts = { healthy: 0, warning: 0, critical: 0 };
     rows.forEach(r => {
       const role = getField(r, ["role"]);
       const h = normalizeHealthValue(getField(r, ["health"])) || healthByRole[role] || "new";
-      if (h === "ok") counts.ok += 1;
-      else if (h === "warn") counts.warn += 1;
-      else if (h === "bad") counts.bad += 1;
+      if (h === "healthy") counts.healthy += 1;
+      else if (h === "warning") counts.warning += 1;
+      else if (h === "critical") counts.critical += 1;
     });
 
     $("overviewCards").innerHTML = `
@@ -736,9 +740,9 @@ document.addEventListener("DOMContentLoaded", () => {
     `;
 
     $("overviewHealthSummary").innerHTML = `
-      <div class="health-badge good"><span class="health-dot good"></span><span>${counts.ok} Healthy</span></div>
-      <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warn} At risk</span></div>
-      <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.bad} Critical</span></div>
+      <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
+      <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} At risk</span></div>
+      <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Critical</span></div>
     `;
 
     const tbody = $("overviewTable");
@@ -963,11 +967,32 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /* ---------------- RENDER: SOURCING ---------------- */
 
+  function getSourcingWindowWeekKeys(selectedWeekKey) {
+    if (!selectedWeekKey || selectedWeekKey === "all") return [];
+    const selected = getWeekYearFromKey(selectedWeekKey);
+    if (!selected) return [];
+    const keys = [selectedWeekKey];
+    if (selected.kw > 1) {
+      keys.push(`${selected.year}-KW${String(selected.kw - 1).padStart(2, "0")}`);
+    }
+    return keys;
+  }
+
+  function isSourcingWeekInWindow(row, selectedWeekKey) {
+    if (selectedWeekKey === "all") return true;
+    const keys = getSourcingWindowWeekKeys(selectedWeekKey);
+    if (!keys.length) return false;
+    return keys.includes(weekKey(row));
+  }
+
   function updateSourcingFilters() {
     const selectedWeekKey = state.selectedSourcingWeek || "";
     const rows = state.sourcingRows || [];
-    const roles = getOrderedValues(rows, selectedWeekKey, r => r.role);
-    const recruiters = getOrderedValues(rows, selectedWeekKey, r => r.recruiter);
+    const windowedRows = selectedWeekKey === "all"
+      ? rows
+      : rows.filter(r => isSourcingWeekInWindow(r, selectedWeekKey));
+    const roles = getOrderedValues(windowedRows, "all", r => r.role);
+    const recruiters = getOrderedValues(windowedRows, "all", r => r.recruiter);
 
     setFilterOptions($("sourcingRoleSelect"), roles, "All roles");
     setFilterOptions($("sourcingRecruiterSelect"), recruiters, "All recruiters");
@@ -983,7 +1008,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const selectedRecruiter = state.selectedSourcingRecruiter || "all";
 
     const filtered = rows.filter(r => {
-      if (!isWeekMatch(r, selectedWeekKey)) return false;
+      if (!isSourcingWeekInWindow(r, selectedWeekKey)) return false;
       if (selectedRole !== "all" && r.role !== selectedRole) return false;
       if (selectedRecruiter !== "all" && r.recruiter !== selectedRecruiter) return false;
       return true;
@@ -992,21 +1017,52 @@ document.addEventListener("DOMContentLoaded", () => {
     const tbody = $("sourcingTable");
     tbody.innerHTML = "";
 
+    const thead = document.querySelector("#sourcing table thead");
+    if (thead) {
+      const convLabel = selectedWeekKey === "all" ? "Conv. (all time)" : "Conv. (2w)";
+      thead.innerHTML = `
+        <tr>
+          <th>Role</th>
+          <th class="num">Contacted</th>
+          <th class="num">Contacted Screens</th>
+          <th class="num">${convLabel}</th>
+          <th class="num">Connects</th>
+          <th class="num">Connect Screens</th>
+          <th class="num">${convLabel}</th>
+        </tr>
+      `;
+    }
+
     let totalContacted = 0;
-    let totalReplied = 0;
-    let totalScreen = 0;
+    let totalContactedScreens = 0;
+    let totalConnects = 0;
+    let totalConnectScreens = 0;
 
     const byRole = new Map();
     filtered.forEach(r => {
-      if (!byRole.has(r.role)) byRole.set(r.role, { contacted: 0, replied: 0, screen: 0 });
+      if (!byRole.has(r.role)) {
+        byRole.set(r.role, {
+          contacted: 0,
+          contactedScreens: 0,
+          connects: 0,
+          connectScreens: 0
+        });
+      }
       const agg = byRole.get(r.role);
-      agg.contacted += num(r.contacted);
-      agg.replied += num(r.replied);
-      agg.screen += num(r.recruiter_screen);
+      const contacted = num(r.contacted);
+      const contactedScreens = num(r.contacted_screens);
+      const connects = num(r.connects);
+      const connectScreens = num(r.connect_screens);
 
-      totalContacted += num(r.contacted);
-      totalReplied += num(r.replied);
-      totalScreen += num(r.recruiter_screen);
+      agg.contacted += contacted;
+      agg.contactedScreens += contactedScreens;
+      agg.connects += connects;
+      agg.connectScreens += connectScreens;
+
+      totalContacted += contacted;
+      totalContactedScreens += contactedScreens;
+      totalConnects += connects;
+      totalConnectScreens += connectScreens;
     });
 
     const roleOrder = [];
@@ -1020,25 +1076,31 @@ document.addEventListener("DOMContentLoaded", () => {
 
     roleOrder.forEach(role => {
       const agg = byRole.get(role);
-      const conv = agg && agg.contacted > 0 ? agg.screen / agg.contacted : null;
+      const contactedConv = agg && agg.contacted > 0 ? agg.contactedScreens / agg.contacted : null;
+      const connectsConv = agg && agg.connects > 0 ? agg.connectScreens / agg.connects : null;
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${role}</td>
         <td class="num">${formatNumber(agg?.contacted || 0)}</td>
-        <td class="num">${formatNumber(agg?.replied || 0)}</td>
-        <td class="num">${formatNumber(agg?.screen || 0)}</td>
-        <td class="num">${formatPercent(conv)}</td>
+        <td class="num">${formatNumber(agg?.contactedScreens || 0)}</td>
+        <td class="num">${formatPercent(contactedConv)}</td>
+        <td class="num">${formatNumber(agg?.connects || 0)}</td>
+        <td class="num">${formatNumber(agg?.connectScreens || 0)}</td>
+        <td class="num">${formatPercent(connectsConv)}</td>
       `;
       tbody.appendChild(tr);
     });
 
-    const overallConv = totalContacted > 0 ? totalScreen / totalContacted : null;
+    const overallContactedConv = totalContacted > 0 ? totalContactedScreens / totalContacted : null;
+    const overallConnectsConv = totalConnects > 0 ? totalConnectScreens / totalConnects : null;
+    const convLabel = selectedWeekKey === "all" ? "All time conversion" : "2-week conversion";
 
     $("sourcingSummary").innerHTML = `
       <div class="kpi"><div class="label">Total Contacted</div><div class="value">${formatNumber(totalContacted)}</div></div>
-      <div class="kpi"><div class="label">Total Replied</div><div class="value">${formatNumber(totalReplied)}</div></div>
-      <div class="kpi"><div class="label">Total Recruiter Screens</div><div class="value">${formatNumber(totalScreen)}</div><div class="sub">${formatPercent(overallConv)} conversion</div></div>
+      <div class="kpi"><div class="label">Contacted Screens</div><div class="value">${formatNumber(totalContactedScreens)}</div><div class="sub">${formatPercent(overallContactedConv)} ${convLabel}</div></div>
+      <div class="kpi"><div class="label">Total Connects</div><div class="value">${formatNumber(totalConnects)}</div></div>
+      <div class="kpi"><div class="label">Connect Screens</div><div class="value">${formatNumber(totalConnectScreens)}</div><div class="sub">${formatPercent(overallConnectsConv)} ${convLabel}</div></div>
       <div class="kpi"><div class="label">Scope</div><div class="value">${selectedWeekKey === "all" ? "All time" : selectedWeekKey.replace("-", " ")}</div></div>
     `;
   }
@@ -1109,19 +1171,19 @@ document.addEventListener("DOMContentLoaded", () => {
       <div class="kpi"><div class="label">Hires (All time)</div><div class="value">${formatNumber(totalHires)}</div><div class="sub">${hiredRows.length ? "" : "No hire data yet."}</div></div>
     `;
 
-    const counts = { ok: 0, warn: 0, bad: 0 };
+    const counts = { healthy: 0, warning: 0, critical: 0 };
     overviewFiltered.forEach(r => {
       const role = getField(r, ["role"]);
       const value = normalizeHealthValue(getField(r, ["health"])) || healthByRole[role] || "";
-      if (value === "ok") counts.ok += 1;
-      else if (value === "warn") counts.warn += 1;
-      else if (value === "bad") counts.bad += 1;
+      if (value === "healthy") counts.healthy += 1;
+      else if (value === "warning") counts.warning += 1;
+      else if (value === "critical") counts.critical += 1;
     });
 
     $("managementHealthSummary").innerHTML = `
-      <div class="health-badge good"><span class="health-dot good"></span><span>${counts.ok} Healthy</span></div>
-      <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warn} At risk</span></div>
-      <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.bad} Critical</span></div>
+      <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
+      <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} At risk</span></div>
+      <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Critical</span></div>
     `;
 
     renderManagementCharts({
@@ -1155,7 +1217,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const sourceCanvas = $("managementSourceMixChart");
     if (!pipelineCanvas || !sourceCanvas) return;
 
-    const totalHealth = counts.ok + counts.warn + counts.bad;
+    const totalHealth = counts.healthy + counts.warning + counts.critical;
     const hasHealth = totalHealth > 0;
 
     const sourceMap = new Map();
@@ -1204,7 +1266,7 @@ document.addEventListener("DOMContentLoaded", () => {
         data: {
           labels: ["Healthy", "At risk", "Critical"],
           datasets: [{
-            data: [counts.ok, counts.warn, counts.bad],
+            data: [counts.healthy, counts.warning, counts.critical],
             backgroundColor: ["#22c55e", "#f59e0b", "#ef4444"]
           }]
         },
@@ -1344,7 +1406,7 @@ document.addEventListener("DOMContentLoaded", () => {
       cards.push({ role, health, notes });
     });
 
-    const order = { bad: 0, warn: 1, ok: 2, new: 3, unknown: 4 };
+    const order = { critical: 0, warning: 1, healthy: 2, unknown: 3 };
     cards.sort((a, b) => order[a.health] - order[b.health]);
 
     if (!cards.length) {
@@ -1353,8 +1415,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     container.innerHTML = cards.map(card => {
-      const openAttr = card.health === "bad" || card.health === "warn" ? " open" : "";
-      const healthLabel = card.health === "warn" ? "At risk" : (card.health === "bad" ? "Critical" : (card.health === "ok" ? "Healthy" : "Unknown"));
+      const openAttr = card.health === "critical" || card.health === "warning" ? " open" : "";
+      const healthLabel = card.health === "warning" ? "At risk" : (card.health === "critical" ? "Critical" : (card.health === "healthy" ? "Healthy" : "Unknown"));
 
       const sectionHtml = (title, items) => {
         if (!items.length) return "";
