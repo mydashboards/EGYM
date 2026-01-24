@@ -601,8 +601,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const s2 = num(step2Count);
     if (s1 < 3) return "critical";
     if (s1 < 6 && s2 < 3) return "critical";
-    if (s1 < 10 && s2 >= 4) return "healthy";
-    if (s1 >= 10 && s2 < 4) return "healthy";
     if (s1 < 10 && s2 < 4) return "warning";
     return "healthy";
   }
@@ -633,18 +631,32 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const eligibleSet = new Set(eligibleWeeks);
     const health = {};
+    const stageOrder = state.pipelineInventoryStageOrder || [];
+    const step1Stage = stageOrder[0];
+    const step2Stage = stageOrder[1];
+
     Object.keys(byRole).forEach(role => {
       let s1 = 0;
       let s2 = 0;
+      let total = 0;
+
       byRole[role].forEach(r => {
         const wk = weekKey(r);
         if (!wk) return;
         if (selectedWeekMeta && !eligibleSet.has(wk)) return;
         if (!r.stage || String(r.stage).startsWith("__")) return;
-        const stage = normalizeHealthStage(r.stage);
-        if (stage === "step1") s1 += num(r.count);
-        if (stage === "step2") s2 += num(r.count);
+
+        const count = num(r.count);
+        total += count;
+        if (step1Stage && r.stage === step1Stage) s1 += count;
+        if (step2Stage && r.stage === step2Stage) s2 += count;
       });
+
+      if (total === 0) {
+        health[role] = "";
+        return;
+      }
+
       health[role] = computeHealthFromCounts(s1, s2);
     });
     return health;
@@ -697,7 +709,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const rows = state.overviewRows || [];
     const hiredRows = state.hiredRows || [];
     const healthByRole = getHealthByRole(
-      state.pipelineWeeklyRows,
+      state.pipelineInventoryRows,
       state.roleTargets,
       state.selectedPipelineWeek === "all" ? "" : state.selectedPipelineWeek
     );
@@ -842,7 +854,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const healthByRole = getHealthByRole(
-      weekly,
+      inv,
       targets,
       selectedWeekKey === "all" ? "" : selectedWeekKey
     );
@@ -1124,7 +1136,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const selectedSourcingRecruiter = state.selectedSourcingRecruiter || "all";
 
     const healthByRole = getHealthByRole(
-      weeklyRows,
+      inventoryRows,
       state.roleTargets || [],
       selectedPipelineWeek === "all" ? "" : selectedPipelineWeek
     );
