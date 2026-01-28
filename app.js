@@ -535,7 +535,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const hasStage = Object.prototype.hasOwnProperty.call(rows[0], "stage");
     const hasCount = Object.prototype.hasOwnProperty.call(rows[0], "count");
-    const ignoredStages = new Set(["sourced", "contacted", "connects", "replied"]);
+    const ignoredStages = new Set(["sourced", "contacted", "connect", "connects", "replied"]);
     const isIgnoredStage = (stageValue) => ignoredStages.has(normalizeStageValue(stageValue));
 
     if (hasStage && hasCount) {
@@ -581,12 +581,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function normalizeSourcing(rows) {
     return rows.map(r => {
-      const contacted = num(getField(r, ["contacted"]));
+      const sourced = num(getField(r, ["sourced", "contacted"]));
       const legacyReplied = num(getField(r, ["replied"]));
       const legacyScreens = num(getField(r, ["recruiter_screen", "recruiter_screened"]));
-      const contactedScreens = num(getField(r, ["contacted_screens", "contacted_screened", "contacted_screen"])) || legacyScreens;
-      const connects = num(getField(r, ["connects"])) || legacyReplied;
-      const connectScreens = num(getField(r, ["connect_screens", "connect_screened", "connect_screen"])) || legacyScreens;
+      const sourcedScreens = num(getField(r, ["sourced_screens", "sourced_screen", "sourced_screened", "contacted_screens", "contacted_screen", "contacted_screened"])) || legacyScreens;
+      const connect = num(getField(r, ["connect", "connects", "connections", "connected", "replied"])) || legacyReplied;
+      const connectScreens = num(getField(r, ["connect_screens", "connect_screen", "connect_screened", "recruiter_screen", "recruiter_screened"])) || legacyScreens;
 
       return {
         year: num(getField(r, ["year"])),
@@ -594,12 +594,13 @@ document.addEventListener("DOMContentLoaded", () => {
         role: getField(r, ["role"]),
         recruiter: getField(r, ["recruiter"]),
         source: getField(r, ["source"]),
-        contacted,
+        sourced,
+        sourced_screens: sourcedScreens,
+        connect,
+        connect_screens: connectScreens,
+        connects: connect,
         replied: legacyReplied,
-        recruiter_screen: legacyScreens,
-        contacted_screens: contactedScreens,
-        connects,
-        connect_screens: connectScreens
+        recruiter_screen: legacyScreens
       };
     }).filter(r => r.year && r.kw && r.role);
   }
@@ -1085,8 +1086,8 @@ document.addEventListener("DOMContentLoaded", () => {
       thead.innerHTML = `
         <tr>
           <th>Role</th>
-          <th class="num">Contacted</th>
-          <th class="num">Contacted Screens</th>
+          <th class="num">Sourced</th>
+          <th class="num">Sourced Screens</th>
           <th class="num">${convLabel}</th>
           <th class="num">Connects</th>
           <th class="num">Connect Screens</th>
@@ -1095,35 +1096,35 @@ document.addEventListener("DOMContentLoaded", () => {
       `;
     }
 
-    let totalContacted = 0;
-    let totalContactedScreens = 0;
-    let totalConnects = 0;
+    let totalSourced = 0;
+    let totalSourcedScreens = 0;
+    let totalConnect = 0;
     let totalConnectScreens = 0;
 
     const byRole = new Map();
     filtered.forEach(r => {
       if (!byRole.has(r.role)) {
         byRole.set(r.role, {
-          contacted: 0,
-          contactedScreens: 0,
-          connects: 0,
+          sourced: 0,
+          sourcedScreens: 0,
+          connect: 0,
           connectScreens: 0
         });
       }
       const agg = byRole.get(r.role);
-      const contacted = num(r.contacted);
-      const contactedScreens = num(r.contacted_screens);
-      const connects = num(r.connects);
+      const sourced = num(r.sourced);
+      const sourcedScreens = num(r.sourced_screens);
+      const connect = num(r.connect);
       const connectScreens = num(r.connect_screens);
 
-      agg.contacted += contacted;
-      agg.contactedScreens += contactedScreens;
-      agg.connects += connects;
+      agg.sourced += sourced;
+      agg.sourcedScreens += sourcedScreens;
+      agg.connect += connect;
       agg.connectScreens += connectScreens;
 
-      totalContacted += contacted;
-      totalContactedScreens += contactedScreens;
-      totalConnects += connects;
+      totalSourced += sourced;
+      totalSourcedScreens += sourcedScreens;
+      totalConnect += connect;
       totalConnectScreens += connectScreens;
     });
 
@@ -1138,31 +1139,31 @@ document.addEventListener("DOMContentLoaded", () => {
 
     roleOrder.forEach(role => {
       const agg = byRole.get(role);
-      const contactedConv = agg && agg.contacted > 0 ? agg.contactedScreens / agg.contacted : null;
-      const connectsConv = agg && agg.connects > 0 ? agg.connectScreens / agg.connects : null;
+      const sourcedConv = agg && agg.sourced > 0 ? agg.sourcedScreens / agg.sourced : null;
+      const connectConv = agg && agg.connect > 0 ? agg.connectScreens / agg.connect : null;
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${role}</td>
-        <td class="num">${formatNumber(agg?.contacted || 0)}</td>
-        <td class="num">${formatNumber(agg?.contactedScreens || 0)}</td>
-        <td class="num">${formatPercent(contactedConv)}</td>
-        <td class="num">${formatNumber(agg?.connects || 0)}</td>
+        <td class="num">${formatNumber(agg?.sourced || 0)}</td>
+        <td class="num">${formatNumber(agg?.sourcedScreens || 0)}</td>
+        <td class="num">${formatPercent(sourcedConv)}</td>
+        <td class="num">${formatNumber(agg?.connect || 0)}</td>
         <td class="num">${formatNumber(agg?.connectScreens || 0)}</td>
-        <td class="num">${formatPercent(connectsConv)}</td>
+        <td class="num">${formatPercent(connectConv)}</td>
       `;
       tbody.appendChild(tr);
     });
 
-    const overallContactedConv = totalContacted > 0 ? totalContactedScreens / totalContacted : null;
-    const overallConnectsConv = totalConnects > 0 ? totalConnectScreens / totalConnects : null;
+    const overallSourcedConv = totalSourced > 0 ? totalSourcedScreens / totalSourced : null;
+    const overallConnectConv = totalConnect > 0 ? totalConnectScreens / totalConnect : null;
     const convLabel = selectedWeekKey === "all" ? "All time conversion" : "2-week conversion";
 
     $("sourcingSummary").innerHTML = `
-      <div class="kpi"><div class="label">Total Contacted</div><div class="value">${formatNumber(totalContacted)}</div></div>
-      <div class="kpi"><div class="label">Contacted Screens</div><div class="value">${formatNumber(totalContactedScreens)}</div><div class="sub">${formatPercent(overallContactedConv)} ${convLabel}</div></div>
-      <div class="kpi"><div class="label">Total Connects</div><div class="value">${formatNumber(totalConnects)}</div></div>
-      <div class="kpi"><div class="label">Connect Screens</div><div class="value">${formatNumber(totalConnectScreens)}</div><div class="sub">${formatPercent(overallConnectsConv)} ${convLabel}</div></div>
+      <div class="kpi"><div class="label">Total Sourced</div><div class="value">${formatNumber(totalSourced)}</div></div>
+      <div class="kpi"><div class="label">Sourced Screens</div><div class="value">${formatNumber(totalSourcedScreens)}</div><div class="sub">${formatPercent(overallSourcedConv)} ${convLabel}</div></div>
+      <div class="kpi"><div class="label">Total Connects</div><div class="value">${formatNumber(totalConnect)}</div></div>
+      <div class="kpi"><div class="label">Connect Screens</div><div class="value">${formatNumber(totalConnectScreens)}</div><div class="sub">${formatPercent(overallConnectConv)} ${convLabel}</div></div>
       <div class="kpi"><div class="label">Scope</div><div class="value">${selectedWeekKey === "all" ? "All time" : selectedWeekKey.replace("-", " ")}</div></div>
     `;
   }
