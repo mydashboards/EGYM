@@ -252,7 +252,7 @@
         </section>
       </section>
 
-      <!-- Management View (placeholder - we do next) -->
+      <!-- Management View -->
       <section id="managementView" class="hidden">
         <div class="card">
           <div class="card-head">
@@ -269,19 +269,14 @@
         </div>
         <div class="card">
           <div class="card-head">
-            <h3>Distribution</h3>
+            <h3>Role Insights</h3>
           </div>
-          <div class="table-wrap">
-            <div id="managementChartsEmpty" class="placeholder hidden">No chart data available.</div>
-            <div class="kpi-grid">
-              <canvas id="managementPipelineHealthChart" width="240" height="240"></canvas>
-              <canvas id="managementSourceMixChart" width="240" height="240"></canvas>
-            </div>
-          </div>
+          <div id="managementRoleInsights"></div>
         </div>
         <div class="card">
           <div class="card-head">
             <h3>Recruiter Utilization</h3>
+            <p class="muted small">Rolling 4 weeks (Step1 screens).</p>
           </div>
           <div id="managementRecruiterEmpty" class="placeholder hidden">No recruiter data available.</div>
           <div class="table-wrap">
@@ -289,8 +284,7 @@
               <thead>
                 <tr>
                   <th>Recruiter</th>
-                  <th class="num">Screens</th>
-                  <th class="num">Contacted</th>
+                  <th class="num">Screens (4W)</th>
                   <th class="num">Utilization</th>
                 </tr>
               </thead>
@@ -300,9 +294,11 @@
         </div>
         <div class="card">
           <div class="card-head">
-            <h3>Role Insights</h3>
+            <h3>Weekly Updates</h3>
+            <p class="muted small">Most recent updates from the last 4 weeks.</p>
           </div>
-          <div id="managementRoleInsights"></div>
+          <div id="managementUpdatesEmpty" class="placeholder hidden">No updates in the last 4 weeks.</div>
+          <div id="managementWeeklyUpdates"></div>
         </div>
       </section>
     </main>
