@@ -44,6 +44,7 @@ document.addEventListener("DOMContentLoaded", () => {
     pipelineInventory: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1802705167&single=true&output=csv",
     sourcing: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1825170360&single=true&output=csv",
     hired: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=756634566&single=true&output=csv",
+    roleTargets: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1524950504&single=true&output=csv",
     roleNotes: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1004956410&single=true&output=csv",
     weeklyUpdates: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1004956410&single=true&output=csv"
   };
@@ -54,6 +55,7 @@ document.addEventListener("DOMContentLoaded", () => {
     pipelineInventory: "pipeline_inventory",
     sourcing: "sourcing_data",
     hired: "hired_data",
+    roleTargets: "role_targets",
     roleNotes: "role_notes",
     weeklyUpdates: "weekly_updates"
   };
@@ -71,6 +73,7 @@ document.addEventListener("DOMContentLoaded", () => {
     pipelineInventoryStageOrder: [],
     sourcingRows: [],
     hiredRows: [],
+    roleTargets: [],
     roleNotesRows: [],
     weeklyUpdatesRows: [],
 
@@ -352,7 +355,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function setSelectOptions(select, options, includeAllTime = false) {
-    if (!select) return;
     const current = select.value;
     select.innerHTML = "";
 
@@ -377,7 +379,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function setFilterOptions(select, values, allLabel) {
-    if (!select) return;
     const current = select.value;
     select.innerHTML = "";
 
@@ -426,26 +427,6 @@ document.addEventListener("DOMContentLoaded", () => {
     return normalizeHeader(String(value || ""));
   }
 
-  const PIPELINE_STAGE_ORDER = ["sourced", "step1", "step2", "step3", "final", "offer", "hired"];
-
-  function normalizePipelineStage(value) {
-    const normalized = normalizeStageValue(value);
-    const collapsed = normalized.replace(/_/g, "");
-    if (!collapsed) return "";
-    if (collapsed === "sourced" || collapsed === "contacted" || collapsed === "sourcedcontacted") return "sourced";
-    if (collapsed === "step1" || collapsed === "stepone") return "step1";
-    if (collapsed === "step2" || collapsed === "steptwo") return "step2";
-    if (collapsed === "step3" || collapsed === "stepthree") return "step3";
-    if (collapsed === "final" || collapsed === "finalinterview") return "final";
-    if (collapsed === "offer" || collapsed === "offered") return "offer";
-    if (collapsed === "hired" || collapsed === "hire") return "hired";
-    return "";
-  }
-
-  function isPipelineStage(stage) {
-    return PIPELINE_STAGE_ORDER.includes(stage);
-  }
-
   function getStageOrderFromRows(rows, coreKeys) {
     if (!rows.length) return [];
     const order = [];
@@ -462,7 +443,6 @@ document.addEventListener("DOMContentLoaded", () => {
   function formatStageLabel(stage) {
     const original = String(stage || "").trim();
     if (!original) return "";
-    if (normalizeStageValue(original) === "sourced") return "Sourced/Contacted";
     if (/[A-Z]/.test(original)) return original;
     return original
       .replace(/[_-]+/g, " ")
@@ -470,17 +450,17 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function healthDotHTML(health) {
-    if (health === "green") return `<span class="status-dot good" title="Green"></span>`;
-    if (health === "yellow") return `<span class="status-dot warn" title="Yellow"></span>`;
-    if (health === "red") return `<span class="status-dot bad" title="Red"></span>`;
-    return "";
+    if (health === "healthy") return `<span class="status-dot good" title="Healthy"></span>`;
+    if (health === "warning") return `<span class="status-dot warn" title="At risk"></span>`;
+    if (health === "critical") return `<span class="status-dot bad" title="Critical"></span>`;
+    return `<span class="status-dot neutral" title="New/Unknown"></span>`;
   }
 
   function normalizeHealthValue(value) {
     const normalized = normalizeHeader(String(value || ""));
-    if (normalized.includes("red") || normalized.includes("critical")) return "red";
-    if (normalized.includes("yellow") || normalized.includes("warning") || normalized.includes("risk") || normalized.includes("at_risk")) return "yellow";
-    if (normalized.includes("green") || normalized.includes("healthy") || normalized.includes("good")) return "green";
+    if (normalized.includes("critical")) return "critical";
+    if (normalized.includes("warning") || normalized.includes("risk") || normalized.includes("at_risk")) return "warning";
+    if (normalized.includes("healthy") || normalized.includes("good")) return "healthy";
     return "";
   }
 
@@ -497,31 +477,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (looksLong) {
       state.pipelineWeeklyStageOrder = [];
-      return rows.map(r => {
-        const stage = normalizePipelineStage(getField(r, ["stage"]));
-        if (!stage || stage === "sourced") return null;
-        return {
-          year: num(getField(r, ["year"])),
-          kw: num(getField(r, ["kw"])),
-          role: getField(r, ["role"]),
-          recruiter: getField(r, ["recruiter"]),
-          stage,
-          count: num(getField(r, ["count"])),
-        };
-      }).filter(r => r && r.year && r.kw && r.role && r.stage);
+      return rows.map(r => ({
+        year: num(getField(r, ["year"])),
+        kw: num(getField(r, ["kw"])),
+        role: getField(r, ["role"]),
+        recruiter: getField(r, ["recruiter"]),
+        stage: normalizeStageValue(getField(r, ["stage"])),
+        count: num(getField(r, ["count"])),
+      })).filter(r => r.year && r.kw && r.role && r.stage);
     }
 
-    const stageColumns = [];
+    const stageOrder = [];
     const seen = new Set();
     (headers.length ? headers : Object.keys(rows[0] || {})).forEach(k => {
       const nk = normalizeHeader(k);
-      if (!nk || coreKeys.has(nk)) return;
-      const stageKey = normalizePipelineStage(nk);
-      if (!stageKey || stageKey === "sourced" || seen.has(stageKey)) return;
-      seen.add(stageKey);
-      stageColumns.push({ header: nk, stage: stageKey });
+      if (!nk || coreKeys.has(nk) || seen.has(nk)) return;
+      seen.add(nk);
+      stageOrder.push(nk);
     });
-    state.pipelineWeeklyStageOrder = stageColumns.map(item => item.stage);
+    state.pipelineWeeklyStageOrder = stageOrder;
 
     rows.forEach(r => {
       const year = num(getField(r, ["year"]));
@@ -532,12 +506,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
       let pushedAny = false;
 
-      stageColumns.forEach(({ header, stage }) => {
-        const count = num(r[header]);
+      stageOrder.forEach(stageKey => {
+        const count = num(r[stageKey]);
         if (!Number.isFinite(count)) return;
         if (count === 0) return;
         pushedAny = true;
-        long.push({ year, kw, role, recruiter, stage, count });
+        long.push({ year, kw, role, recruiter, stage: stageKey, count });
       });
 
       // IMPORTANT: keep the role visible for that week even if all counts are 0/blank
@@ -561,25 +535,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (hasStage && hasCount) {
       state.pipelineInventoryStageOrder = [];
-      return rows.map(r => {
-        const stage = normalizePipelineStage(getField(r, ["stage"]));
-        if (!stage || stage === "sourced") return null;
-        return {
-          year: num(getField(r, ["year"])),
-          kw: num(getField(r, ["kw"])),
-          role: getField(r, ["role"]),
-          recruiter: getField(r, ["recruiter"]),
-          stage,
-          count: num(getField(r, ["count"])),
-          stage_order: getField(r, ["stage_order"])
-        };
-      }).filter(r => r && r.year && r.kw && r.role && r.stage);
+      return rows.map(r => ({
+        year: num(getField(r, ["year"])),
+        kw: num(getField(r, ["kw"])),
+        role: getField(r, ["role"]),
+        recruiter: getField(r, ["recruiter"]),
+        stage: getField(r, ["stage"]),
+        count: num(getField(r, ["count"])),
+        stage_order: getField(r, ["stage_order"])
+      })).filter(r => r.year && r.kw && r.role && r.stage);
     }
 
     const coreKeys = new Set(["role", "kw", "year", "week_start", "recruiter", "health", "stage_order"]);
-    state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys)
-      .map(normalizePipelineStage)
-      .filter(stage => stage && stage !== "sourced");
+    state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys);
     const long = [];
     rows.forEach(r => {
       const year = num(getField(r, ["year"]));
@@ -591,15 +559,13 @@ document.addEventListener("DOMContentLoaded", () => {
       Object.keys(r).forEach(k => {
         const nk = normalizeHeader(k);
         if (coreKeys.has(nk)) return;
-        const stage = normalizePipelineStage(nk);
-        if (!stage || stage === "sourced") return;
         const count = num(r[k]); // keep zeros so roles/stages remain visible
         long.push({
           year,
           kw,
           role,
           recruiter,
-          stage,
+          stage: nk,
           count,
           stage_order: null
         });
@@ -611,9 +577,11 @@ document.addEventListener("DOMContentLoaded", () => {
   function normalizeSourcing(rows) {
     return rows.map(r => {
       const contacted = num(getField(r, ["contacted"]));
-      const contactedScreens = num(getField(r, ["contacted_screens", "contacted_screened", "contacted_screen"]));
-      const connects = num(getField(r, ["connects"]));
-      const connectScreens = num(getField(r, ["connect_screens", "connect_screened", "connect_screen"]));
+      const legacyReplied = num(getField(r, ["replied"]));
+      const legacyScreens = num(getField(r, ["recruiter_screen", "recruiter_screened"]));
+      const contactedScreens = num(getField(r, ["contacted_screens", "contacted_screened", "contacted_screen"])) || legacyScreens;
+      const connects = num(getField(r, ["connects"])) || legacyReplied;
+      const connectScreens = num(getField(r, ["connect_screens", "connect_screened", "connect_screen"])) || legacyScreens;
 
       return {
         year: num(getField(r, ["year"])),
@@ -622,11 +590,27 @@ document.addEventListener("DOMContentLoaded", () => {
         recruiter: getField(r, ["recruiter"]),
         source: getField(r, ["source"]),
         contacted,
+        replied: legacyReplied,
+        recruiter_screen: legacyScreens,
         contacted_screens: contactedScreens,
         connects,
         connect_screens: connectScreens
       };
     }).filter(r => r.year && r.kw && r.role);
+  }
+
+  function normalizeTargets(rows) {
+    return rows.map(r => ({
+      role: getField(r, ["role"]),
+      lookback_weeks: num(getField(r, ["lookback_weeks", "lookback"])),
+      min_prev_stage_n: num(getField(r, ["min_prev_stage_n", "min_n"])),
+      step1_from_sourced: num(getField(r, ["step1_from_sourced"])),
+      step2_from_step1: num(getField(r, ["step2_from_step1"])),
+      step3_from_step2: num(getField(r, ["step3_from_step2"])),
+      final_from_step3: num(getField(r, ["final_from_step3"])),
+      offer_from_final: num(getField(r, ["offer_from_final"])),
+      hired_from_offer: num(getField(r, ["hired_from_offer"]))
+    })).filter(r => r.role);
   }
 
   function normalizeRoleNotes(rows) {
@@ -653,30 +637,29 @@ document.addEventListener("DOMContentLoaded", () => {
   /* ---------------- HEALTH (RAG) ---------------- */
 
   function normalizeHealthStage(value) {
-    return normalizePipelineStage(value);
+    const normalized = normalizeStageValue(value);
+    const collapsed = normalized.replace(/_/g, "");
+    if (collapsed === "step1") return "step1";
+    if (collapsed === "step2") return "step2";
+    return normalized;
   }
 
   function computeHealthFromCounts(step1Count, step2Count) {
     const s1 = num(step1Count);
     const s2 = num(step2Count);
-    if (s1 < 3) return "red";
-    if (s1 < 6 && s2 < 3) return "red";
-    if (s1 < 10 && s2 < 5) return "yellow";
-    return "green";
+    if (s1 === 0 && s2 === 0) return "unknown";
+    if (s1 < 3) return "critical";
+    if (s1 < 6 && s2 < 3) return "critical";
+    if (s1 < 10 && s2 < 4) return "warning";
+    return "healthy";
   }
 
-  function getHealthByRole(inventoryRows, endWeekKey, roles = [], filters = {}) {
+  function getHealthByRole(weeklyRows, endWeekKey, filters = {}) {
     const { roleFilter = "all", recruiterFilter = "all" } = filters;
     const windowKeys = new Set(getRollingWeekKeys(endWeekKey, 4));
     const byRole = new Map();
 
-    roles.forEach(role => {
-      if (!role) return;
-      if (roleFilter !== "all" && role !== roleFilter) return;
-      byRole.set(role, { step1: 0, step2: 0 });
-    });
-
-    inventoryRows.forEach(r => {
+    weeklyRows.forEach(r => {
       if (!r.role) return;
       if (roleFilter !== "all" && r.role !== roleFilter) return;
       if (recruiterFilter !== "all" && r.recruiter !== recruiterFilter) return;
@@ -746,11 +729,9 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderOverview() {
     const rows = state.overviewRows || [];
     const hiredRows = state.hiredRows || [];
-    const inventoryRows = state.pipelineInventoryRows || [];
     const healthByRole = getHealthByRole(
-      inventoryRows,
-      TODAY_WEEK_KEY,
-      rows.map(r => getField(r, ["role"]))
+      state.pipelineWeeklyRows,
+      TODAY_WEEK_KEY
     );
 
     const hiresByRole = {};
@@ -775,31 +756,28 @@ document.addEventListener("DOMContentLoaded", () => {
       return s + adjusted;
     }, 0);
 
-    const counts = { green: 0, yellow: 0, red: 0 };
+    const counts = { healthy: 0, warning: 0, critical: 0 };
     rows.forEach(r => {
       const role = getField(r, ["role"]);
-      const h = healthByRole[role];
-      if (h === "green") counts.green += 1;
-      else if (h === "yellow") counts.yellow += 1;
-      else if (h === "red") counts.red += 1;
+      const h = healthByRole[role] || "unknown";
+      if (h === "healthy") counts.healthy += 1;
+      else if (h === "warning") counts.warning += 1;
+      else if (h === "critical") counts.critical += 1;
     });
 
-    const overviewCards = $("overviewCards");
-    if (overviewCards) overviewCards.innerHTML = `
+    $("overviewCards").innerHTML = `
       <div class="kpi"><div class="label">Open Roles</div><div class="value">${openRoles}</div></div>
       <div class="kpi"><div class="label">Filled Roles</div><div class="value">${filledRoles}</div></div>
       <div class="kpi"><div class="label">Total Openings</div><div class="value">${totalOpenings}</div></div>
     `;
 
-    const overviewHealthSummary = $("overviewHealthSummary");
-    if (overviewHealthSummary) overviewHealthSummary.innerHTML = `
-      <div class="health-badge good"><span class="health-dot good"></span><span>${counts.green} Green</span></div>
-      <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.yellow} Yellow</span></div>
-      <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.red} Red</span></div>
+    $("overviewHealthSummary").innerHTML = `
+      <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
+      <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} At risk</span></div>
+      <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Critical</span></div>
     `;
 
     const tbody = $("overviewTable");
-    if (!tbody) return;
     tbody.innerHTML = "";
 
     rows.forEach(r => {
@@ -811,7 +789,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ? Math.max(0, baseOpenings - (hiresByRole[role] || 0))
         : baseOpenings;
       const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap", "owner", "recruiter"]);
-      const h = healthByRole[role] || "red";
+      const h = healthByRole[role] || "unknown";
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -828,46 +806,45 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /* ---------------- RENDER: PIPELINE ---------------- */
 
-  function getSourcedCountsByRole(sourcingRows, selectedWeekKey, roleFilter = "all", recruiterFilter = "all") {
-    const byRole = new Map();
-    sourcingRows.forEach(r => {
+  function getStagesForInventory(rows, selectedWeekKey, stageOrder) {
+    const stageMap = new Map();
+    rows.forEach(r => {
       if (!isWeekMatch(r, selectedWeekKey)) return;
-      if (roleFilter !== "all" && r.role !== roleFilter) return;
-      if (recruiterFilter !== "all" && r.recruiter !== recruiterFilter) return;
-      const role = r.role;
-      if (!role) return;
-      if (!byRole.has(role)) byRole.set(role, 0);
-      byRole.set(role, byRole.get(role) + num(r.contacted));
+      const label = String(getField(r, ["stage"]) || r.stage || "").trim();
+      if (!label) return;
+      if (!stageMap.has(label)) {
+        const so = getField(r, ["stage_order"]);
+        stageMap.set(label, { label, order: so === "" ? null : num(so) });
+      }
     });
-    return byRole;
-  }
 
-  function getPipelineStagesForDisplay(inventoryRows, selectedWeekKey, sourcingRows) {
-    const present = new Set();
-    inventoryRows.forEach(r => {
-      if (!isWeekMatch(r, selectedWeekKey)) return;
-      if (!r.stage) return;
-      if (isPipelineStage(r.stage)) present.add(r.stage);
+    if (Array.isArray(stageOrder) && stageOrder.length) {
+      return stageOrder
+        .filter(label => stageMap.has(label))
+        .map(label => stageMap.get(label));
+    }
+
+    return Array.from(stageMap.values()).sort((a, b) => {
+      const ao = Number.isFinite(a.order) ? a.order : null;
+      const bo = Number.isFinite(b.order) ? b.order : null;
+      if (ao !== null && bo !== null && ao !== bo) return ao - bo;
+      if (ao !== null && bo === null) return -1;
+      if (ao === null && bo !== null) return 1;
+      return a.label.localeCompare(b.label);
     });
-    sourcingRows.forEach(r => {
-      if (!isWeekMatch(r, selectedWeekKey)) return;
-      if (num(r.contacted) > 0) present.add("sourced");
-    });
-    return PIPELINE_STAGE_ORDER.filter(stage => present.has(stage));
   }
 
   function renderPipeline() {
     const inv = state.pipelineInventoryRows || [];
-    const sourcingRows = state.sourcingRows || [];
+    const weekly = state.pipelineWeeklyRows || [];
     const selectedWeekKey = state.selectedPipelineWeek || "";
 
     const emptyEl = $("pipelineEmpty");
     const thead = document.querySelector("#pipeline table thead");
     const tbody = $("pipelineTable");
-    if (!tbody) return;
     tbody.innerHTML = "";
 
-    const stages = getPipelineStagesForDisplay(inv, selectedWeekKey, sourcingRows).map(stage => ({ label: stage }));
+    const stages = getStagesForInventory(inv, selectedWeekKey, state.pipelineInventoryStageOrder);
 
     const roles = new Set();
     const countsByRole = new Map();
@@ -876,19 +853,12 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!isWeekMatch(r, selectedWeekKey)) return;
       const role = getField(r, ["role"]) || r.role;
       const stage = getField(r, ["stage"]) || r.stage;
-      if (!role || !stage || !isPipelineStage(stage)) return;
+      if (!role || !stage) return;
       roles.add(role);
 
       if (!countsByRole.has(role)) countsByRole.set(role, new Map());
       const sm = countsByRole.get(role);
       sm.set(stage, (sm.get(stage) || 0) + num(getField(r, ["count"]) || r.count));
-    });
-
-    const sourcedByRole = getSourcedCountsByRole(sourcingRows, selectedWeekKey);
-    sourcedByRole.forEach((count, role) => {
-      if (!countsByRole.has(role)) countsByRole.set(role, new Map());
-      countsByRole.get(role).set("sourced", count);
-      roles.add(role);
     });
 
     if (thead) {
@@ -903,9 +873,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const healthByRole = getHealthByRole(
-      inv,
-      TODAY_WEEK_KEY,
-      Array.from(roles)
+      weekly,
+      TODAY_WEEK_KEY
     );
 
     const roleList = [];
@@ -917,22 +886,17 @@ document.addEventListener("DOMContentLoaded", () => {
       seen.add(role);
       roleList.push(role);
     });
-    sourcedByRole.forEach((_count, role) => {
-      if (!role || seen.has(role)) return;
-      seen.add(role);
-      roleList.push(role);
-    });
 
     if (!roleList.length) {
-      if (emptyEl) emptyEl.classList.remove("hidden");
+      emptyEl.classList.remove("hidden");
       return;
     }
-    if (emptyEl) emptyEl.classList.add("hidden");
+    emptyEl.classList.add("hidden");
 
     roleList.forEach(role => {
       const sm = countsByRole.get(role) || new Map();
       const stageCells = stages.map(s => `<td class="num">${formatNumber(sm.get(s.label) || 0)}</td>`).join("");
-      const h = healthByRole[role] || "red";
+      const h = healthByRole[role] || "unknown";
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -947,48 +911,34 @@ document.addEventListener("DOMContentLoaded", () => {
   /* ---------------- RENDER: ACTIVITY ---------------- */
 
   function getActivityStages(weeklyRows, stageOrder) {
+    if (Array.isArray(stageOrder) && stageOrder.length) return stageOrder;
     const stages = [];
     const seen = new Set();
     weeklyRows.forEach(r => {
       if (!r.stage) return;
       if (String(r.stage).startsWith("__")) return; // ignore placeholder stage
-      if (!isPipelineStage(r.stage)) return;
       if (seen.has(r.stage)) return;
       seen.add(r.stage);
       stages.push(r.stage);
     });
-    const ordered = PIPELINE_STAGE_ORDER.filter(stage => seen.has(stage));
-    return ordered.length ? ordered : stages;
+    return stages;
   }
 
   function updateActivityFilters() {
     const selectedWeekKey = state.selectedActivityWeek || "";
     const weekly = state.pipelineWeeklyRows || [];
-    const sourcing = state.sourcingRows || [];
     const roles = getOrderedValues(weekly, selectedWeekKey, r => r.role);
     const recruiters = getOrderedValues(weekly, selectedWeekKey, r => r.recruiter);
-    const sourcedRoles = getOrderedValues(sourcing, selectedWeekKey, r => r.role);
-    const sourcedRecruiters = getOrderedValues(sourcing, selectedWeekKey, r => r.recruiter);
-
-    sourcedRoles.forEach(role => {
-      if (!roles.includes(role)) roles.push(role);
-    });
-    sourcedRecruiters.forEach(rec => {
-      if (!recruiters.includes(rec)) recruiters.push(rec);
-    });
 
     setFilterOptions($("activityRoleSelect"), roles, "All roles");
     setFilterOptions($("activityRecruiterSelect"), recruiters, "All recruiters");
 
-    const activityRoleSelect = $("activityRoleSelect");
-    const activityRecruiterSelect = $("activityRecruiterSelect");
-    if (activityRoleSelect) state.selectedActivityRole = activityRoleSelect.value;
-    if (activityRecruiterSelect) state.selectedActivityRecruiter = activityRecruiterSelect.value;
+    state.selectedActivityRole = $("activityRoleSelect").value;
+    state.selectedActivityRecruiter = $("activityRecruiterSelect").value;
   }
 
   function renderActivity() {
     const weekly = state.pipelineWeeklyRows || [];
-    const sourcingRows = state.sourcingRows || [];
     const selectedWeekKey = state.selectedActivityWeek || "";
     const selectedRole = state.selectedActivityRole || "all";
     const selectedRecruiter = state.selectedActivityRecruiter || "all";
@@ -1000,19 +950,12 @@ document.addEventListener("DOMContentLoaded", () => {
       return true;
     });
 
-    const sourcedByRole = getSourcedCountsByRole(sourcingRows, selectedWeekKey, selectedRole, selectedRecruiter);
-    const sourcedRows = Array.from(sourcedByRole.entries()).map(([role, count]) => ({
-      role,
-      stage: "sourced",
-      count
-    }));
-    const combined = filtered.concat(sourcedRows);
-    const stages = getActivityStages(combined, state.pipelineWeeklyStageOrder);
+    const stages = getActivityStages(filtered, state.pipelineWeeklyStageOrder);
     const roles = [];
     const seen = new Set();
     const countsByRole = new Map();
 
-    combined.forEach(r => {
+    filtered.forEach(r => {
       if (!r.role) return;
       if (!seen.has(r.role)) {
         seen.add(r.role);
@@ -1020,7 +963,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       if (!r.stage || String(r.stage).startsWith("__")) return;
-      if (!isPipelineStage(r.stage)) return;
       if (!countsByRole.has(r.role)) countsByRole.set(r.role, new Map());
       const sm = countsByRole.get(r.role);
       sm.set(r.stage, (sm.get(r.stage) || 0) + num(r.count));
@@ -1038,7 +980,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const tbody = $("activityTable");
-    if (!tbody) return;
     tbody.innerHTML = "";
 
     roles.forEach(role => {
@@ -1060,7 +1001,11 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!selectedWeekKey || selectedWeekKey === "all") return [];
     const selected = getWeekYearFromKey(selectedWeekKey);
     if (!selected) return [];
-    return getRollingWeekKeys(selectedWeekKey, 4);
+    const keys = [selectedWeekKey];
+    if (selected.kw > 1) {
+      keys.push(`${selected.year}-KW${String(selected.kw - 1).padStart(2, "0")}`);
+    }
+    return keys;
   }
 
   function isSourcingWeekInWindow(row, selectedWeekKey) {
@@ -1082,10 +1027,8 @@ document.addEventListener("DOMContentLoaded", () => {
     setFilterOptions($("sourcingRoleSelect"), roles, "All roles");
     setFilterOptions($("sourcingRecruiterSelect"), recruiters, "All recruiters");
 
-    const sourcingRoleSelect = $("sourcingRoleSelect");
-    const sourcingRecruiterSelect = $("sourcingRecruiterSelect");
-    if (sourcingRoleSelect) state.selectedSourcingRole = sourcingRoleSelect.value;
-    if (sourcingRecruiterSelect) state.selectedSourcingRecruiter = sourcingRecruiterSelect.value;
+    state.selectedSourcingRole = $("sourcingRoleSelect").value;
+    state.selectedSourcingRecruiter = $("sourcingRecruiterSelect").value;
   }
 
   function renderSourcing() {
@@ -1102,12 +1045,11 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     const tbody = $("sourcingTable");
-    if (!tbody) return;
     tbody.innerHTML = "";
 
     const thead = document.querySelector("#sourcing table thead");
     if (thead) {
-      const convLabel = selectedWeekKey === "all" ? "Conv. (all time)" : "Conv. (4w)";
+      const convLabel = selectedWeekKey === "all" ? "Conv. (all time)" : "Conv. (2w)";
       thead.innerHTML = `
         <tr>
           <th>Role</th>
@@ -1182,10 +1124,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const overallContactedConv = totalContacted > 0 ? totalContactedScreens / totalContacted : null;
     const overallConnectsConv = totalConnects > 0 ? totalConnectScreens / totalConnects : null;
-    const convLabel = selectedWeekKey === "all" ? "All time conversion" : "4-week conversion";
+    const convLabel = selectedWeekKey === "all" ? "All time conversion" : "2-week conversion";
 
-    const sourcingSummary = $("sourcingSummary");
-    if (sourcingSummary) sourcingSummary.innerHTML = `
+    $("sourcingSummary").innerHTML = `
       <div class="kpi"><div class="label">Total Contacted</div><div class="value">${formatNumber(totalContacted)}</div></div>
       <div class="kpi"><div class="label">Contacted Screens</div><div class="value">${formatNumber(totalContactedScreens)}</div><div class="sub">${formatPercent(overallContactedConv)} ${convLabel}</div></div>
       <div class="kpi"><div class="label">Total Connects</div><div class="value">${formatNumber(totalConnects)}</div></div>
@@ -1200,7 +1141,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const overviewRows = state.overviewRows || [];
     const hiredRows = state.hiredRows || [];
     const weeklyRows = state.pipelineWeeklyRows || [];
-    const inventoryRows = state.pipelineInventoryRows || [];
     const roleNotesRows = state.roleNotesRows || [];
     const weeklyUpdatesRows = state.weeklyUpdatesRows || [];
 
@@ -1209,9 +1149,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const selectedRecruiter = state.selectedActivityRecruiter || "all";
 
     const healthByRole = getHealthByRole(
-      inventoryRows,
+      weeklyRows,
       TODAY_WEEK_KEY,
-      overviewRows.map(r => getField(r, ["role"])),
       { roleFilter: selectedRole, recruiterFilter: selectedRecruiter }
     );
 
@@ -1253,28 +1192,26 @@ document.addEventListener("DOMContentLoaded", () => {
       return sum + 1;
     }, 0);
 
-    const managementKpis = $("managementKpis");
-    if (managementKpis) managementKpis.innerHTML = `
+    $("managementKpis").innerHTML = `
       <div class="kpi"><div class="label">Open Roles</div><div class="value">${formatNumber(openRoles)}</div></div>
       <div class="kpi"><div class="label">Weekly Activity</div><div class="value">${formatNumber(weeklyActivity)}</div></div>
       <div class="kpi"><div class="label">Step1 Screens</div><div class="value">${formatNumber(step1ScreensRolling)}</div><div class="sub">Rolling 4 weeks</div></div>
       <div class="kpi"><div class="label">Hires</div><div class="value">${formatNumber(totalHires)}</div><div class="sub">All time${hiredRows.length ? "" : " · No hire data yet."}</div></div>
     `;
 
-    const counts = { green: 0, yellow: 0, red: 0 };
+    const counts = { healthy: 0, warning: 0, critical: 0 };
     overviewFiltered.forEach(r => {
       const role = getField(r, ["role"]);
       const value = healthByRole[role] || "";
-      if (value === "green") counts.green += 1;
-      else if (value === "yellow") counts.yellow += 1;
-      else if (value === "red") counts.red += 1;
+      if (value === "healthy") counts.healthy += 1;
+      else if (value === "warning") counts.warning += 1;
+      else if (value === "critical") counts.critical += 1;
     });
 
-    const managementHealthSummary = $("managementHealthSummary");
-    if (managementHealthSummary) managementHealthSummary.innerHTML = `
-      <div class="health-badge good"><span class="health-dot good"></span><span>${counts.green} Green</span></div>
-      <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.yellow} Yellow</span></div>
-      <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.red} Red</span></div>
+    $("managementHealthSummary").innerHTML = `
+      <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
+      <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} At risk</span></div>
+      <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Critical</span></div>
     `;
 
     renderManagementRecruiters({
@@ -1395,12 +1332,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (!notes.challenges.length && !notes.highlights.length) return;
 
-      const health = healthByRole[role] || "red";
+      const health = healthByRole[role] || "unknown";
       cards.push({ role, health, notes });
     });
 
-    const order = { red: 0, yellow: 1, green: 2 };
-    cards.sort((a, b) => (order[a.health] ?? 99) - (order[b.health] ?? 99));
+    const order = { critical: 0, warning: 1, healthy: 2, unknown: 3 };
+    cards.sort((a, b) => order[a.health] - order[b.health]);
 
     if (!cards.length) {
       container.innerHTML = `<div class="placeholder">No role insights for this week.</div>`;
@@ -1408,8 +1345,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     container.innerHTML = cards.map(card => {
-      const openAttr = card.health === "red" || card.health === "yellow" ? " open" : "";
-      const healthLabel = card.health === "yellow" ? "Yellow" : (card.health === "red" ? "Red" : "Green");
+      const openAttr = card.health === "critical" || card.health === "warning" ? " open" : "";
+      const healthLabel = card.health === "warning" ? "At risk" : (card.health === "critical" ? "Critical" : (card.health === "healthy" ? "Healthy" : "Unknown"));
 
       const sectionHtml = (title, items) => {
         if (!items.length) return "";
@@ -1509,7 +1446,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const tbody = $("hiresTable");
     const empty = $("hiresEmpty");
 
-    if (!tbody || !empty) return;
     tbody.innerHTML = "";
 
     if (!rows.length) {
@@ -1556,8 +1492,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const avgTth = average(tthValues);
     const avgTtf = average(ttfValues);
 
-    const hiresKpis = $("hiresKpis");
-    if (hiresKpis) hiresKpis.innerHTML = `
+    $("hiresKpis").innerHTML = `
       <div class="kpi"><div class="label">Total Hires</div><div class="value">${formatNumber(rows.length)}</div></div>
       <div class="kpi"><div class="label">Avg TTH</div><div class="value">${avgTth !== null ? avgTth.toFixed(1) : "—"}</div></div>
       <div class="kpi"><div class="label">Avg TTF</div><div class="value">${avgTtf !== null ? avgTtf.toFixed(1) : "—"}</div></div>
@@ -1577,10 +1512,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const managementView = $("managementView");
 
     const isContributor = view === "contributor";
-    if (contributorBtn) contributorBtn.classList.toggle("active", isContributor);
-    if (managementBtn) managementBtn.classList.toggle("active", !isContributor);
-    if (contributorView) contributorView.classList.toggle("hidden", !isContributor);
-    if (managementView) managementView.classList.toggle("hidden", isContributor);
+    contributorBtn.classList.toggle("active", isContributor);
+    managementBtn.classList.toggle("active", !isContributor);
+    contributorView.classList.toggle("hidden", !isContributor);
+    managementView.classList.toggle("hidden", isContributor);
   }
 
   /* ---------------- WEEK SELECTIONS ---------------- */
@@ -1613,12 +1548,9 @@ document.addEventListener("DOMContentLoaded", () => {
       state.selectedSourcingWeek = pickPreferredWeekKey(state.sourcingOptions, PREFERRED_KW, PREFERRED_YEAR) || (state.sourcingOptions[0]?.key || "all");
     }
 
-    const pipelineSelect = $("pipelineWeekSelect");
-    const activitySelect = $("activityWeekSelect");
-    const sourcingSelect = $("sourcingWeekSelect");
-    if (pipelineSelect) pipelineSelect.value = state.selectedPipelineWeek;
-    if (activitySelect) activitySelect.value = state.selectedActivityWeek;
-    if (sourcingSelect) sourcingSelect.value = state.selectedSourcingWeek;
+    $("pipelineWeekSelect").value = state.selectedPipelineWeek;
+    $("activityWeekSelect").value = state.selectedActivityWeek;
+    $("sourcingWeekSelect").value = state.selectedSourcingWeek;
 
     updateActivityFilters();
     updateSourcingFilters();
@@ -1650,6 +1582,7 @@ document.addEventListener("DOMContentLoaded", () => {
         pipelineInventoryRaw,
         sourcingRaw,
         hiredRaw,
+        targetsRaw,
         roleNotesRaw
       ] = await Promise.all([
         loadCSV("overview", CSV.overview),
@@ -1657,6 +1590,7 @@ document.addEventListener("DOMContentLoaded", () => {
         loadCSV("pipelineInventory", CSV.pipelineInventory),
         loadCSV("sourcing", CSV.sourcing),
         loadCSV("hired", CSV.hired),
+        loadCSV("roleTargets", CSV.roleTargets),
         loadCSV("roleNotes", CSV.roleNotes)
       ]);
 
@@ -1674,14 +1608,14 @@ document.addEventListener("DOMContentLoaded", () => {
       state.pipelineInventoryRows = normalizePipelineInventory(pipelineInventoryRaw || []);
       state.sourcingRows = normalizeSourcing(sourcingRaw || []);
       state.hiredRows = hiredRaw || [];
+      state.roleTargets = normalizeTargets(targetsRaw || []);
       state.roleNotesRows = normalizeRoleNotes(roleNotesRaw || []);
       state.weeklyUpdatesRows = normalizeWeeklyUpdates(weeklyUpdatesRaw || []);
 
       syncWeekSelections();
       renderAll();
 
-      const lastUpdated = $("lastUpdated");
-      if (lastUpdated) lastUpdated.textContent = `Last updated: ${fmtDate()}`;
+      $("lastUpdated").textContent = `Last updated: ${fmtDate()}`;
     } catch (e) {
       console.error(e);
     }
@@ -1690,57 +1624,43 @@ document.addEventListener("DOMContentLoaded", () => {
   /* ---------------- EVENT HANDLERS ---------------- */
 
   function handlePipelineWeekChange() {
-    const select = $("pipelineWeekSelect");
-    if (!select) return;
-    state.selectedPipelineWeek = select.value;
+    state.selectedPipelineWeek = $("pipelineWeekSelect").value;
     renderOverview();
     renderPipeline();
   }
 
   function handleActivityWeekChange() {
-    const select = $("activityWeekSelect");
-    if (!select) return;
-    state.selectedActivityWeek = select.value;
+    state.selectedActivityWeek = $("activityWeekSelect").value;
     updateActivityFilters();
     renderActivity();
     renderManagement();
   }
 
   function handleSourcingWeekChange() {
-    const select = $("sourcingWeekSelect");
-    if (!select) return;
-    state.selectedSourcingWeek = select.value;
+    state.selectedSourcingWeek = $("sourcingWeekSelect").value;
     updateSourcingFilters();
     renderSourcing();
   }
 
   function handleActivityRoleChange() {
-    const select = $("activityRoleSelect");
-    if (!select) return;
-    state.selectedActivityRole = select.value;
+    state.selectedActivityRole = $("activityRoleSelect").value;
     renderActivity();
     renderManagement();
   }
 
   function handleActivityRecruiterChange() {
-    const select = $("activityRecruiterSelect");
-    if (!select) return;
-    state.selectedActivityRecruiter = select.value;
+    state.selectedActivityRecruiter = $("activityRecruiterSelect").value;
     renderActivity();
     renderManagement();
   }
 
   function handleSourcingRoleChange() {
-    const select = $("sourcingRoleSelect");
-    if (!select) return;
-    state.selectedSourcingRole = select.value;
+    state.selectedSourcingRole = $("sourcingRoleSelect").value;
     renderSourcing();
   }
 
   function handleSourcingRecruiterChange() {
-    const select = $("sourcingRecruiterSelect");
-    if (!select) return;
-    state.selectedSourcingRecruiter = select.value;
+    state.selectedSourcingRecruiter = $("sourcingRecruiterSelect").value;
     renderSourcing();
   }
 
@@ -1752,28 +1672,18 @@ document.addEventListener("DOMContentLoaded", () => {
   if (storedView === "management") state.view = "management";
   setView(state.view);
 
-  const viewContributor = $("viewContributor");
-  if (viewContributor) viewContributor.addEventListener("click", () => setView("contributor"));
-  const viewManagement = $("viewManagement");
-  if (viewManagement) viewManagement.addEventListener("click", () => setView("management"));
+  $("viewContributor").addEventListener("click", () => setView("contributor"));
+  $("viewManagement").addEventListener("click", () => setView("management"));
 
-  const refreshBtn = $("refreshBtn");
-  if (refreshBtn) refreshBtn.addEventListener("click", refreshAll);
+  $("refreshBtn").addEventListener("click", refreshAll);
 
-  const pipelineWeekSelect = $("pipelineWeekSelect");
-  if (pipelineWeekSelect) pipelineWeekSelect.addEventListener("change", handlePipelineWeekChange);
-  const activityWeekSelect = $("activityWeekSelect");
-  if (activityWeekSelect) activityWeekSelect.addEventListener("change", handleActivityWeekChange);
-  const sourcingWeekSelect = $("sourcingWeekSelect");
-  if (sourcingWeekSelect) sourcingWeekSelect.addEventListener("change", handleSourcingWeekChange);
-  const activityRoleSelect = $("activityRoleSelect");
-  if (activityRoleSelect) activityRoleSelect.addEventListener("change", handleActivityRoleChange);
-  const activityRecruiterSelect = $("activityRecruiterSelect");
-  if (activityRecruiterSelect) activityRecruiterSelect.addEventListener("change", handleActivityRecruiterChange);
-  const sourcingRoleSelect = $("sourcingRoleSelect");
-  if (sourcingRoleSelect) sourcingRoleSelect.addEventListener("change", handleSourcingRoleChange);
-  const sourcingRecruiterSelect = $("sourcingRecruiterSelect");
-  if (sourcingRecruiterSelect) sourcingRecruiterSelect.addEventListener("change", handleSourcingRecruiterChange);
+  $("pipelineWeekSelect").addEventListener("change", handlePipelineWeekChange);
+  $("activityWeekSelect").addEventListener("change", handleActivityWeekChange);
+  $("sourcingWeekSelect").addEventListener("change", handleSourcingWeekChange);
+  $("activityRoleSelect").addEventListener("change", handleActivityRoleChange);
+  $("activityRecruiterSelect").addEventListener("change", handleActivityRecruiterChange);
+  $("sourcingRoleSelect").addEventListener("change", handleSourcingRoleChange);
+  $("sourcingRecruiterSelect").addEventListener("change", handleSourcingRecruiterChange);
 
   refreshAll();
   setInterval(refreshAll, 60000);
