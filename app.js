@@ -1,3 +1,44 @@
+const HIRES_PASSWORD = "EGYM2026";
+
+function activateTab(tabId) {
+  const tabs = document.querySelectorAll(".tab");
+  const panels = document.querySelectorAll("#contributorView .panel, #managementView .panel");
+  const target = tabId || "overview";
+
+  tabs.forEach(t => {
+    const active = t.dataset.tab === target;
+    t.classList.toggle("active", active);
+    t.setAttribute("aria-selected", String(active));
+  });
+
+  panels.forEach(p => p.classList.toggle("active", p.id === target));
+}
+
+function initTabs() {
+  const tabs = document.querySelectorAll(".tab");
+  let hiresUnlocked = false;
+
+  tabs.forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.tab;
+      if (id === "hires" && !hiresUnlocked) {
+        const input = window.prompt("Enter password to access Hires & KPIs:");
+        if (input !== HIRES_PASSWORD) return;
+        hiresUnlocked = true;
+      }
+      window.location.hash = id;
+      activateTab(id);
+    });
+  });
+
+  window.addEventListener("hashchange", () => {
+    const id = window.location.hash.replace("#", "") || "overview";
+    activateTab(id);
+  });
+
+  activateTab(window.location.hash.replace("#", "") || "overview");
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   /* ---------------- CONFIG ---------------- */
 
@@ -38,7 +79,6 @@ document.addEventListener("DOMContentLoaded", () => {
     roleNotes: "role_notes"
   };
 
-  const HIRES_PASSWORD = "EGYM2026";
   const VIEW_STORAGE_KEY = "dashboard_view";
 
   const state = {
@@ -650,119 +690,162 @@ document.addEventListener("DOMContentLoaded", () => {
   /* ---------------- HEALTH (RAG) ---------------- */
 
   function normalizeHealthStage(value) {
-    const normalized = normalizeHeader(String(value || ""));
-    if (!normalized) return "";
-    if (normalized.includes("crit")) return "critical";
-    if (normalized.includes("warn") || normalized.includes("risk")) return "warning";
-    if (normalized.includes("healthy") || normalized.includes("good")) return "healthy";
+    const normalized = normalizeStageValue(value);
+    const collapsed = normalized.replace(/_/g, "");
+    if (collapsed === "step1") return "step1";
+    if (collapsed === "step2") return "step2";
     return normalized;
   }
 
-  function normalizeHealthRows(rows) {
-    return rows.map(r => ({
-      year: num(getField(r, ["year"])),
-      kw: num(getField(r, ["kw"])),
-      role: getField(r, ["role"]),
-      health: normalizeHealthStage(getField(r, ["health"])),
-    })).filter(r => r.year && r.kw && r.role && r.health);
+  function computeHealthFromCounts(step1Count, step2Count) {
+    const s1 = num(step1Count);
+    const s2 = num(step2Count);
+    if (s1 < 3) return "critical";
+    if (s1 < 6 && s2 < 3) return "critical";
+    if (s1 < 10 && s2 < 4) return "warning";
+    return "healthy";
   }
 
-  function getHealthByRole(rows, targets, selectedWeekKey = "") {
-    const selected = selectedWeekKey ? getWeekYearFromKey(selectedWeekKey) : null;
-    const filtered = selected ? rows.filter(r => r.year === selected.year && r.kw === selected.kw) : rows;
+  function getHealthByRole(weeklyRows, targets, endWeekKey) {
+    const health = {};
+    const weekOptions = getWeekOptions(weeklyRows);
+    const endWeekMeta = endWeekKey ? weekOptions.find(w => w.key === endWeekKey) : null;
 
-    const byRole = new Map();
-    filtered.forEach(r => {
-      if (!r.role) return;
-      if (!byRole.has(r.role)) byRole.set(r.role, []);
-      byRole.get(r.role).push(normalizeHealthStage(getField(r, ["health"])));
-    });
-
-    const byRoleTarget = new Map();
+    const targetMap = new Map();
     (targets || []).forEach(t => {
-      const role = getField(t, ["role"]);
-      if (!role) return;
-      const value = normalizeHealthStage(getField(t, ["health"]));
-      if (!value) return;
-      byRoleTarget.set(role, value);
+      if (!t.role) return;
+      targetMap.set(t.role, t);
     });
 
-    const healthByRole = {};
-    byRole.forEach((values, role) => {
-      if (!values.length) return;
-      const hasCritical = values.some(v => v === "critical");
-      const hasWarning = values.some(v => v === "warning");
-      if (hasCritical) healthByRole[role] = "critical";
-      else if (hasWarning) healthByRole[role] = "warning";
-      else healthByRole[role] = "healthy";
+    const byRole = {};
+
+    weeklyRows.forEach(r => {
+      if (!r.role) return;
+      if (!byRole[r.role]) byRole[r.role] = [];
+      byRole[r.role].push(r);
     });
 
-    byRoleTarget.forEach((value, role) => {
-      if (!healthByRole[role]) healthByRole[role] = value;
+    Object.keys(byRole).forEach(role => {
+      const target = targetMap.get(role);
+      const lookback = target && target.lookback_weeks ? target.lookback_weeks : 4;
+      const step1Stage = target ? normalizeStageValue(target.step1) : "step1";
+      const step2Stage = target ? normalizeStageValue(target.step2) : "step2";
+
+      const history = byRole[role].slice().sort((a, b) => {
+        if (a.year !== b.year) return b.year - a.year;
+        return b.kw - a.kw;
+      });
+
+      let eligible = history;
+      if (endWeekMeta) {
+        const eligibleWeeks = [];
+        let current = endWeekMeta;
+        for (let i = 0; i < lookback; i += 1) {
+          if (!current) break;
+          eligibleWeeks.push(current.key);
+          const prevKey = getPreviousWeekKey(current.key);
+          current = weekOptions.find(w => w.key === prevKey);
+        }
+        const eligibleSet = new Set(eligibleWeeks);
+        eligible = history.filter(r => eligibleSet.has(weekKey(r)));
+      }
+
+      let s1 = 0;
+      let s2 = 0;
+      let total = 0;
+
+      eligible.forEach(r => {
+        if (!r.stage || String(r.stage).startsWith("__")) return;
+        const count = num(r.count);
+        total += count;
+        if (step1Stage && r.stage === step1Stage) s1 += count;
+        if (step2Stage && r.stage === step2Stage) s2 += count;
+      });
+
+      if (total === 0) {
+        health[role] = "";
+        return;
+      }
+
+      health[role] = computeHealthFromCounts(s1, s2);
     });
 
-    return healthByRole;
+    return health;
   }
-
-  /* ---------------- RENDER: OVERVIEW ---------------- */
 
   function renderOverview() {
     const rows = state.overviewRows || [];
-    const selectedWeekKey = state.selectedPipelineWeek || "";
-    const selectedRole = state.selectedActivityRole || "all";
-    const selectedRecruiter = state.selectedActivityRecruiter || "all";
+    const hiredRows = state.hiredRows || [];
+    const healthByRole = getHealthByRole(
+      state.pipelineInventoryRows,
+      state.roleTargets,
+      state.selectedPipelineWeek === "all" ? "" : state.selectedPipelineWeek
+    );
 
-    const filtered = rows.filter(r => {
-      if (!isWeekMatch(r, selectedWeekKey)) return false;
-      const role = getField(r, ["role"]);
-      if (selectedRole !== "all" && role !== selectedRole) return false;
-      if (selectedRecruiter !== "all") {
+    const hiresByRole = {};
+    if (hiredRows.length) {
+      hiredRows.forEach(r => {
+        const role = getField(r, ["role"]);
+        if (!role) return;
+        hiresByRole[role] = (hiresByRole[role] || 0) + 1;
+      });
+    }
+
+    const overviewFiltered = rows.filter(r => {
+      if (!isWeekMatch(r, state.selectedPipelineWeek)) return false;
+      if (state.selectedActivityRole !== "all" && r.role !== state.selectedActivityRole) return false;
+      if (state.selectedActivityRecruiter !== "all") {
         const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap", "owner", "recruiter"]);
-        if (owner !== selectedRecruiter) return false;
+        if (owner !== state.selectedActivityRecruiter) return false;
       }
       return true;
     });
 
-    const totals = {
-      pipeline: 0,
-      hired: 0,
-      roles: new Set(),
-      recruiters: new Set()
-    };
+    const totalPipeline = overviewFiltered.reduce((sum, r) => sum + num(getField(r, ["pipeline"])), 0);
+    const weeklyActivity = overviewFiltered.reduce((sum, r) => sum + num(getField(r, ["weekly_activity"])), 0);
+    const totalHires = overviewFiltered.reduce((sum, r) => sum + num(getField(r, ["hired"])), 0);
+    const openRoles = overviewFiltered.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
 
-    filtered.forEach(r => {
-      const pipelineValue = num(getField(r, ["pipeline"]));
-      const hiredValue = num(getField(r, ["hired"]));
-      const role = getField(r, ["role"]);
-      const recruiter = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap", "owner", "recruiter"]);
-
-      totals.pipeline += pipelineValue;
-      totals.hired += hiredValue;
-      if (role) totals.roles.add(role);
-      if (recruiter) totals.recruiters.add(recruiter);
-    });
-
-    const yearly = rows.filter(r => {
-      const role = getField(r, ["role"]);
-      if (!role) return false;
-      if (selectedRole !== "all" && role !== selectedRole) return false;
-      if (selectedRecruiter !== "all") {
-        const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap", "owner", "recruiter"]);
-        if (owner !== selectedRecruiter) return false;
-      }
-      return true;
-    });
-
-    const yearlyTotalHires = yearly.reduce((sum, r) => sum + num(getField(r, ["hired"])), 0);
-    const yearlyTotalPipeline = yearly.reduce((sum, r) => sum + num(getField(r, ["pipeline"])), 0);
-
-    $("overviewSummary").innerHTML = `
-      <div class="kpi"><div class="label">Pipeline</div><div class="value">${formatNumber(totals.pipeline)}</div><div class="sub">${formatNumber(yearlyTotalPipeline)} YTD</div></div>
-      <div class="kpi"><div class="label">Hired</div><div class="value">${formatNumber(totals.hired)}</div><div class="sub">${formatNumber(yearlyTotalHires)} YTD</div></div>
-      <div class="kpi"><div class="label">Roles</div><div class="value">${formatNumber(totals.roles.size)}</div><div class="sub">${formatNumber(yearlyTotalPipeline)} total pipeline</div></div>
-      <div class="kpi"><div class="label">Recruiters</div><div class="value">${formatNumber(totals.recruiters.size)}</div><div class="sub">${formatNumber(yearlyTotalPipeline)} total pipeline</div></div>
-      <div class="kpi"><div class="label">Scope</div><div class="value">${selectedWeekKey === "all" ? "All time" : selectedWeekKey.replace("-", " ")}</div></div>
+    $("overviewKpis").innerHTML = `
+      <div class="kpi"><div class="label">Pipeline</div><div class="value">${formatNumber(totalPipeline)}</div></div>
+      <div class="kpi"><div class="label">Weekly Activity</div><div class="value">${formatNumber(weeklyActivity)}</div></div>
+      <div class="kpi"><div class="label">Hires</div><div class="value">${formatNumber(totalHires)}</div></div>
+      <div class="kpi"><div class="label">Open Roles</div><div class="value">${formatNumber(openRoles)}</div></div>
     `;
+
+    const thead = document.querySelector("#overview table thead");
+    if (thead) {
+      thead.innerHTML = `
+        <tr>
+          <th>Role</th>
+          <th class="num">Pipeline</th>
+          <th class="num">Weekly Activity</th>
+          <th class="num">Hired</th>
+          <th>Health</th>
+        </tr>
+      `;
+    }
+
+    const tbody = $("overviewTable");
+    tbody.innerHTML = "";
+
+    overviewFiltered.forEach(r => {
+      const role = getField(r, ["role"]);
+      const pipeline = num(getField(r, ["pipeline"]));
+      const weekly = num(getField(r, ["weekly_activity"]));
+      const hired = hiresByRole[role] || 0;
+      const health = normalizeHealthValue(getField(r, ["health"])) || healthByRole[role] || "";
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${role}</td>
+        <td class="num">${formatNumber(pipeline)}</td>
+        <td class="num">${formatNumber(weekly)}</td>
+        <td class="num">${formatNumber(hired)}</td>
+        <td>${healthDotHTML(health)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
   }
 
   /* ---------------- RENDER: PIPELINE ---------------- */
@@ -1158,39 +1241,34 @@ document.addEventListener("DOMContentLoaded", () => {
       return true;
     });
 
-    const weeklyFiltered = weeklyRows.filter(r => {
-      if (!isWeekMatch(r, selectedActivityWeek)) return false;
-      if (selectedRole !== "all" && r.role !== selectedRole) return false;
-      if (selectedRecruiter !== "all" && r.recruiter !== selectedRecruiter) return false;
-      return true;
-    });
+    const openRoles = overviewFiltered.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
 
-    const inventoryFiltered = inventoryRows.filter(r => {
-      if (!isWeekMatch(r, selectedPipelineWeek)) return false;
-      if (selectedRole !== "all" && r.role !== selectedRole) return false;
-      if (selectedRecruiter !== "all" && r.recruiter !== selectedRecruiter) return false;
-      return true;
-    });
+    const pipelineCandidates = inventoryRows.reduce((sum, r) => {
+      if (!isWeekMatch(r, selectedPipelineWeek)) return sum;
+      if (selectedRole !== "all" && r.role !== selectedRole) return sum;
+      if (selectedRecruiter !== "all" && r.recruiter !== selectedRecruiter) return sum;
+      return sum + num(r.count);
+    }, 0);
 
-    const sourcingFiltered = sourcingRows.filter(r => {
-      if (!isSourcingWeekInWindow(r, selectedSourcingWeek)) return false;
-      if (selectedSourcingRole !== "all" && r.role !== selectedSourcingRole) return false;
-      if (selectedSourcingRecruiter !== "all" && r.recruiter !== selectedSourcingRecruiter) return false;
-      return true;
-    });
+    const weeklyActivity = weeklyRows.reduce((sum, r) => {
+      if (!isWeekMatch(r, selectedPipelineWeek)) return sum;
+      if (selectedRole !== "all" && r.role !== selectedRole) return sum;
+      if (selectedRecruiter !== "all" && r.recruiter !== selectedRecruiter) return sum;
+      if (!r.stage || String(r.stage).startsWith("__")) return sum;
+      return sum + num(r.count);
+    }, 0);
 
-    $("managementSummary").innerHTML = `
-      <div class="kpi"><div class="label">Open Roles</div><div class="value">${formatNumber(overviewFiltered.length)}</div></div>
-      <div class="kpi"><div class="label">Weekly Activity</div><div class="value">${formatNumber(weeklyFiltered.reduce((sum, r) => sum + num(r.count), 0))}</div></div>
-      <div class="kpi"><div class="label">Pipeline Total</div><div class="value">${formatNumber(inventoryFiltered.reduce((sum, r) => sum + num(r.count), 0))}</div></div>
-      <div class="kpi"><div class="label">Total Contacted (2w)</div><div class="value">${formatNumber(sourcingFiltered.reduce((sum, r) => sum + num(r.contacted), 0))}</div></div>
-      <div class="kpi"><div class="label">Scope</div><div class="value">${selectedPipelineWeek === "all" ? "All time" : selectedPipelineWeek.replace("-", " ")}</div></div>
-    `;
-
-    const weeklyActivity = weeklyFiltered.reduce((sum, r) => sum + num(r.count), 0);
-    const totalHires = num(getField(overviewFiltered[0] || {}, ["hired"]));
+    const totalHires = hiredRows.reduce((sum, r) => {
+      const role = getField(r, ["role"]);
+      const signatureDate = getField(r, ["signature_date", "signature date"]);
+      const startDate = getField(r, ["start_date", "start date"]);
+      if (!role || (!signatureDate && !startDate)) return sum;
+      return sum + 1;
+    }, 0);
 
     $("managementKpis").innerHTML = `
+      <div class="kpi"><div class="label">Open Roles</div><div class="value">${formatNumber(openRoles)}</div></div>
+      <div class="kpi"><div class="label">Pipeline Candidates</div><div class="value">${formatNumber(pipelineCandidates)}</div></div>
       <div class="kpi"><div class="label">Weekly Activity</div><div class="value">${formatNumber(weeklyActivity)}</div></div>
       <div class="kpi"><div class="label">Hires (All time)</div><div class="value">${formatNumber(totalHires)}</div><div class="sub">${hiredRows.length ? "" : "No hire data yet."}</div></div>
     `;
