@@ -1031,18 +1031,16 @@ document.addEventListener("DOMContentLoaded", () => {
   /* ---------------- RENDER: SOURCING ---------------- */
 
   function getSourcingWindowWeekKeys(selectedWeekKey) {
-    if (!selectedWeekKey || selectedWeekKey === "all") return [];
-    const selected = getWeekYearFromKey(selectedWeekKey);
-    if (!selected) return [];
-    const keys = [selectedWeekKey];
-    if (selected.kw > 1) {
-      keys.push(`${selected.year}-KW${String(selected.kw - 1).padStart(2, "0")}`);
+    if (!selectedWeekKey || selectedWeekKey === "all") {
+      const options = state.sourcingOptions || [];
+      const hasToday = options.some(o => o.key === TODAY_WEEK_KEY);
+      const endKey = hasToday ? TODAY_WEEK_KEY : (options[0]?.key || "");
+      return endKey ? getRollingWeekKeys(endKey, 4) : [];
     }
-    return keys;
+    return getRollingWeekKeys(selectedWeekKey, 4);
   }
 
   function isSourcingWeekInWindow(row, selectedWeekKey) {
-    if (selectedWeekKey === "all") return true;
     const keys = getSourcingWindowWeekKeys(selectedWeekKey);
     if (!keys.length) return false;
     return keys.includes(weekKey(row));
@@ -1069,6 +1067,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const selectedWeekKey = state.selectedSourcingWeek || "";
     const selectedRole = state.selectedSourcingRole || "all";
     const selectedRecruiter = state.selectedSourcingRecruiter || "all";
+    const windowKeys = getSourcingWindowWeekKeys(selectedWeekKey);
+    const endWeekKey = windowKeys[0] || selectedWeekKey;
 
     const filtered = rows.filter(r => {
       if (!isSourcingWeekInWindow(r, selectedWeekKey)) return false;
@@ -1082,7 +1082,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const thead = document.querySelector("#sourcing table thead");
     if (thead) {
-      const convLabel = selectedWeekKey === "all" ? "Conv. (all time)" : "Conv. (2w)";
+      const convLabel = "Conv. (4w)";
       thead.innerHTML = `
         <tr>
           <th>Role</th>
@@ -1157,14 +1157,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const overallSourcedConv = totalSourced > 0 ? totalSourcedScreens / totalSourced : null;
     const overallConnectConv = totalConnect > 0 ? totalConnectScreens / totalConnect : null;
-    const convLabel = selectedWeekKey === "all" ? "All time conversion" : "2-week conversion";
+    const convLabel = "4-week conversion";
 
     $("sourcingSummary").innerHTML = `
       <div class="kpi"><div class="label">Total Sourced</div><div class="value">${formatNumber(totalSourced)}</div></div>
       <div class="kpi"><div class="label">Sourced Screens</div><div class="value">${formatNumber(totalSourcedScreens)}</div><div class="sub">${formatPercent(overallSourcedConv)} ${convLabel}</div></div>
       <div class="kpi"><div class="label">Total Connects</div><div class="value">${formatNumber(totalConnect)}</div></div>
       <div class="kpi"><div class="label">Connect Screens</div><div class="value">${formatNumber(totalConnectScreens)}</div><div class="sub">${formatPercent(overallConnectConv)} ${convLabel}</div></div>
-      <div class="kpi"><div class="label">Scope</div><div class="value">${selectedWeekKey === "all" ? "All time" : selectedWeekKey.replace("-", " ")}</div></div>
+      <div class="kpi"><div class="label">Scope</div><div class="value">Rolling 4 weeks · ending ${endWeekKey.replace("-", " ")}</div></div>
     `;
   }
 
@@ -1199,6 +1199,11 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     const openRoles = overviewFiltered.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
+    const onHoldRoles = overviewFiltered.filter(r => {
+      const status = normalizeHeader(getField(r, ["status"]));
+      if (!status) return false;
+      return status === "on_hold" || status === "onhold" || status.includes("hold");
+    }).length;
 
     const weeklyActivity = weeklyRows.reduce((sum, r) => {
       if (!isWeekMatch(r, selectedActivityWeek)) return sum;
@@ -1228,6 +1233,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     $("managementKpis").innerHTML = `
       <div class="kpi"><div class="label">Open Roles</div><div class="value">${formatNumber(openRoles)}</div></div>
+      <div class="kpi"><div class="label">On hold</div><div class="value">${formatNumber(onHoldRoles)}</div></div>
       <div class="kpi"><div class="label">Weekly Activity</div><div class="value">${formatNumber(weeklyActivity)}</div></div>
       <div class="kpi"><div class="label">Step1 Screens</div><div class="value">${formatNumber(step1ScreensRolling)}</div><div class="sub">Rolling 4 weeks</div></div>
       <div class="kpi"><div class="label">Hires</div><div class="value">${formatNumber(totalHires)}</div><div class="sub">All time${hiredRows.length ? "" : " · No hire data yet."}</div></div>
