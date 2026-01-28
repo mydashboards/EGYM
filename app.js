@@ -1583,8 +1583,7 @@ document.addEventListener("DOMContentLoaded", () => {
         sourcingRaw,
         hiredRaw,
         targetsRaw,
-        roleNotesRaw,
-        weeklyUpdatesRaw
+        roleNotesRaw
       ] = await Promise.all([
         loadCSV("overview", CSV.overview),
         loadCSV("pipelineWeekly", CSV.pipelineWeekly),
@@ -1592,9 +1591,15 @@ document.addEventListener("DOMContentLoaded", () => {
         loadCSV("sourcing", CSV.sourcing),
         loadCSV("hired", CSV.hired),
         loadCSV("roleTargets", CSV.roleTargets),
-        loadCSV("roleNotes", CSV.roleNotes),
-        loadCSV("weeklyUpdates", CSV.weeklyUpdates)
+        loadCSV("roleNotes", CSV.roleNotes)
       ]);
+
+      let weeklyUpdatesRaw = [];
+      try {
+        weeklyUpdatesRaw = await loadCSV("weeklyUpdates", CSV.weeklyUpdates);
+      } catch (error) {
+        weeklyUpdatesRaw = [];
+      }
 
       state.overviewRows = overviewRows || [];
       const pipelineWeeklyRows = pipelineWeeklyRaw?.rows || pipelineWeeklyRaw || [];
