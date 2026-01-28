@@ -474,6 +474,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const looksLong = rows.length && ("stage" in rows[0] || "count" in rows[0]);
     const coreKeys = new Set(["role", "kw", "year", "week_start", "recruiter", "health"]);
     const long = [];
+    const ignoredStages = new Set(["connects", "connect", "connected", "connections"]);
+    const isIgnoredStage = (stageValue) => ignoredStages.has(normalizeStageValue(stageValue));
 
     if (looksLong) {
       state.pipelineWeeklyStageOrder = [];
@@ -484,14 +486,14 @@ document.addEventListener("DOMContentLoaded", () => {
         recruiter: getField(r, ["recruiter"]),
         stage: normalizeStageValue(getField(r, ["stage"])),
         count: num(getField(r, ["count"])),
-      })).filter(r => r.year && r.kw && r.role && r.stage);
+      })).filter(r => r.year && r.kw && r.role && r.stage && !isIgnoredStage(r.stage));
     }
 
     const stageOrder = [];
     const seen = new Set();
     (headers.length ? headers : Object.keys(rows[0] || {})).forEach(k => {
       const nk = normalizeHeader(k);
-      if (!nk || coreKeys.has(nk) || seen.has(nk)) return;
+      if (!nk || coreKeys.has(nk) || seen.has(nk) || isIgnoredStage(nk)) return;
       seen.add(nk);
       stageOrder.push(nk);
     });
@@ -510,6 +512,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const count = num(r[stageKey]);
         if (!Number.isFinite(count)) return;
         if (count === 0) return;
+        if (isIgnoredStage(stageKey)) return;
         pushedAny = true;
         long.push({ year, kw, role, recruiter, stage: stageKey, count });
       });
@@ -532,6 +535,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const hasStage = Object.prototype.hasOwnProperty.call(rows[0], "stage");
     const hasCount = Object.prototype.hasOwnProperty.call(rows[0], "count");
+    const ignoredStages = new Set(["sourced", "contacted", "connects", "replied"]);
+    const isIgnoredStage = (stageValue) => ignoredStages.has(normalizeStageValue(stageValue));
 
     if (hasStage && hasCount) {
       state.pipelineInventoryStageOrder = [];
@@ -543,11 +548,11 @@ document.addEventListener("DOMContentLoaded", () => {
         stage: getField(r, ["stage"]),
         count: num(getField(r, ["count"])),
         stage_order: getField(r, ["stage_order"])
-      })).filter(r => r.year && r.kw && r.role && r.stage);
+      })).filter(r => r.year && r.kw && r.role && r.stage && !isIgnoredStage(r.stage));
     }
 
     const coreKeys = new Set(["role", "kw", "year", "week_start", "recruiter", "health", "stage_order"]);
-    state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys);
+    state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys).filter(stage => !isIgnoredStage(stage));
     const long = [];
     rows.forEach(r => {
       const year = num(getField(r, ["year"]));
@@ -558,7 +563,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       Object.keys(r).forEach(k => {
         const nk = normalizeHeader(k);
-        if (coreKeys.has(nk)) return;
+        if (coreKeys.has(nk) || isIgnoredStage(nk)) return;
         const count = num(r[k]); // keep zeros so roles/stages remain visible
         long.push({
           year,
@@ -683,6 +688,34 @@ document.addEventListener("DOMContentLoaded", () => {
     return health;
   }
 
+  function getHealthByRoleFromInventory(inventoryRows, selectedWeekKey, filters = {}) {
+    const { roleFilter = "all", recruiterFilter = "all" } = filters;
+    const byRole = new Map();
+    const weekKeyToUse = selectedWeekKey === "all" ? TODAY_WEEK_KEY : selectedWeekKey;
+    if (!weekKeyToUse) return {};
+
+    inventoryRows.forEach(r => {
+      if (!r.role) return;
+      if (roleFilter !== "all" && r.role !== roleFilter) return;
+      if (recruiterFilter !== "all" && r.recruiter !== recruiterFilter) return;
+      if (weekKey(r) !== weekKeyToUse) return;
+
+      const stage = normalizeHealthStage(getField(r, ["stage"]) || r.stage);
+      if (stage !== "step1" && stage !== "step2") return;
+
+      if (!byRole.has(r.role)) byRole.set(r.role, { step1: 0, step2: 0 });
+      const agg = byRole.get(r.role);
+      if (stage === "step1") agg.step1 += num(getField(r, ["count"]) || r.count);
+      if (stage === "step2") agg.step2 += num(getField(r, ["count"]) || r.count);
+    });
+
+    const health = {};
+    byRole.forEach((agg, role) => {
+      health[role] = computeHealthFromCounts(agg.step1, agg.step2);
+    });
+    return health;
+  }
+
   /* ---------------- TABS ---------------- */
 
   function activateTab(tabId) {
@@ -729,9 +762,9 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderOverview() {
     const rows = state.overviewRows || [];
     const hiredRows = state.hiredRows || [];
-    const healthByRole = getHealthByRole(
-      state.pipelineWeeklyRows,
-      TODAY_WEEK_KEY
+    const healthByRole = getHealthByRoleFromInventory(
+      state.pipelineInventoryRows,
+      state.selectedPipelineWeek || TODAY_WEEK_KEY
     );
 
     const hiresByRole = {};
@@ -836,7 +869,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderPipeline() {
     const inv = state.pipelineInventoryRows || [];
-    const weekly = state.pipelineWeeklyRows || [];
     const selectedWeekKey = state.selectedPipelineWeek || "";
 
     const emptyEl = $("pipelineEmpty");
@@ -872,9 +904,9 @@ document.addEventListener("DOMContentLoaded", () => {
       `;
     }
 
-    const healthByRole = getHealthByRole(
-      weekly,
-      TODAY_WEEK_KEY
+    const healthByRole = getHealthByRoleFromInventory(
+      inv,
+      state.selectedPipelineWeek || TODAY_WEEK_KEY
     );
 
     const roleList = [];
@@ -1141,6 +1173,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const overviewRows = state.overviewRows || [];
     const hiredRows = state.hiredRows || [];
     const weeklyRows = state.pipelineWeeklyRows || [];
+    const inventoryRows = state.pipelineInventoryRows || [];
     const roleNotesRows = state.roleNotesRows || [];
     const weeklyUpdatesRows = state.weeklyUpdatesRows || [];
 
@@ -1148,9 +1181,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const selectedRole = state.selectedActivityRole || "all";
     const selectedRecruiter = state.selectedActivityRecruiter || "all";
 
-    const healthByRole = getHealthByRole(
-      weeklyRows,
-      TODAY_WEEK_KEY,
+    const healthByRole = getHealthByRoleFromInventory(
+      inventoryRows,
+      state.selectedPipelineWeek || TODAY_WEEK_KEY,
       { roleFilter: selectedRole, recruiterFilter: selectedRecruiter }
     );
 
@@ -1627,6 +1660,7 @@ document.addEventListener("DOMContentLoaded", () => {
     state.selectedPipelineWeek = $("pipelineWeekSelect").value;
     renderOverview();
     renderPipeline();
+    renderManagement();
   }
 
   function handleActivityWeekChange() {
