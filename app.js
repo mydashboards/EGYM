@@ -845,7 +845,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!isWeekMatch(r, selectedWeekKey)) return;
       const role = getField(r, ["role"]) || r.role;
       const stage = getField(r, ["stage"]) || r.stage;
-      if (!role || !stage) return;
+if (!role || !stage) return;
+if (String(stage).startsWith("__")) return;
       roles.add(role);
 
       if (!countsByRole.has(role)) countsByRole.set(role, new Map());
