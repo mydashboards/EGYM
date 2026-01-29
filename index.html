@@ -1,3 +1,4 @@
+// index.html
 <!doctype html>
 <html lang="en">
 <head>
@@ -36,6 +37,17 @@
     </header>
 
     <div id="dataErrors" class="banner hidden" aria-live="polite"></div>
+
+    <div id="departmentGate" class="department-gate hidden" role="dialog" aria-modal="true" aria-labelledby="departmentGateTitle">
+      <div class="department-gate-card">
+        <h2 id="departmentGateTitle">Select Department</h2>
+        <label>
+          <span>Department</span>
+          <select id="departmentSelect"></select>
+        </label>
+        <button id="departmentContinue" class="btn primary" type="button">Continue</button>
+      </div>
+    </div>
 
     <main>
       <!-- Contributor View -->
@@ -106,7 +118,7 @@
           <div class="card">
             <div class="card-head">
               <h3>End-of-week inventory</h3>
-              <p class="muted small">Stages shown for the selected calendar week (or cumulative for All time).</p>
+              <p class="muted small">Stages shown for the selected calendar week.</p>
             </div>
 
             <div id="pipelineEmpty" class="placeholder hidden">
@@ -275,8 +287,16 @@
         </div>
         <div class="card">
           <div class="card-head">
-            <h3>Recruiter Utilization</h3>
-            <p class="muted small">Rolling 4 weeks (Step1 screens).</p>
+            <div>
+              <h3>Recruiter Utilization</h3>
+              <p class="muted small">Step1 screens and utilization per week.</p>
+            </div>
+            <div class="filters">
+              <label>
+                <span>Week</span>
+                <select id="managementWeekSelect"></select>
+              </label>
+            </div>
           </div>
           <div id="managementRecruiterEmpty" class="placeholder hidden">No recruiter data available.</div>
           <div class="table-wrap">
@@ -284,13 +304,30 @@
               <thead>
                 <tr>
                   <th>Recruiter</th>
-                  <th class="num">Screens (4W)</th>
+                  <th class="num">Step1</th>
+                  <th class="num">Avg/wk</th>
                   <th class="num">Utilization</th>
                 </tr>
               </thead>
               <tbody id="managementRecruiterTable"></tbody>
             </table>
           </div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h3>Forecast</h3>
+              <p class="muted small">Expected hires based on final-stage inventory.</p>
+            </div>
+            <div class="filters">
+              <label>
+                <span>Quarter</span>
+                <select id="managementQuarterSelect"></select>
+              </label>
+            </div>
+          </div>
+          <div id="managementForecast" class="forecast-grid"></div>
+          <p class="muted small forecast-note">Based on Final-stage inventory (Final/3 capped at 100%).</p>
         </div>
         <div class="card">
           <div class="card-head">
