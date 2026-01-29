@@ -378,6 +378,29 @@ document.addEventListener("DOMContentLoaded", () => {
     else if (options.length) select.value = options[0].key;
   }
 
+  function setSourcingWeekOptions(select, options) {
+    const current = select.value;
+    select.innerHTML = "";
+
+    const endKey = getSourcingWindowWeekKeys("all")[0];
+    const endKw = getWeekNumberFromKey(endKey);
+    const allOpt = document.createElement("option");
+    allOpt.value = "all";
+    allOpt.textContent = endKw ? `Rolling 4w · ending KW ${String(endKw).padStart(2, "0")}` : "Rolling 4w · ending";
+    select.appendChild(allOpt);
+
+    options.forEach(o => {
+      const opt = document.createElement("option");
+      opt.value = o.key;
+      opt.textContent = `Rolling 4w · ending KW ${String(o.kw).padStart(2, "0")}`;
+      select.appendChild(opt);
+    });
+
+    const allowed = new Set(["all", ...options.map(o => o.key)]);
+    if (current && allowed.has(current)) select.value = current;
+    else select.value = "all";
+  }
+
   function setFilterOptions(select, values, allLabel) {
     const current = select.value;
     select.innerHTML = "";
@@ -767,6 +790,11 @@ document.addEventListener("DOMContentLoaded", () => {
       state.pipelineInventoryRows,
       state.selectedPipelineWeek || TODAY_WEEK_KEY
     );
+    const onHoldRoles = rows.filter(r => {
+      const status = normalizeHeader(getField(r, ["status"]));
+      if (!status) return false;
+      return status === "on_hold" || status === "onhold" || status.includes("hold");
+    }).length;
 
     const hiresByRole = {};
     if (hiredRows.length) {
@@ -801,6 +829,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     $("overviewCards").innerHTML = `
       <div class="kpi"><div class="label">Open Roles</div><div class="value">${openRoles}</div></div>
+      <div class="kpi"><div class="label">On hold</div><div class="value">${onHoldRoles}</div></div>
       <div class="kpi"><div class="label">Filled Roles</div><div class="value">${filledRoles}</div></div>
       <div class="kpi"><div class="label">Total Openings</div><div class="value">${totalOpenings}</div></div>
     `;
@@ -1049,9 +1078,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function updateSourcingFilters() {
     const selectedWeekKey = state.selectedSourcingWeek || "";
     const rows = state.sourcingRows || [];
-    const windowedRows = selectedWeekKey === "all"
-      ? rows
-      : rows.filter(r => isSourcingWeekInWindow(r, selectedWeekKey));
+    const windowedRows = rows.filter(r => isSourcingWeekInWindow(r, selectedWeekKey));
     const roles = getOrderedValues(windowedRows, "all", r => r.role);
     const recruiters = getOrderedValues(windowedRows, "all", r => r.recruiter);
 
@@ -1069,6 +1096,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const selectedRecruiter = state.selectedSourcingRecruiter || "all";
     const windowKeys = getSourcingWindowWeekKeys(selectedWeekKey);
     const endWeekKey = windowKeys[0] || selectedWeekKey;
+    const endWeekNumber = getWeekNumberFromKey(endWeekKey);
 
     const filtered = rows.filter(r => {
       if (!isSourcingWeekInWindow(r, selectedWeekKey)) return false;
@@ -1164,7 +1192,7 @@ document.addEventListener("DOMContentLoaded", () => {
       <div class="kpi"><div class="label">Sourced Screens</div><div class="value">${formatNumber(totalSourcedScreens)}</div><div class="sub">${formatPercent(overallSourcedConv)} ${convLabel}</div></div>
       <div class="kpi"><div class="label">Total Connects</div><div class="value">${formatNumber(totalConnect)}</div></div>
       <div class="kpi"><div class="label">Connect Screens</div><div class="value">${formatNumber(totalConnectScreens)}</div><div class="sub">${formatPercent(overallConnectConv)} ${convLabel}</div></div>
-      <div class="kpi"><div class="label">Scope</div><div class="value">Rolling 4 weeks · ending ${endWeekKey.replace("-", " ")}</div></div>
+      <div class="kpi"><div class="label">Scope</div><div class="value">Rolling 4 weeks · ending KW ${endWeekNumber ? String(endWeekNumber).padStart(2, "0") : ""}</div></div>
     `;
   }
 
@@ -1184,22 +1212,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const healthByRole = getHealthByRoleFromInventory(
       inventoryRows,
-      state.selectedPipelineWeek || TODAY_WEEK_KEY,
-      { roleFilter: selectedRole, recruiterFilter: selectedRecruiter }
+      state.selectedPipelineWeek || TODAY_WEEK_KEY
     );
 
-    const overviewFiltered = overviewRows.filter(r => {
-      const role = getField(r, ["role"]);
-      if (selectedRole !== "all" && role !== selectedRole) return false;
-      if (selectedRecruiter !== "all") {
-        const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap", "owner", "recruiter"]);
-        if (owner !== selectedRecruiter) return false;
-      }
-      return true;
-    });
-
-    const openRoles = overviewFiltered.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
-    const onHoldRoles = overviewFiltered.filter(r => {
+    const openRoles = overviewRows.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
+    const onHoldRoles = overviewRows.filter(r => {
       const status = normalizeHeader(getField(r, ["status"]));
       if (!status) return false;
       return status === "on_hold" || status === "onhold" || status.includes("hold");
@@ -1215,8 +1232,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const rollingWeekKeys = new Set(getRollingWeekKeys(TODAY_WEEK_KEY, 4));
     const step1ScreensRolling = weeklyRows.reduce((sum, r) => {
-      if (selectedRole !== "all" && r.role !== selectedRole) return sum;
-      if (selectedRecruiter !== "all" && r.recruiter !== selectedRecruiter) return sum;
       if (!rollingWeekKeys.has(weekKey(r))) return sum;
       const stage = normalizeHealthStage(r.stage);
       if (stage !== "step1") return sum;
@@ -1240,7 +1255,7 @@ document.addEventListener("DOMContentLoaded", () => {
     `;
 
     const counts = { healthy: 0, warning: 0, critical: 0 };
-    overviewFiltered.forEach(r => {
+    overviewRows.forEach(r => {
       const role = getField(r, ["role"]);
       const value = healthByRole[role] || "";
       if (value === "healthy") counts.healthy += 1;
@@ -1255,17 +1270,7 @@ document.addEventListener("DOMContentLoaded", () => {
     `;
 
     renderManagementRecruiters({
-      weeklyRows,
-      selectedRole,
-      selectedRecruiter
-    });
-
-    renderManagementRoleInsights({
-      roleNotesRows,
-      selectedActivityWeek,
-      selectedRole,
-      selectedRecruiter,
-      healthByRole
+      weeklyRows
     });
 
     renderManagementWeeklyUpdates({
@@ -1274,19 +1279,19 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  function renderManagementRecruiters({ weeklyRows, selectedRole, selectedRecruiter }) {
+  function renderManagementRecruiters({ weeklyRows }) {
     const tbody = $("managementRecruiterTable");
     const empty = $("managementRecruiterEmpty");
     if (!tbody || !empty) return;
 
     const windowKeys = new Set(getRollingWeekKeys(TODAY_WEEK_KEY, 4));
     const totalsByRecruiter = new Map();
+    const allowedRecruiters = new Set(["Alex", "Sven"]);
 
     weeklyRows.forEach(r => {
       if (!windowKeys.has(weekKey(r))) return;
-      if (selectedRole !== "all" && r.role !== selectedRole) return;
-      if (selectedRecruiter !== "all" && r.recruiter !== selectedRecruiter) return;
       const recruiter = r.recruiter || "Unassigned";
+      if (!allowedRecruiters.has(recruiter)) return;
       const stage = normalizeHealthStage(r.stage);
       if (stage !== "step1") return;
 
@@ -1310,12 +1315,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     rows.forEach(([recruiter, data]) => {
       const avgScreens = data.screens / 4;
-      let utilization = 0;
-      if (avgScreens >= 20) utilization = 100;
-      else if (avgScreens >= 15) utilization = 85 + ((avgScreens - 15) / 5) * 15;
-      else if (avgScreens >= 10) utilization = 60 + ((avgScreens - 10) / 5) * 25;
-      else if (avgScreens > 0) utilization = (avgScreens / 10) * 60;
-      utilization = Math.round(Math.max(0, Math.min(100, utilization)));
+      const utilization = Math.round(Math.max(0, Math.min(100, (avgScreens / 20) * 100)));
       const barWidth = `${Math.max(0, Math.min(100, utilization))}%`;
 
       const tr = document.createElement("tr");
@@ -1567,7 +1567,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     setSelectOptions($("pipelineWeekSelect"), state.pipelineOptions, true);
     setSelectOptions($("activityWeekSelect"), state.activityOptions, true);
-    setSelectOptions($("sourcingWeekSelect"), state.sourcingOptions, true);
+    setSourcingWeekOptions($("sourcingWeekSelect"), state.sourcingOptions);
 
     const pipelineAllowed = ["all", ...state.pipelineOptions.map(o => o.key)];
     const activityAllowed = ["all", ...state.activityOptions.map(o => o.key)];
