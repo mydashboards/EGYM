@@ -543,13 +543,6 @@ document.addEventListener("DOMContentLoaded", () => {
     long.push({ year, kw, role, stage: stageKey, count });
   });
 
-  // keep role visible even if all stage values are 0/blank
-  if (!pushedAny) {
-    long.push({ year, kw, role, stage: "__role__", count: 0 });
-  }
-});
-
-
       // IMPORTANT: keep the role visible for that week even if all counts are 0/blank
       // (so Activity/Pipeline can list all roles that exist in the KW).
       if (!pushedAny) {
