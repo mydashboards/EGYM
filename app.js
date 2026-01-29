@@ -473,6 +473,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function setSelectOptions(select, options, includeAllTime = false) {
+    if (!select) return;
     const current = select.value;
     select.innerHTML = "";
 
@@ -497,6 +498,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function setSourcingWeekOptions(select, endWeekKey) {
+    if (!select) return;
     select.innerHTML = "";
     const endKw = getWeekNumberFromKey(endWeekKey);
     const opt = document.createElement("option");
@@ -508,6 +510,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function setFilterOptions(select, values, allLabel) {
+    if (!select) return;
     const current = select.value;
     select.innerHTML = "";
 
@@ -529,6 +532,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function setDepartmentOptions(select, options, preferredValue) {
+    if (!select) return;
     select.innerHTML = "";
     options.forEach(value => {
       const opt = document.createElement("option");
@@ -545,6 +549,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function setManagementQuarterOptions(select, year, preferredQuarter) {
+    if (!select) return;
     select.innerHTML = "";
     for (let q = 1; q <= 4; q += 1) {
       const opt = document.createElement("option");
@@ -677,7 +682,6 @@ document.addEventListener("DOMContentLoaded", () => {
       });
 
       // IMPORTANT: keep the role visible for that week even if all counts are 0/blank
-      // (so Activity/Pipeline can list all roles that exist in the KW).
       if (!pushedAny) {
         long.push({ year, kw, role, recruiter, department, stage: "__role__", count: 0 });
       }
@@ -968,20 +972,27 @@ document.addEventListener("DOMContentLoaded", () => {
       else if (h === "critical") counts.critical += 1;
     });
 
-    $("overviewCards").innerHTML = `
-      <div class="kpi"><div class="label">Open Roles</div><div class="value">${openRoles}</div></div>
-      <div class="kpi"><div class="label">On hold</div><div class="value">${onHoldRoles}</div></div>
-      <div class="kpi"><div class="label">Filled Roles</div><div class="value">${filledRoles}</div></div>
-      <div class="kpi"><div class="label">Total Openings</div><div class="value">${totalOpenings}</div></div>
-    `;
+    const cardsEl = $("overviewCards");
+    if (cardsEl) {
+      cardsEl.innerHTML = `
+        <div class="kpi"><div class="label">Open Roles</div><div class="value">${openRoles}</div></div>
+        <div class="kpi"><div class="label">On hold</div><div class="value">${onHoldRoles}</div></div>
+        <div class="kpi"><div class="label">Filled Roles</div><div class="value">${filledRoles}</div></div>
+        <div class="kpi"><div class="label">Total Openings</div><div class="value">${totalOpenings}</div></div>
+      `;
+    }
 
-    $("overviewHealthSummary").innerHTML = `
-      <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
-      <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} At risk</span></div>
-      <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Critical</span></div>
-    `;
+    const healthSummaryEl = $("overviewHealthSummary");
+    if (healthSummaryEl) {
+      healthSummaryEl.innerHTML = `
+        <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
+        <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} At risk</span></div>
+        <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Critical</span></div>
+      `;
+    }
 
     const tbody = $("overviewTable");
+    if (!tbody) return;
     tbody.innerHTML = "";
 
     rows.forEach(r => {
@@ -1045,6 +1056,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const emptyEl = $("pipelineEmpty");
     const thead = document.querySelector("#pipeline table thead");
     const tbody = $("pipelineTable");
+    if (!tbody) return;
     tbody.innerHTML = "";
 
     const stages = getStagesForInventory(inv, selectedWeekKey, state.pipelineInventoryStageOrder);
@@ -1091,10 +1103,10 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     if (!roleList.length) {
-      emptyEl.classList.remove("hidden");
+      if (emptyEl) emptyEl.classList.remove("hidden");
       return;
     }
-    emptyEl.classList.add("hidden");
+    if (emptyEl) emptyEl.classList.add("hidden");
 
     roleList.forEach(role => {
       const sm = countsByRole.get(role) || new Map();
@@ -1125,7 +1137,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const seen = new Set();
     weeklyRows.forEach(r => {
       if (!r.stage) return;
-      if (String(r.stage).startsWith("__")) return; // ignore placeholder stage
+      if (String(r.stage).startsWith("__")) return;
       if (ignoredStages.has(normalizeStageValue(r.stage))) return;
       if (seen.has(r.stage)) return;
       seen.add(r.stage);
@@ -1152,9 +1164,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     setFilterOptions($("activityRoleSelect"), rolesForRecruiter, "All roles");
     if (currentRole !== "all" && !rolesForRecruiter.includes(currentRole)) {
-      $("activityRoleSelect").value = "all";
+      const el = $("activityRoleSelect");
+      if (el) el.value = "all";
     }
-    state.selectedActivityRole = $("activityRoleSelect").value;
+    state.selectedActivityRole = $("activityRoleSelect") ? $("activityRoleSelect").value : "all";
 
     const recruitersForRole = getOrderedValues(
       weekly.filter(r => {
@@ -1168,9 +1181,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     setFilterOptions($("activityRecruiterSelect"), recruitersForRole, "All recruiters");
     if (currentRecruiter !== "all" && !recruitersForRole.includes(currentRecruiter)) {
-      $("activityRecruiterSelect").value = "all";
+      const el = $("activityRecruiterSelect");
+      if (el) el.value = "all";
     }
-    state.selectedActivityRecruiter = $("activityRecruiterSelect").value;
+    state.selectedActivityRecruiter = $("activityRecruiterSelect") ? $("activityRecruiterSelect").value : "all";
   }
 
   function renderActivity() {
@@ -1216,6 +1230,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const tbody = $("activityTable");
+    if
+    const tbody = $("activityTable");
+    if (!tbody) return;
     tbody.innerHTML = "";
 
     roles.forEach(role => {
@@ -1262,8 +1279,8 @@ document.addEventListener("DOMContentLoaded", () => {
     setFilterOptions($("sourcingRoleSelect"), roles, "All roles");
     setFilterOptions($("sourcingRecruiterSelect"), recruiters, "All recruiters");
 
-    state.selectedSourcingRole = $("sourcingRoleSelect").value;
-    state.selectedSourcingRecruiter = $("sourcingRecruiterSelect").value;
+    state.selectedSourcingRole = $("sourcingRoleSelect") ? $("sourcingRoleSelect").value : "all";
+    state.selectedSourcingRecruiter = $("sourcingRecruiterSelect") ? $("sourcingRecruiterSelect").value : "all";
   }
 
   function renderSourcing() {
@@ -1271,7 +1288,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const selectedWeekKey = state.selectedSourcingWeek || "";
     const selectedRole = state.selectedSourcingRole || "all";
     const selectedRecruiter = state.selectedSourcingRecruiter || "all";
-    const windowKeys = getSourcingWindowWeekKeys(selectedWeekKey);
 
     const filtered = rows.filter(r => {
       if (!isSourcingWeekInWindow(r, selectedWeekKey)) return false;
@@ -1281,6 +1297,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     const tbody = $("sourcingTable");
+    if (!tbody) return;
     tbody.innerHTML = "";
 
     const thead = document.querySelector("#sourcing table thead");
@@ -1333,7 +1350,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const roleOrder = [];
     const seen = new Set();
-
     filtered.forEach(r => {
       if (!r.role || seen.has(r.role)) return;
       seen.add(r.role);
@@ -1344,6 +1360,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const agg = byRole.get(role);
       const sourcedConv = agg && agg.sourced > 0 ? agg.sourcedScreens / agg.sourced : null;
       const connectConv = agg && agg.connect > 0 ? agg.connectScreens / agg.connect : null;
+
       const sourcedValue = agg?.sourced || 0;
       const sourcedScreensValue = agg?.sourcedScreens || 0;
       const connectValue = agg?.connect || 0;
@@ -1366,12 +1383,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const overallConnectConv = totalConnect > 0 ? totalConnectScreens / totalConnect : null;
     const convLabel = "4-week conversion";
 
-    $("sourcingSummary").innerHTML = `
-      <div class="kpi"><div class="label">Total Sourced</div><div class="value">${formatNumber(totalSourced)}</div></div>
-      <div class="kpi"><div class="label">Sourced Screens</div><div class="value">${formatNumber(totalSourcedScreens)}</div><div class="sub">${formatPercent(overallSourcedConv)} ${convLabel}</div></div>
-      <div class="kpi"><div class="label">Total Connects</div><div class="value">${formatNumber(totalConnect)}</div></div>
-      <div class="kpi"><div class="label">Connect Screens</div><div class="value">${formatNumber(totalConnectScreens)}</div><div class="sub">${formatPercent(overallConnectConv)} ${convLabel}</div></div>
-    `;
+    const summary = $("sourcingSummary");
+    if (summary) {
+      summary.innerHTML = `
+        <div class="kpi"><div class="label">Total Sourced</div><div class="value">${formatNumber(totalSourced)}</div></div>
+        <div class="kpi"><div class="label">Sourced Screens</div><div class="value">${formatNumber(totalSourcedScreens)}</div><div class="sub">${formatPercent(overallSourcedConv)} ${convLabel}</div></div>
+        <div class="kpi"><div class="label">Total Connects</div><div class="value">${formatNumber(totalConnect)}</div></div>
+        <div class="kpi"><div class="label">Connect Screens</div><div class="value">${formatNumber(totalConnectScreens)}</div><div class="sub">${formatPercent(overallConnectConv)} ${convLabel}</div></div>
+      `;
+    }
   }
 
   /* ---------------- RENDER: MANAGEMENT ---------------- */
@@ -1416,12 +1436,15 @@ document.addEventListener("DOMContentLoaded", () => {
       return sum + 1;
     }, 0);
 
-    $("managementKpis").innerHTML = `
-      <div class="kpi"><div class="label">Open Roles</div><div class="value">${formatNumber(openRoles)}</div></div>
-      <div class="kpi"><div class="label">On hold</div><div class="value">${formatNumber(onHoldRoles)}</div></div>
-      <div class="kpi"><div class="label">Step1 Screens</div><div class="value">${formatNumber(step1ScreensRolling)}</div><div class="sub">Rolling 4 weeks</div></div>
-      <div class="kpi"><div class="label">Hires</div><div class="value">${formatNumber(totalHires)}</div><div class="sub">All time${hiredRows.length ? "" : " · No hire data yet."}</div></div>
-    `;
+    const kpisEl = $("managementKpis");
+    if (kpisEl) {
+      kpisEl.innerHTML = `
+        <div class="kpi"><div class="label">Open Roles</div><div class="value">${formatNumber(openRoles)}</div></div>
+        <div class="kpi"><div class="label">On hold</div><div class="value">${formatNumber(onHoldRoles)}</div></div>
+        <div class="kpi"><div class="label">Step1 Screens</div><div class="value">${formatNumber(step1ScreensRolling)}</div><div class="sub">Rolling 4 weeks</div></div>
+        <div class="kpi"><div class="label">Hires</div><div class="value">${formatNumber(totalHires)}</div><div class="sub">All time${hiredRows.length ? "" : " · No hire data yet."}</div></div>
+      `;
+    }
 
     const counts = { healthy: 0, warning: 0, critical: 0 };
     overviewRows.forEach(r => {
@@ -1432,32 +1455,35 @@ document.addEventListener("DOMContentLoaded", () => {
       else if (value === "critical") counts.critical += 1;
     });
 
-    $("managementHealthSummary").innerHTML = `
-      <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
-      <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} At risk</span></div>
-      <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Critical</span></div>
-    `;
+    const hsEl = $("managementHealthSummary");
+    if (hsEl) {
+      hsEl.innerHTML = `
+        <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
+        <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} At risk</span></div>
+        <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Critical</span></div>
+      `;
+    }
 
-    renderManagementRecruiters({
-      weeklyRows
+    renderManagementRecruiters({ weeklyRows });
+
+    renderManagementRoleInsights({
+      roleNotesRows,
+      selectedActivityWeek,
+      selectedRole,
+      selectedRecruiter,
+      healthByRole
     });
 
-    renderManagementWeeklyUpdates({
-      weeklyUpdatesRows,
-      selectedRole
-    });
+    renderManagementWeeklyUpdates({ weeklyUpdatesRows, selectedRole });
 
-    renderManagementForecast({
-      inventoryRows,
-      overviewRows,
-      hiredRows
-    });
+    renderManagementForecast({ inventoryRows, overviewRows, hiredRows });
   }
 
   function renderManagementRecruiters({ weeklyRows }) {
     const tbody = $("managementRecruiterTable");
     const empty = $("managementRecruiterEmpty");
     if (!tbody || !empty) return;
+
     const selectedWeekKey = state.selectedManagementWeek || "";
     const totalsByRecruiter = new Map();
     const weekCountByRecruiter = new Map();
@@ -1570,7 +1596,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     container.innerHTML = cards.map(card => {
       const openAttr = card.health === "critical" || card.health === "warning" ? " open" : "";
-      const healthLabel = card.health === "warning" ? "At risk" : (card.health === "critical" ? "Critical" : (card.health === "healthy" ? "Healthy" : "Unknown"));
+      const healthLabel =
+        card.health === "warning" ? "At risk" :
+        (card.health === "critical" ? "Critical" :
+        (card.health === "healthy" ? "Healthy" : "Unknown"));
 
       const sectionHtml = (title, items) => {
         if (!items.length) return "";
@@ -1704,10 +1733,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let expectedHiresQuarterTotal = 0;
     finalsByRole.forEach((finals, role) => {
-      // Forecast logic:
-      // - finals: final-stage inventory for the selected week
-      // - probabilityHireThisQuarter = clamp(finals / 3, 0..1)
-      // - expected hires this quarter = probabilityHireThisQuarter * openingsRemaining
       const openingsRemaining = openingsByRole.has(role) ? openingsByRole.get(role) : 1;
       const probabilityHireThisQuarter = Math.max(0, Math.min(1, finals / 3));
       expectedHiresQuarterTotal += probabilityHireThisQuarter * openingsRemaining;
@@ -1752,6 +1777,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const rows = state.hiredRows || [];
     const tbody = $("hiresTable");
     const empty = $("hiresEmpty");
+    if (!tbody || !empty) return;
 
     tbody.innerHTML = "";
 
@@ -1799,12 +1825,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const avgTth = average(tthValues);
     const avgTtf = average(ttfValues);
 
-    $("hiresKpis").innerHTML = `
-      <div class="kpi"><div class="label">Total Hires</div><div class="value">${formatNumber(rows.length)}</div></div>
-      <div class="kpi"><div class="label">Avg TTH</div><div class="value">${avgTth !== null ? avgTth.toFixed(1) : "—"}</div></div>
-      <div class="kpi"><div class="label">Avg TTF</div><div class="value">${avgTtf !== null ? avgTtf.toFixed(1) : "—"}</div></div>
-      <div class="kpi"><div class="label">Scope</div><div class="value">All time</div></div>
-    `;
+    const kpis = $("hiresKpis");
+    if (kpis) {
+      kpis.innerHTML = `
+        <div class="kpi"><div class="label">Total Hires</div><div class="value">${formatNumber(rows.length)}</div></div>
+        <div class="kpi"><div class="label">Avg TTH</div><div class="value">${avgTth !== null ? avgTth.toFixed(1) : "—"}</div></div>
+        <div class="kpi"><div class="label">Avg TTF</div><div class="value">${avgTtf !== null ? avgTtf.toFixed(1) : "—"}</div></div>
+        <div class="kpi"><div class="label">Scope</div><div class="value">All time</div></div>
+      `;
+    }
   }
 
   /* ---------------- VIEW SWITCH ---------------- */
@@ -1819,10 +1848,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const managementView = $("managementView");
 
     const isContributor = view === "contributor";
-    contributorBtn.classList.toggle("active", isContributor);
-    managementBtn.classList.toggle("active", !isContributor);
-    contributorView.classList.toggle("hidden", !isContributor);
-    managementView.classList.toggle("hidden", isContributor);
+    if (contributorBtn) contributorBtn.classList.toggle("active", isContributor);
+    if (managementBtn) managementBtn.classList.toggle("active", !isContributor);
+    if (contributorView) contributorView.classList.toggle("hidden", !isContributor);
+    if (managementView) managementView.classList.toggle("hidden", isContributor);
   }
 
   /* ---------------- WEEK SELECTIONS ---------------- */
@@ -1845,7 +1874,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const sourcingAllowed = state.sourcingOptions.map(o => o.key);
     const managementAllowed = ["all", ...managementOptions.map(o => o.key)];
 
-    // PIPELINE: default to current ISO week (if present), else latest, else all
+    // PIPELINE: default to current ISO week (if present), else latest
     if (!state.selectedPipelineWeek || !pipelineAllowed.includes(state.selectedPipelineWeek)) {
       state.selectedPipelineWeek = pickPreferredWeekKey(state.pipelineOptions, PREFERRED_KW, PREFERRED_YEAR) || (state.pipelineOptions[0]?.key || "");
     }
@@ -1855,19 +1884,20 @@ document.addEventListener("DOMContentLoaded", () => {
       state.selectedActivityWeek = pickPreferredWeekKey(state.activityOptions, PREFERRED_KW, PREFERRED_YEAR) || (state.activityOptions[0]?.key || "all");
     }
 
-    // SOURCING: default to current ISO week (if present), else latest, else all
+    // SOURCING: default to current ISO week (if present), else latest
     if (!state.selectedSourcingWeek || !sourcingAllowed.includes(state.selectedSourcingWeek)) {
       state.selectedSourcingWeek = sourcingEndKey;
     }
 
+    // MANAGEMENT: default to current ISO week (if present), else latest, else all
     if (!state.selectedManagementWeek || !managementAllowed.includes(state.selectedManagementWeek)) {
       state.selectedManagementWeek = pickPreferredWeekKey(managementOptions, PREFERRED_KW, PREFERRED_YEAR) || (managementOptions[0]?.key || "all");
     }
 
-    $("pipelineWeekSelect").value = state.selectedPipelineWeek;
-    $("activityWeekSelect").value = state.selectedActivityWeek;
-    $("sourcingWeekSelect").value = state.selectedSourcingWeek;
-    $("managementWeekSelect").value = state.selectedManagementWeek;
+    if ($("pipelineWeekSelect")) $("pipelineWeekSelect").value = state.selectedPipelineWeek;
+    if ($("activityWeekSelect")) $("activityWeekSelect").value = state.selectedActivityWeek;
+    if ($("sourcingWeekSelect")) $("sourcingWeekSelect").value = state.selectedSourcingWeek;
+    if ($("managementWeekSelect")) $("managementWeekSelect").value = state.selectedManagementWeek;
 
     const berlinDate = getDateInTimeZone("Europe/Berlin");
     const currentYear = berlinDate.getUTCFullYear();
@@ -1876,7 +1906,7 @@ document.addEventListener("DOMContentLoaded", () => {
       state.selectedManagementQuarter = getQuarterLabel(currentYear, currentQuarter);
     }
     setManagementQuarterOptions($("managementQuarterSelect"), currentYear, currentQuarter);
-    $("managementQuarterSelect").value = state.selectedManagementQuarter;
+    if ($("managementQuarterSelect")) $("managementQuarterSelect").value = state.selectedManagementQuarter;
 
     updateActivityFilters();
     updateSourcingFilters();
@@ -2005,7 +2035,8 @@ document.addEventListener("DOMContentLoaded", () => {
       syncWeekSelections();
       renderAll();
 
-      $("lastUpdated").textContent = `Last updated: ${fmtDate()}`;
+      const last = $("lastUpdated");
+      if (last) last.textContent = `Last updated: ${fmtDate()}`;
     } catch (e) {
       console.error(e);
     }
@@ -2014,61 +2045,61 @@ document.addEventListener("DOMContentLoaded", () => {
   /* ---------------- EVENT HANDLERS ---------------- */
 
   function handlePipelineWeekChange() {
-    state.selectedPipelineWeek = $("pipelineWeekSelect").value;
+    state.selectedPipelineWeek = $("pipelineWeekSelect") ? $("pipelineWeekSelect").value : "";
     renderOverview();
     renderPipeline();
     renderManagement();
   }
 
   function handleActivityWeekChange() {
-    state.selectedActivityWeek = $("activityWeekSelect").value;
+    state.selectedActivityWeek = $("activityWeekSelect") ? $("activityWeekSelect").value : "all";
     updateActivityFilters();
     renderActivity();
     renderManagement();
   }
 
   function handleSourcingWeekChange() {
-    state.selectedSourcingWeek = $("sourcingWeekSelect").value;
+    state.selectedSourcingWeek = $("sourcingWeekSelect") ? $("sourcingWeekSelect").value : "";
     updateSourcingFilters();
     renderSourcing();
   }
 
   function handleActivityRoleChange() {
-    state.selectedActivityRole = $("activityRoleSelect").value;
+    state.selectedActivityRole = $("activityRoleSelect") ? $("activityRoleSelect").value : "all";
     updateActivityFilters();
     renderActivity();
     renderManagement();
   }
 
   function handleActivityRecruiterChange() {
-    state.selectedActivityRecruiter = $("activityRecruiterSelect").value;
+    state.selectedActivityRecruiter = $("activityRecruiterSelect") ? $("activityRecruiterSelect").value : "all";
     updateActivityFilters();
     renderActivity();
     renderManagement();
   }
 
   function handleSourcingRoleChange() {
-    state.selectedSourcingRole = $("sourcingRoleSelect").value;
+    state.selectedSourcingRole = $("sourcingRoleSelect") ? $("sourcingRoleSelect").value : "all";
     renderSourcing();
   }
 
   function handleSourcingRecruiterChange() {
-    state.selectedSourcingRecruiter = $("sourcingRecruiterSelect").value;
+    state.selectedSourcingRecruiter = $("sourcingRecruiterSelect") ? $("sourcingRecruiterSelect").value : "all";
     renderSourcing();
   }
 
   function handleManagementWeekChange() {
-    state.selectedManagementWeek = $("managementWeekSelect").value;
+    state.selectedManagementWeek = $("managementWeekSelect") ? $("managementWeekSelect").value : "all";
     renderManagement();
   }
 
   function handleManagementQuarterChange() {
-    state.selectedManagementQuarter = $("managementQuarterSelect").value;
+    state.selectedManagementQuarter = $("managementQuarterSelect") ? $("managementQuarterSelect").value : state.selectedManagementQuarter;
     renderManagement();
   }
 
   function handleDepartmentContinue() {
-    const selected = $("departmentSelect").value;
+    const selected = $("departmentSelect") ? $("departmentSelect").value : "";
     if (!selected) return;
     state.selectedDepartment = selected;
     localStorage.setItem(DEPARTMENT_STORAGE_KEY, selected);
@@ -2078,7 +2109,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderAll();
   }
 
-    /* ---------------- INIT ---------------- */
+  /* ---------------- INIT ---------------- */
 
   initTabs();
 
@@ -2086,7 +2117,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (storedView === "management") state.view = "management";
   setView(state.view);
 
-  // Safe event binding (fixes: Cannot read properties of null (reading 'addEventListener'))
+  // Safe event binding
   function on(id, evt, handler) {
     const el = $(id);
     if (!el) {
@@ -2114,3 +2145,4 @@ document.addEventListener("DOMContentLoaded", () => {
 
   refreshAll();
   setInterval(refreshAll, 60000);
+});
