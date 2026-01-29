@@ -2078,7 +2078,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderAll();
   }
 
-  /* ---------------- INIT ---------------- */
+    /* ---------------- INIT ---------------- */
 
   initTabs();
 
@@ -2086,22 +2086,31 @@ document.addEventListener("DOMContentLoaded", () => {
   if (storedView === "management") state.view = "management";
   setView(state.view);
 
-  $("viewContributor").addEventListener("click", () => setView("contributor"));
-  $("viewManagement").addEventListener("click", () => setView("management"));
+  // Safe event binding (fixes: Cannot read properties of null (reading 'addEventListener'))
+  function on(id, evt, handler) {
+    const el = $(id);
+    if (!el) {
+      console.warn(`[bind] Missing element #${id} for event "${evt}"`);
+      return;
+    }
+    el.addEventListener(evt, handler);
+  }
 
-  $("refreshBtn").addEventListener("click", refreshAll);
+  on("viewContributor", "click", () => setView("contributor"));
+  on("viewManagement", "click", () => setView("management"));
 
-  $("pipelineWeekSelect").addEventListener("change", handlePipelineWeekChange);
-  $("activityWeekSelect").addEventListener("change", handleActivityWeekChange);
-  $("sourcingWeekSelect").addEventListener("change", handleSourcingWeekChange);
-  $("activityRoleSelect").addEventListener("change", handleActivityRoleChange);
-  $("activityRecruiterSelect").addEventListener("change", handleActivityRecruiterChange);
-  $("sourcingRoleSelect").addEventListener("change", handleSourcingRoleChange);
-  $("sourcingRecruiterSelect").addEventListener("change", handleSourcingRecruiterChange);
-  $("managementWeekSelect").addEventListener("change", handleManagementWeekChange);
-  $("managementQuarterSelect").addEventListener("change", handleManagementQuarterChange);
-  $("departmentContinue").addEventListener("click", handleDepartmentContinue);
+  on("refreshBtn", "click", refreshAll);
+
+  on("pipelineWeekSelect", "change", handlePipelineWeekChange);
+  on("activityWeekSelect", "change", handleActivityWeekChange);
+  on("sourcingWeekSelect", "change", handleSourcingWeekChange);
+  on("activityRoleSelect", "change", handleActivityRoleChange);
+  on("activityRecruiterSelect", "change", handleActivityRecruiterChange);
+  on("sourcingRoleSelect", "change", handleSourcingRoleChange);
+  on("sourcingRecruiterSelect", "change", handleSourcingRecruiterChange);
+  on("managementWeekSelect", "change", handleManagementWeekChange);
+  on("managementQuarterSelect", "change", handleManagementQuarterChange);
+  on("departmentContinue", "click", handleDepartmentContinue);
 
   refreshAll();
   setInterval(refreshAll, 60000);
-});
