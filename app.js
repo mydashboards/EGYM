@@ -527,21 +527,22 @@ document.addEventListener("DOMContentLoaded", () => {
     state.pipelineWeeklyStageOrder = stageOrder;
 
     rows.forEach(r => {
-  const year = num(getField(r, ["year"]));
-  const kw = num(getField(r, ["kw"]));
-  const role = getField(r, ["role"]);
-  if (!year || !kw || !role) return;
+      const year = num(getField(r, ["year"]));
+      const kw = num(getField(r, ["kw"]));
+      const role = getField(r, ["role"]);
+      const recruiter = getField(r, ["recruiter"]);
+      if (!year || !kw || !role) return;
 
-  let pushedAny = false;
+      let pushedAny = false;
 
-  state.pipelineInventoryStageOrder.forEach(stageKey => {
-    const count = num(r[stageKey]);
-    if (!Number.isFinite(count)) return;
-    if (count === 0) return;
-    if (isIgnoredStage(stageKey)) return;
-    pushedAny = true;
-    long.push({ year, kw, role, stage: stageKey, count });
-  });
+      stageOrder.forEach(stageKey => {
+        const count = num(r[stageKey]);
+        if (!Number.isFinite(count)) return;
+        if (count === 0) return;
+        if (isIgnoredStage(stageKey)) return;
+        pushedAny = true;
+        long.push({ year, kw, role, recruiter, stage: stageKey, count });
+      });
 
       // IMPORTANT: keep the role visible for that week even if all counts are 0/blank
       // (so Activity/Pipeline can list all roles that exist in the KW).
@@ -838,8 +839,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!isWeekMatch(r, selectedWeekKey)) return;
       const role = getField(r, ["role"]) || r.role;
       const stage = getField(r, ["stage"]) || r.stage;
-if (!role || !stage) return;
-if (String(stage).startsWith("__")) return;
+      if (!role || !stage) return;
       roles.add(role);
 
       if (!countsByRole.has(role)) countsByRole.set(role, new Map());
