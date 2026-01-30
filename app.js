@@ -1230,8 +1230,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const tbody = $("activityTable");
-    if
-    const tbody = $("activityTable");
     if (!tbody) return;
     tbody.innerHTML = "";
 
