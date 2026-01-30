@@ -4,16 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Recruiting Dashboard · EGYM</title>
-
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f2937'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='Inter,Arial,sans-serif' font-size='32' fill='%23ffffff'%3EE%3C/text%3E%3C/svg%3E" />
-
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
-  <!-- IMPORTANT: keep this relative path for GitHub Pages /EGYM/ -->
   <link rel="stylesheet" href="./styles.css" />
 </head>
 
@@ -48,8 +45,19 @@
           <button class="tab" data-tab="pipeline" type="button">Pipeline</button>
           <button class="tab" data-tab="activity" type="button">Activity</button>
           <button class="tab" data-tab="sourcing" type="button">Sourcing</button>
-          <button class="tab" data-tab="hires" type="button">Hires &amp; KPIs</button>
+          <button class="tab" data-tab="hires" type="button">Hires & KPIs</button>
         </nav>
+
+        <!-- GLOBAL FILTER ROW (Department) -->
+        <div class="panel-head" style="margin-top:14px;">
+          <div></div>
+          <div class="filters">
+            <label>
+              <span>Department</span>
+              <select id="departmentSelectTop"></select>
+            </label>
+          </div>
+        </div>
 
         <!-- OVERVIEW -->
         <section id="overview" class="panel active">
@@ -98,11 +106,16 @@
             <div>
               <h2>Pipeline</h2>
             </div>
-
             <div class="filters">
               <label>
                 <span>Week</span>
                 <select id="pipelineWeekSelect"></select>
+              </label>
+
+              <!-- Department (Pipeline) -->
+              <label>
+                <span>Department</span>
+                <select id="pipelineDepartmentSelect"></select>
               </label>
             </div>
           </div>
@@ -132,12 +145,18 @@
             <div>
               <h2>Activity</h2>
             </div>
-
             <div class="filters">
               <label>
                 <span>Week</span>
                 <select id="activityWeekSelect"></select>
               </label>
+
+              <!-- Department (Activity) -->
+              <label>
+                <span>Department</span>
+                <select id="activityDepartmentSelect"></select>
+              </label>
+
               <label>
                 <span>Role</span>
                 <select id="activityRoleSelect"></select>
@@ -170,12 +189,18 @@
             <div>
               <h2>Sourcing</h2>
             </div>
-
             <div class="filters">
               <label>
                 <span>Week</span>
                 <select id="sourcingWeekSelect"></select>
               </label>
+
+              <!-- Department (Sourcing) -->
+              <label>
+                <span>Department</span>
+                <select id="sourcingDepartmentSelect"></select>
+              </label>
+
               <label>
                 <span>Role</span>
                 <select id="sourcingRoleSelect"></select>
@@ -216,7 +241,7 @@
         <section id="hires" class="panel">
           <div class="panel-head">
             <div>
-              <h2>Hires &amp; KPIs</h2>
+              <h2>Hires & KPIs</h2>
               <p class="muted small">Password-protected.</p>
             </div>
           </div>
@@ -267,29 +292,24 @@
           </div>
           <div id="managementKpis" class="kpi-grid"></div>
         </div>
-
         <div class="card">
           <div class="card-head">
             <h3>Pipeline Health</h3>
           </div>
           <div id="managementHealthSummary" class="health-row"></div>
         </div>
-
         <div class="card">
           <div class="card-head">
             <h3>Role Insights</h3>
           </div>
           <div id="managementRoleInsights"></div>
         </div>
-
         <div class="card">
           <div class="card-head">
             <h3>Recruiter Utilization</h3>
             <p class="muted small">Rolling 4 weeks (Step1 screens).</p>
           </div>
-
           <div id="managementRecruiterEmpty" class="placeholder hidden">No recruiter data available.</div>
-
           <div class="table-wrap">
             <table>
               <thead>
@@ -303,13 +323,11 @@
             </table>
           </div>
         </div>
-
         <div class="card">
           <div class="card-head">
             <h3>Weekly Updates</h3>
             <p class="muted small">Most recent updates from the last 4 weeks.</p>
           </div>
-
           <div id="managementUpdatesEmpty" class="placeholder hidden">No updates in the last 4 weeks.</div>
           <div id="managementWeeklyUpdates"></div>
         </div>
