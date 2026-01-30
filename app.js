@@ -1124,7 +1124,7 @@ const selectedRecruiter = state.selectedPipelineRecruiter || "all";
       const h = healthByRole[role] || "unknown";
 
       const tr = document.createElement("tr");
-      tr.innerHTML = `
+tr.innerHTML = `
         <td>${role}</td>
         ${stageCells}
         <td class="center">${healthDotHTML(h)}</td>
