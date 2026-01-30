@@ -62,6 +62,8 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const HIRES_PASSWORD = "EGYM2026";
+  const MANAGEMENT_PASSWORD = "EGYM2026";
+const MANAGEMENT_UNLOCK_KEY = "management_unlocked";
   const VIEW_STORAGE_KEY = "dashboard_view";
   const DEPARTMENT_STORAGE_KEY = "selected_department";
 
@@ -2118,8 +2120,15 @@ if (sourcingDepartmentSelect) setDepartmentOptions(sourcingDepartmentSelect, sta
   initTabs();
 
   const storedView = localStorage.getItem(VIEW_STORAGE_KEY);
-  if (storedView === "management") state.view = "management";
-  setView(state.view);
+const managementUnlocked = localStorage.getItem(MANAGEMENT_UNLOCK_KEY) === "1";
+
+if (storedView === "management" && managementUnlocked) {
+  state.view = "management";
+} else {
+  state.view = "contributor";
+}
+setView(state.view);
+
 
   // Safe event binding
   function on(id, evt, handler) {
@@ -2132,7 +2141,17 @@ if (sourcingDepartmentSelect) setDepartmentOptions(sourcingDepartmentSelect, sta
   }
 
   on("viewContributor", "click", () => setView("contributor"));
-  on("viewManagement", "click", () => setView("management"));
+
+on("viewManagement", "click", () => {
+  const unlocked = localStorage.getItem(MANAGEMENT_UNLOCK_KEY) === "1";
+  if (!unlocked) {
+    const input = window.prompt("Enter password to access Management View:");
+    if (input !== MANAGEMENT_PASSWORD) return;
+    localStorage.setItem(MANAGEMENT_UNLOCK_KEY, "1");
+  }
+  setView("management");
+});
+
 
   on("refreshBtn", "click", refreshAll);
 
