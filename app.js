@@ -1019,119 +1019,118 @@ state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys)
 
   /* ---------------- RENDER: PIPELINE ---------------- */
 
-  function getStagesForInventory(rows, selectedWeekKey, stageOrder) {
-    const stageMap = new Map();
-    rows.forEach(r => {
-      if (!isWeekMatch(r, selectedWeekKey)) return;
-      const label = String(getField(r, ["stage"]) || r.stage || "").trim();
-if (!label) return;
+function renderPipeline() {
+  const inv = state.pipelineInventoryRows || [];
+  const selectedWeekKey = state.selectedPipelineWeek || "";
+  const selectedRecruiter = state.selectedPipelineRecruiter || "all";
 
-// ✅ never show Department as a stage/column
-if (normalizeHeader(label) === "department") return;
-      if (!stageMap.has(label)) {
-        const so = getField(r, ["stage_order"]);
-        stageMap.set(label, { label, order: so === "" ? null : num(so) });
-      }
-    });
+  const emptyEl = $("pipelineEmpty");
+  const thead = document.querySelector("#pipeline table thead");
+  const tbody = $("pipelineTable");
+  if (!tbody) return;
+  tbody.innerHTML = "";
 
-    if (Array.isArray(stageOrder) && stageOrder.length) {
-      return stageOrder
-        .filter(label => stageMap.has(label))
-        .map(label => stageMap.get(label));
-    }
+  // --- stages (Department is already filtered out in getStagesForInventory)
+  const stages = getStagesForInventory(
+    inv,
+    selectedWeekKey,
+    state.pipelineInventoryStageOrder
+  );
 
-    return Array.from(stageMap.values()).sort((a, b) => {
-      const ao = Number.isFinite(a.order) ? a.order : null;
-      const bo = Number.isFinite(b.order) ? b.order : null;
-      if (ao !== null && bo !== null && ao !== bo) return ao - bo;
-      if (ao !== null && bo === null) return -1;
-      if (ao === null && bo !== null) return 1;
-      return a.label.localeCompare(b.label);
-    });
-  }
-
-  function renderPipeline() {
-    const inv = state.pipelineInventoryRows || [];
-    const selectedWeekKey = state.selectedPipelineWeek || "";
-const selectedRecruiter = state.selectedPipelineRecruiter || "all";
-
-    const emptyEl = $("pipelineEmpty");
-    const thead = document.querySelector("#pipeline table thead");
-    const tbody = $("pipelineTable");
-    if (!tbody) return;
-    tbody.innerHTML = "";
-
-    const stages = getStagesForInventory(inv, selectedWeekKey, state.pipelineInventoryStageOrder);
-
-    const roles = new Set();
-    const countsByRole = new Map();
+  // --- collect counts per role
+  const countsByRole = new Map();
+  const roles = new Set();
 
   inv.forEach(r => {
-  if (!isWeekMatch(r, selectedWeekKey)) return;
-  if (selectedRecruiter !== "all" && (r.recruiter || "Unassigned") !== selectedRecruiter) return;
+    if (!isWeekMatch(r, selectedWeekKey)) return;
+    if (
+      selectedRecruiter !== "all" &&
+      (r.recruiter || "Unassigned") !== selectedRecruiter
+    ) return;
 
-  const role = getField(r, ["role"]) || r.role;
-  const stage = getField(r, ["stage"]) || r.stage;
-      if (!role || !stage) return;
-      roles.add(role);
+    const role = getField(r, ["role"]) || r.role;
+    const stage = getField(r, ["stage"]) || r.stage;
+    if (!role || !stage) return;
 
-      if (!countsByRole.has(role)) countsByRole.set(role, new Map());
-      const sm = countsByRole.get(role);
-      sm.set(stage, (sm.get(stage) || 0) + num(getField(r, ["count"]) || r.count));
-    });
+    roles.add(role);
 
-    if (thead) {
-      const stageHeaders = stages.map(s => `<th>${formatStageLabel(s.label)}</th>`).join("");
-      thead.innerHTML = `
-        <tr>
-          <th>Role</th>
-          ${stageHeaders}
-          <th class="center">Health</th>
-        </tr>
-      `;
+    if (!countsByRole.has(role)) {
+      countsByRole.set(role, new Map());
     }
 
-    const healthByRole = getHealthByRoleFromInventory(
-      inv,
-      state.selectedPipelineWeek || TODAY_WEEK_KEY
-    );
+    const sm = countsByRole.get(role);
+    sm.set(stage, (sm.get(stage) || 0) + num(getField(r, ["count"]) || r.count));
+  });
 
-    const roleList = [];
-    const seen = new Set();
-    inv.forEach(r => {
-      inv.forEach(r => {
-  if (!isWeekMatch(r, selectedWeekKey)) return;
-  if (selectedRecruiter !== "all" && (r.recruiter || "Unassigned") !== selectedRecruiter) return;
+  // --- header
+  if (thead) {
+    const stageHeaders = stages
+      .map(s => `<th>${formatStageLabel(s.label)}</th>`)
+      .join("");
 
-  const role = getField(r, ["role"]) || r.role;
-  if (!role || seen.has(role)) return;
-      seen.add(role);
-      roleList.push(role);
-    });
+    thead.innerHTML = `
+      <tr>
+        <th>Role</th>
+        ${stageHeaders}
+        <th class="center">Health</th>
+      </tr>
+    `;
+  }
 
-    if (!roleList.length) {
-      if (emptyEl) emptyEl.classList.remove("hidden");
-      return;
-    }
-    if (emptyEl) emptyEl.classList.add("hidden");
+  // --- health
+  const healthByRole = getHealthByRoleFromInventory(
+    inv,
+    selectedWeekKey || TODAY_WEEK_KEY
+  );
 
-    roleList.forEach(role => {
-      const sm = countsByRole.get(role) || new Map();
-      const stageCells = stages.map(s => {
+  // --- stable role list (no duplicates)
+  const roleList = [];
+  const seen = new Set();
+
+  inv.forEach(r => {
+    if (!isWeekMatch(r, selectedWeekKey)) return;
+    if (
+      selectedRecruiter !== "all" &&
+      (r.recruiter || "Unassigned") !== selectedRecruiter
+    ) return;
+
+    const role = getField(r, ["role"]) || r.role;
+    if (!role || seen.has(role)) return;
+
+    seen.add(role);
+    roleList.push(role);
+  });
+
+  // --- empty state
+  if (!roleList.length) {
+    if (emptyEl) emptyEl.classList.remove("hidden");
+    return;
+  }
+  if (emptyEl) emptyEl.classList.add("hidden");
+
+  // --- rows
+  roleList.forEach(role => {
+    const sm = countsByRole.get(role) || new Map();
+
+    const stageCells = stages
+      .map(s => {
         const value = sm.get(s.label) || 0;
         return `<td class="num ${getNumberClass(value)}">${formatNumber(value)}</td>`;
-      }).join("");
-      const h = healthByRole[role] || "unknown";
+      })
+      .join("");
 
-      const tr = document.createElement("tr");
-tr.innerHTML = `
-        <td>${role}</td>
-        ${stageCells}
-        <td class="center">${healthDotHTML(h)}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-  })
+    const h = healthByRole[role] || "unknown";
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${role}</td>
+      ${stageCells}
+      <td class="center">${healthDotHTML(h)}</td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
 
   /* ---------------- RENDER: ACTIVITY ---------------- */
 
