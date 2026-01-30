@@ -1017,7 +1017,7 @@ state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys)
     });
   }
 
-  /* ---------------- RENDER: PIPELINE ---------------- */
+ /* ---------------- RENDER: PIPELINE ---------------- */
 
 function renderPipeline() {
   const inv = state.pipelineInventoryRows || [];
@@ -1030,7 +1030,7 @@ function renderPipeline() {
   if (!tbody) return;
   tbody.innerHTML = "";
 
-  // --- stages (Department is already filtered out in getStagesForInventory)
+  // --- stages (Department is filtered out in getStagesForInventory)
   const stages = getStagesForInventory(
     inv,
     selectedWeekKey,
@@ -1039,27 +1039,25 @@ function renderPipeline() {
 
   // --- collect counts per role
   const countsByRole = new Map();
-  const roles = new Set();
 
   inv.forEach(r => {
     if (!isWeekMatch(r, selectedWeekKey)) return;
-    if (
-      selectedRecruiter !== "all" &&
-      (r.recruiter || "Unassigned") !== selectedRecruiter
-    ) return;
+
+    const recruiter = getField(r, ["recruiter"]) || r.recruiter || "Unassigned";
+    if (selectedRecruiter !== "all" && recruiter !== selectedRecruiter) return;
 
     const role = getField(r, ["role"]) || r.role;
     const stage = getField(r, ["stage"]) || r.stage;
     if (!role || !stage) return;
 
-    roles.add(role);
+    // safety: never count "department" as a stage
+    if (normalizeHeader(stage) === "department") return;
 
-    if (!countsByRole.has(role)) {
-      countsByRole.set(role, new Map());
-    }
-
+    if (!countsByRole.has(role)) countsByRole.set(role, new Map());
     const sm = countsByRole.get(role);
-    sm.set(stage, (sm.get(stage) || 0) + num(getField(r, ["count"]) || r.count));
+
+    const c = num(getField(r, ["count"]) || r.count);
+    sm.set(stage, (sm.get(stage) || 0) + c);
   });
 
   // --- header
@@ -1083,16 +1081,15 @@ function renderPipeline() {
     selectedWeekKey || TODAY_WEEK_KEY
   );
 
-  // --- stable role list (no duplicates)
+  // --- stable role list (no duplicates), respecting filters
   const roleList = [];
   const seen = new Set();
 
   inv.forEach(r => {
     if (!isWeekMatch(r, selectedWeekKey)) return;
-    if (
-      selectedRecruiter !== "all" &&
-      (r.recruiter || "Unassigned") !== selectedRecruiter
-    ) return;
+
+    const recruiter = getField(r, ["recruiter"]) || r.recruiter || "Unassigned";
+    if (selectedRecruiter !== "all" && recruiter !== selectedRecruiter) return;
 
     const role = getField(r, ["role"]) || r.role;
     if (!role || seen.has(role)) return;
@@ -1127,10 +1124,32 @@ function renderPipeline() {
       ${stageCells}
       <td class="center">${healthDotHTML(h)}</td>
     `;
-
     tbody.appendChild(tr);
   });
 }
+
+function updatePipelineFilters() {
+  // If the dropdown isn't present (or you haven't added it in index), don't crash
+  const sel = $("pipelineRecruiterSelect");
+  if (!sel) return;
+
+  const inv = state.pipelineInventoryRows || [];
+  const selectedWeekKey = state.selectedPipelineWeek || "";
+
+  const recruiters = getOrderedValues(
+    inv.filter(r => isWeekMatch(r, selectedWeekKey)),
+    "all",
+    r => (getField(r, ["recruiter"]) || r.recruiter || "Unassigned")
+  );
+
+  setFilterOptions(sel, recruiters, "All recruiters");
+
+  const current = state.selectedPipelineRecruiter || "all";
+  const allowed = new Set(["all", ...recruiters]);
+  sel.value = allowed.has(current) ? current : "all";
+  state.selectedPipelineRecruiter = sel.value;
+}
+
 
   /* ---------------- RENDER: ACTIVITY ---------------- */
 
@@ -1912,7 +1931,7 @@ function renderPipeline() {
     setManagementQuarterOptions($("managementQuarterSelect"), currentYear, currentQuarter);
     if ($("managementQuarterSelect")) $("managementQuarterSelect").value = state.selectedManagementQuarter;
 
-    updatePipelineFilters();
+updatePipelineFilters();
 updateActivityFilters();
 updateSourcingFilters();
 
