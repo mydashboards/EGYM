@@ -209,13 +209,6 @@ document.addEventListener("DOMContentLoaded", () => {
     return n === 0 ? "num-zero" : "num-pos";
   }
 
-  function setDepartmentGateVisible(visible) {
-    const gate = $("departmentGate");
-    if (!gate) return;
-    gate.classList.toggle("hidden", !visible);
-    document.body.classList.toggle("department-gated", visible);
-  }
-
   function normalizeHeader(value) {
     return String(value || "")
       .trim()
@@ -2013,20 +2006,14 @@ document.addEventListener("DOMContentLoaded", () => {
       const softwareMatch = state.departmentOptions.find(option => option.toLowerCase() === "software");
       const defaultDepartment = storedMatch || softwareMatch || state.departmentOptions[0] || "";
 
-      if ($("departmentSelect")) {
-        setDepartmentOptions($("departmentSelect"), state.departmentOptions, defaultDepartment);
+      const departmentSelect = $("departmentSelectTop");
+      if (departmentSelect) {
+        setDepartmentOptions(departmentSelect, state.departmentOptions, defaultDepartment);
       }
 
-      if (storedMatch) {
-        state.selectedDepartment = storedMatch;
-        setDepartmentGateVisible(false);
-      } else {
-        state.selectedDepartment = "";
-        if (!state.departmentOptions.length) {
-          setDepartmentGateVisible(false);
-        } else {
-          setDepartmentGateVisible(true);
-        }
+      state.selectedDepartment = defaultDepartment;
+      if (state.selectedDepartment) {
+        localStorage.setItem(DEPARTMENT_STORAGE_KEY, state.selectedDepartment);
       }
 
       applyDepartmentSelection();
@@ -2096,14 +2083,13 @@ document.addEventListener("DOMContentLoaded", () => {
     renderManagement();
   }
 
-  function handleDepartmentContinue() {
-    const selected = $("departmentSelect") ? $("departmentSelect").value : "";
+  function handleDepartmentChange() {
+    const selected = $("departmentSelectTop") ? $("departmentSelectTop").value : "";
     if (!selected) return;
     state.selectedDepartment = selected;
     localStorage.setItem(DEPARTMENT_STORAGE_KEY, selected);
     applyDepartmentSelection();
     syncWeekSelections();
-    setDepartmentGateVisible(false);
     renderAll();
   }
 
@@ -2139,7 +2125,7 @@ document.addEventListener("DOMContentLoaded", () => {
   on("sourcingRecruiterSelect", "change", handleSourcingRecruiterChange);
   on("managementWeekSelect", "change", handleManagementWeekChange);
   on("managementQuarterSelect", "change", handleManagementQuarterChange);
-  on("departmentContinue", "click", handleDepartmentContinue);
+  on("departmentSelectTop", "change", handleDepartmentChange);
 
   refreshAll();
   setInterval(refreshAll, 60000);
