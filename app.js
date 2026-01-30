@@ -1018,7 +1018,34 @@ state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys)
   }
 
  /* ---------------- RENDER: PIPELINE ---------------- */
+  
+function getStagesForInventory(invRows, selectedWeekKey, stageOrder) {
+  // Stage order MUST follow sheet header order (already stored in state.pipelineInventoryStageOrder)
+  const order = Array.isArray(stageOrder) ? stageOrder : [];
+  const out = [];
 
+  // Ensure we NEVER treat department as a stage
+  order.forEach(stageKey => {
+    const nk = normalizeHeader(stageKey);
+    if (!nk) return;
+    if (nk === "department") return;
+    out.push(nk);
+  });
+
+  // Fallback: if stageOrder is empty, derive keys from any row (still filter out department + core)
+  if (!out.length && invRows && invRows.length) {
+    const core = new Set(["role","kw","year","week_start","recruiter","health","stage_order","department"]);
+    Object.keys(invRows[0] || {}).forEach(k => {
+      const nk = normalizeHeader(k);
+      if (!nk) return;
+      if (core.has(nk)) return;
+      if (nk === "department") return;
+      out.push(nk);
+    });
+  }
+
+  return out;
+}
 function renderPipeline() {
   const inv = state.pipelineInventoryRows || [];
   const selectedWeekKey = state.selectedPipelineWeek || "";
@@ -1030,14 +1057,10 @@ function renderPipeline() {
   if (!tbody) return;
   tbody.innerHTML = "";
 
-  // --- stages (Department is filtered out in getStagesForInventory)
-  const stages = getStagesForInventory(
-    inv,
-    selectedWeekKey,
-    state.pipelineInventoryStageOrder
-  );
+  // stages: ALWAYS from sheet header order (and never department)
+  const stages = getStagesForInventory(inv, selectedWeekKey, state.pipelineInventoryStageOrder);
 
-  // --- collect counts per role
+  // counts per role per normalized stage key
   const countsByRole = new Map();
 
   inv.forEach(r => {
@@ -1047,25 +1070,25 @@ function renderPipeline() {
     if (selectedRecruiter !== "all" && recruiter !== selectedRecruiter) return;
 
     const role = getField(r, ["role"]) || r.role;
-    const stage = getField(r, ["stage"]) || r.stage;
-    if (!role || !stage) return;
+    const stageRaw = getField(r, ["stage"]) || r.stage;
+    if (!role || !stageRaw) return;
 
-    // safety: never count "department" as a stage
-    if (normalizeHeader(stage) === "department") return;
+    const stageKey = normalizeHeader(stageRaw);
+    if (!stageKey) return;
+
+    // never count department as stage
+    if (stageKey === "department") return;
 
     if (!countsByRole.has(role)) countsByRole.set(role, new Map());
     const sm = countsByRole.get(role);
 
     const c = num(getField(r, ["count"]) || r.count);
-    sm.set(stage, (sm.get(stage) || 0) + c);
+    sm.set(stageKey, (sm.get(stageKey) || 0) + c);
   });
 
-  // --- header
+  // header
   if (thead) {
-    const stageHeaders = stages
-      .map(s => `<th>${formatStageLabel(s.label)}</th>`)
-      .join("");
-
+    const stageHeaders = stages.map(s => `<th>${formatStageLabel(s)}</th>`).join("");
     thead.innerHTML = `
       <tr>
         <th>Role</th>
@@ -1075,13 +1098,13 @@ function renderPipeline() {
     `;
   }
 
-  // --- health
+  // health
   const healthByRole = getHealthByRoleFromInventory(
     inv,
     selectedWeekKey || TODAY_WEEK_KEY
   );
 
-  // --- stable role list (no duplicates), respecting filters
+  // stable role list (no duplicates), respecting filters
   const roleList = [];
   const seen = new Set();
 
@@ -1098,23 +1121,21 @@ function renderPipeline() {
     roleList.push(role);
   });
 
-  // --- empty state
+  // empty state
   if (!roleList.length) {
     if (emptyEl) emptyEl.classList.remove("hidden");
     return;
   }
   if (emptyEl) emptyEl.classList.add("hidden");
 
-  // --- rows
+  // rows
   roleList.forEach(role => {
     const sm = countsByRole.get(role) || new Map();
 
-    const stageCells = stages
-      .map(s => {
-        const value = sm.get(s.label) || 0;
-        return `<td class="num ${getNumberClass(value)}">${formatNumber(value)}</td>`;
-      })
-      .join("");
+    const stageCells = stages.map(stageKey => {
+      const value = sm.get(stageKey) || 0;
+      return `<td class="num ${getNumberClass(value)}">${formatNumber(value)}</td>`;
+    }).join("");
 
     const h = healthByRole[role] || "unknown";
 
@@ -1127,6 +1148,7 @@ function renderPipeline() {
     tbody.appendChild(tr);
   });
 }
+
 
 function updatePipelineFilters() {
   // If the dropdown isn't present (or you haven't added it in index), don't crash
@@ -2069,11 +2091,12 @@ if (sourcingDepartmentSelect) setDepartmentOptions(sourcingDepartmentSelect, sta
   /* ---------------- EVENT HANDLERS ---------------- */
 
   function handlePipelineWeekChange() {
-    state.selectedPipelineWeek = $("pipelineWeekSelect") ? $("pipelineWeekSelect").value : "";
-    renderOverview();
-    renderPipeline();
-    renderManagement();
-  }
+  state.selectedPipelineWeek = $("pipelineWeekSelect") ? $("pipelineWeekSelect").value : "";
+  updatePipelineFilters();
+  renderOverview();
+  renderPipeline();
+  renderManagement();
+}
 
   function handleActivityWeekChange() {
     state.selectedActivityWeek = $("activityWeekSelect") ? $("activityWeekSelect").value : "all";
@@ -2183,6 +2206,7 @@ on("viewManagement", "click", () => {
   on("refreshBtn", "click", refreshAll);
 
   on("pipelineWeekSelect", "change", handlePipelineWeekChange);
+  on("pipelineRecruiterSelect", "change", () => { state.selectedPipelineRecruiter = $("pipelineRecruiterSelect") ? $("pipelineRecruiterSelect").value : "all"; renderPipeline(); renderManagement(); });
   on("activityWeekSelect", "change", handleActivityWeekChange);
   on("sourcingWeekSelect", "change", handleSourcingWeekChange);
   on("activityRoleSelect", "change", handleActivityRoleChange);
