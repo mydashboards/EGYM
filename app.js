@@ -95,6 +95,7 @@ const MANAGEMENT_UNLOCK_KEY = "management_unlocked";
     sourcingOptions: [],
 
     selectedPipelineWeek: "",
+    selectedPipelineRecruiter: "all",
     selectedActivityWeek: "",
     selectedSourcingWeek: "",
     selectedActivityRole: "all",
@@ -1052,6 +1053,7 @@ if (normalizeHeader(label) === "department") return;
   function renderPipeline() {
     const inv = state.pipelineInventoryRows || [];
     const selectedWeekKey = state.selectedPipelineWeek || "";
+const selectedRecruiter = state.selectedPipelineRecruiter || "all";
 
     const emptyEl = $("pipelineEmpty");
     const thead = document.querySelector("#pipeline table thead");
@@ -1064,10 +1066,12 @@ if (normalizeHeader(label) === "department") return;
     const roles = new Set();
     const countsByRole = new Map();
 
-    inv.forEach(r => {
-      if (!isWeekMatch(r, selectedWeekKey)) return;
-      const role = getField(r, ["role"]) || r.role;
-      const stage = getField(r, ["stage"]) || r.stage;
+  inv.forEach(r => {
+  if (!isWeekMatch(r, selectedWeekKey)) return;
+  if (selectedRecruiter !== "all" && (r.recruiter || "Unassigned") !== selectedRecruiter) return;
+
+  const role = getField(r, ["role"]) || r.role;
+  const stage = getField(r, ["stage"]) || r.stage;
       if (!role || !stage) return;
       roles.add(role);
 
@@ -1095,9 +1099,12 @@ if (normalizeHeader(label) === "department") return;
     const roleList = [];
     const seen = new Set();
     inv.forEach(r => {
-      if (!isWeekMatch(r, selectedWeekKey)) return;
-      const role = getField(r, ["role"]) || r.role;
-      if (!role || seen.has(role)) return;
+      inv.forEach(r => {
+  if (!isWeekMatch(r, selectedWeekKey)) return;
+  if (selectedRecruiter !== "all" && (r.recruiter || "Unassigned") !== selectedRecruiter) return;
+
+  const role = getField(r, ["role"]) || r.role;
+  if (!role || seen.has(role)) return;
       seen.add(role);
       roleList.push(role);
     });
@@ -1906,8 +1913,10 @@ if (normalizeHeader(label) === "department") return;
     setManagementQuarterOptions($("managementQuarterSelect"), currentYear, currentQuarter);
     if ($("managementQuarterSelect")) $("managementQuarterSelect").value = state.selectedManagementQuarter;
 
-    updateActivityFilters();
-    updateSourcingFilters();
+    updatePipelineFilters();
+updateActivityFilters();
+updateSourcingFilters();
+
   }
 
   function renderAll() {
