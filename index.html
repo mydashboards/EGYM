@@ -38,6 +38,28 @@
     <div id="dataErrors" class="banner hidden" aria-live="polite"></div>
 
     <main>
+      <div class="filters top-controls">
+        <label>
+          <span>Department</span>
+          <select id="departmentSelectTop"></select>
+        </label>
+        <label>
+          <span>Pipeline week</span>
+          <select id="pipelineWeekSelect"></select>
+        </label>
+        <label>
+          <span>Activity week</span>
+          <select id="activityWeekSelect"></select>
+        </label>
+        <label>
+          <span>Sourcing week</span>
+          <select id="sourcingWeekSelect"></select>
+        </label>
+        <label>
+          <span>Management week</span>
+          <select id="managementWeekSelect"></select>
+        </label>
+      </div>
       <!-- Contributor View -->
       <section id="contributorView">
         <nav class="tabs" aria-label="Dashboard tabs">
@@ -95,12 +117,6 @@
             <div>
               <h2>Pipeline</h2>
             </div>
-            <div class="filters">
-              <label>
-                <span>Week</span>
-                <select id="pipelineWeekSelect"></select>
-              </label>
-            </div>
           </div>
 
           <div class="card">
@@ -129,10 +145,6 @@
               <h2>Activity</h2>
             </div>
             <div class="filters">
-              <label>
-                <span>Week</span>
-                <select id="activityWeekSelect"></select>
-              </label>
               <label>
                 <span>Role</span>
                 <select id="activityRoleSelect"></select>
@@ -166,10 +178,6 @@
               <h2>Sourcing</h2>
             </div>
             <div class="filters">
-              <label>
-                <span>Week</span>
-                <select id="sourcingWeekSelect"></select>
-              </label>
               <label>
                 <span>Role</span>
                 <select id="sourcingRoleSelect"></select>
