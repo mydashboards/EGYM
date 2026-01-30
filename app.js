@@ -627,7 +627,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return [];
     }
     const looksLong = rows.length && ("stage" in rows[0] || "count" in rows[0]);
-    const coreKeys = new Set(["role", "kw", "year", "week_start", "recruiter", "health"]);
+const coreKeys = new Set(["role", "kw", "year", "week_start", "recruiter", "health", "department"]);
     const long = [];
     const ignoredStages = new Set(["connects", "connect", "connected", "connections", "replied"]);
     const isIgnoredStage = (stageValue) => ignoredStages.has(normalizeStageValue(stageValue));
@@ -708,8 +708,10 @@ document.addEventListener("DOMContentLoaded", () => {
       })).filter(r => r.year && r.kw && r.role && r.stage && !isIgnoredStage(r.stage));
     }
 
-    const coreKeys = new Set(["role", "kw", "year", "week_start", "recruiter", "health", "stage_order"]);
-    state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys).filter(stage => !isIgnoredStage(stage));
+const coreKeys = new Set(["role", "kw", "year", "week_start", "recruiter", "health", "stage_order", "department"]);
+state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys)
+  .filter(stage => !isIgnoredStage(stage))
+  .filter(stage => stage !== "department");
     const long = [];
     rows.forEach(r => {
       const year = num(getField(r, ["year"]));
@@ -1019,7 +1021,10 @@ document.addEventListener("DOMContentLoaded", () => {
     rows.forEach(r => {
       if (!isWeekMatch(r, selectedWeekKey)) return;
       const label = String(getField(r, ["stage"]) || r.stage || "").trim();
-      if (!label) return;
+if (!label) return;
+
+// ✅ never show Department as a stage/column
+if (normalizeHeader(label) === "department") return;
       if (!stageMap.has(label)) {
         const so = getField(r, ["stage_order"]);
         stageMap.set(label, { label, order: so === "" ? null : num(so) });
