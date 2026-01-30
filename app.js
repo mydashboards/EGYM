@@ -2011,10 +2011,15 @@ if (normalizeHeader(label) === "department") return;
       const softwareMatch = state.departmentOptions.find(option => option.toLowerCase() === "software");
       const defaultDepartment = storedMatch || softwareMatch || state.departmentOptions[0] || "";
 
-      const departmentSelect = $("departmentSelectTop");
-      if (departmentSelect) {
-        setDepartmentOptions(departmentSelect, state.departmentOptions, defaultDepartment);
-      }
+   const departmentSelectTop = $("departmentSelectTop");
+const pipelineDepartmentSelect = $("pipelineDepartmentSelect");
+const activityDepartmentSelect = $("activityDepartmentSelect");
+const sourcingDepartmentSelect = $("sourcingDepartmentSelect");
+
+if (departmentSelectTop) setDepartmentOptions(departmentSelectTop, state.departmentOptions, defaultDepartment);
+if (pipelineDepartmentSelect) setDepartmentOptions(pipelineDepartmentSelect, state.departmentOptions, defaultDepartment);
+if (activityDepartmentSelect) setDepartmentOptions(activityDepartmentSelect, state.departmentOptions, defaultDepartment);
+if (sourcingDepartmentSelect) setDepartmentOptions(sourcingDepartmentSelect, state.departmentOptions, defaultDepartment);
 
       state.selectedDepartment = defaultDepartment;
       if (state.selectedDepartment) {
@@ -2088,15 +2093,25 @@ if (normalizeHeader(label) === "department") return;
     renderManagement();
   }
 
-  function handleDepartmentChange() {
-    const selected = $("departmentSelectTop") ? $("departmentSelectTop").value : "";
-    if (!selected) return;
-    state.selectedDepartment = selected;
-    localStorage.setItem(DEPARTMENT_STORAGE_KEY, selected);
-    applyDepartmentSelection();
-    syncWeekSelections();
-    renderAll();
-  }
+  function handleDepartmentChange(fromId = "departmentSelectTop") {
+  const fromEl = $(fromId);
+  const selected = fromEl ? fromEl.value : "";
+  if (!selected) return;
+
+  state.selectedDepartment = selected;
+  localStorage.setItem(DEPARTMENT_STORAGE_KEY, selected);
+
+  // sync all department dropdowns to the same selection
+  const ids = ["departmentSelectTop", "pipelineDepartmentSelect", "activityDepartmentSelect", "sourcingDepartmentSelect"];
+  ids.forEach(id => {
+    const el = $(id);
+    if (el) el.value = selected;
+  });
+
+  applyDepartmentSelection();
+  syncWeekSelections();
+  renderAll();
+}
 
   /* ---------------- INIT ---------------- */
 
@@ -2130,7 +2145,10 @@ if (normalizeHeader(label) === "department") return;
   on("sourcingRecruiterSelect", "change", handleSourcingRecruiterChange);
   on("managementWeekSelect", "change", handleManagementWeekChange);
   on("managementQuarterSelect", "change", handleManagementQuarterChange);
-  on("departmentSelectTop", "change", handleDepartmentChange);
+on("departmentSelectTop", "change", () => handleDepartmentChange("departmentSelectTop"));
+on("pipelineDepartmentSelect", "change", () => handleDepartmentChange("pipelineDepartmentSelect"));
+on("activityDepartmentSelect", "change", () => handleDepartmentChange("activityDepartmentSelect"));
+on("sourcingDepartmentSelect", "change", () => handleDepartmentChange("sourcingDepartmentSelect"));
 
   refreshAll();
   setInterval(refreshAll, 60000);
