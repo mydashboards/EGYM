@@ -1131,7 +1131,7 @@ tr.innerHTML = `
       `;
       tbody.appendChild(tr);
     });
-  }
+  })
 
   /* ---------------- RENDER: ACTIVITY ---------------- */
 
