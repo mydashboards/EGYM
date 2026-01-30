@@ -4,8 +4,6 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Recruiting Dashboard · EGYM</title>
-  <meta name="description" content="Recruiting Dashboard · EGYM" />
-  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f2937'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='Inter,Arial,sans-serif' font-size='32' fill='%23ffffff'%3EE%3C/text%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -40,28 +38,6 @@
     <div id="dataErrors" class="banner hidden" aria-live="polite"></div>
 
     <main>
-      <div class="filters top-controls">
-        <label>
-          <span>Department</span>
-          <select id="departmentSelectTop"></select>
-        </label>
-        <label>
-          <span>Pipeline week</span>
-          <select id="pipelineWeekSelect"></select>
-        </label>
-        <label>
-          <span>Activity week</span>
-          <select id="activityWeekSelect"></select>
-        </label>
-        <label>
-          <span>Sourcing week</span>
-          <select id="sourcingWeekSelect"></select>
-        </label>
-        <label>
-          <span>Management week</span>
-          <select id="managementWeekSelect"></select>
-        </label>
-      </div>
       <!-- Contributor View -->
       <section id="contributorView">
         <nav class="tabs" aria-label="Dashboard tabs">
@@ -119,6 +95,12 @@
             <div>
               <h2>Pipeline</h2>
             </div>
+            <div class="filters">
+              <label>
+                <span>Week</span>
+                <select id="pipelineWeekSelect"></select>
+              </label>
+            </div>
           </div>
 
           <div class="card">
@@ -147,6 +129,10 @@
               <h2>Activity</h2>
             </div>
             <div class="filters">
+              <label>
+                <span>Week</span>
+                <select id="activityWeekSelect"></select>
+              </label>
               <label>
                 <span>Role</span>
                 <select id="activityRoleSelect"></select>
@@ -180,6 +166,10 @@
               <h2>Sourcing</h2>
             </div>
             <div class="filters">
+              <label>
+                <span>Week</span>
+                <select id="sourcingWeekSelect"></select>
+              </label>
               <label>
                 <span>Role</span>
                 <select id="sourcingRoleSelect"></select>
@@ -233,7 +223,7 @@
               <p class="muted small">All time. If this is empty, the source may be header-only (allowed).</p>
             </div>
 
-          <div id="hiresEmpty" class="placeholder hidden">No hire data yet.</div>
+            <div id="hiresEmpty" class="placeholder hidden">No hire data yet.</div>
 
             <div class="table-wrap">
               <table>
