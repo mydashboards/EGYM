@@ -1881,7 +1881,78 @@ function updatePipelineFilters() {
     step1ByRole.set(role, (step1ByRole.get(role) || 0) + num(r.count));
   });
 
-      /* ---------------- RENDER: HIRES ---------------- */
+
+  // ---------------- HEALTH GATE ----------------
+  const healthByRole = getHealthByRoleWithOfferOverride({
+    weeklyRows: state.pipelineWeeklyRows,
+    inventoryRows: state.pipelineInventoryRows,
+    endWeekKey: TODAY_WEEK_KEY,
+    inventoryWeekKey: state.selectedPipelineWeek || TODAY_WEEK_KEY
+  });
+
+  // ---------------- HIRES THIS MONTH (ACTUAL) ----------------
+  let hiresThisMonth = 0;
+
+  (hiredRows || []).forEach(r => {
+    const date =
+      parseDate(getField(r, ["signature_date", "signature date"])) ||
+      parseDate(getField(r, ["start_date", "start date"]));
+
+    if (!date) return;
+    if (date.getUTCFullYear() !== currentYear) return;
+    if (date.getUTCMonth() !== currentMonth) return;
+
+    hiresThisMonth += 1;
+  });
+
+  // ---------------- FORECAST LOGIC ----------------
+  let forecastRolling = 0;
+
+  step1ByRole.forEach((step1Count, role) => {
+    const health = healthByRole[role] || "unknown";
+
+    // ❗ Health-Gate:
+    // If role is healthy ONLY because of Step1 → too early → no forecast yet
+    if (health === "healthy" && step1Count < STEP1_PER_HIRE) return;
+
+    forecastRolling += step1Count / STEP1_PER_HIRE;
+  });
+
+  // ---------------- OPENINGS CAP ----------------
+  const openingsByRole = new Map();
+  (overviewRows || []).forEach(r => {
+    const role = getField(r, ["role"]);
+    const openings = num(getField(r, ["openings"]));
+    if (!role || !openings) return;
+    openingsByRole.set(role, openings);
+  });
+
+  const maxPossibleHires = Array.from(openingsByRole.values()).reduce((a, b) => a + b, 0);
+  forecastRolling = Math.min(forecastRolling, maxPossibleHires);
+
+  // ---------------- MONTH vs QUARTER ----------------
+  const monthFraction = 1 / 3; // simple, transparent assumption
+  const forecastMonth = forecastRolling * monthFraction;
+  const forecastQuarter = forecastRolling;
+
+  // ---------------- RENDER ----------------
+  container.innerHTML = `
+    <div class="forecast-item">
+      <div class="label">Hires this month (actual)</div>
+      <div class="value">${hiresThisMonth}</div>
+    </div>
+    <div class="forecast-item">
+      <div class="label">Expected hires (this month)</div>
+      <div class="value">~${forecastMonth.toFixed(1)}</div>
+    </div>
+    <div class="forecast-item">
+      <div class="label">Expected hires (this quarter)</div>
+      <div class="value">~${forecastQuarter.toFixed(1)}</div>
+    </div>
+  `;
+}
+
+/* ---------------- RENDER: HIRES ---------------- */
 
   function parseDate(value) {
     if (!value) return null;
@@ -1962,77 +2033,7 @@ function updatePipelineFilters() {
       `;
     }
   }
-
-  // ---------------- HEALTH GATE ----------------
-  const healthByRole = getHealthByRoleWithOfferOverride({
-    weeklyRows: state.pipelineWeeklyRows,
-    inventoryRows: state.pipelineInventoryRows,
-    endWeekKey: TODAY_WEEK_KEY,
-    inventoryWeekKey: state.selectedPipelineWeek || TODAY_WEEK_KEY
-  });
-
-  // ---------------- HIRES THIS MONTH (ACTUAL) ----------------
-  let hiresThisMonth = 0;
-
-  (hiredRows || []).forEach(r => {
-    const date =
-      parseDate(getField(r, ["signature_date", "signature date"])) ||
-      parseDate(getField(r, ["start_date", "start date"]));
-
-    if (!date) return;
-    if (date.getUTCFullYear() !== currentYear) return;
-    if (date.getUTCMonth() !== currentMonth) return;
-
-    hiresThisMonth += 1;
-  });
-
-  // ---------------- FORECAST LOGIC ----------------
-  let forecastRolling = 0;
-
-  step1ByRole.forEach((step1Count, role) => {
-    const health = healthByRole[role] || "unknown";
-
-    // ❗ Health-Gate:
-    // If role is healthy ONLY because of Step1 → too early → no forecast yet
-    if (health === "healthy" && step1Count < STEP1_PER_HIRE) return;
-
-    forecastRolling += step1Count / STEP1_PER_HIRE;
-  });
-
-  // ---------------- OPENINGS CAP ----------------
-  const openingsByRole = new Map();
-  (overviewRows || []).forEach(r => {
-    const role = getField(r, ["role"]);
-    const openings = num(getField(r, ["openings"]));
-    if (!role || !openings) return;
-    openingsByRole.set(role, openings);
-  });
-
-  const maxPossibleHires = Array.from(openingsByRole.values()).reduce((a, b) => a + b, 0);
-  forecastRolling = Math.min(forecastRolling, maxPossibleHires);
-
-  // ---------------- MONTH vs QUARTER ----------------
-  const monthFraction = 1 / 3; // simple, transparent assumption
-  const forecastMonth = forecastRolling * monthFraction;
-  const forecastQuarter = forecastRolling;
-
-  // ---------------- RENDER ----------------
-  container.innerHTML = `
-    <div class="forecast-item">
-      <div class="label">Hires this month (actual)</div>
-      <div class="value">${hiresThisMonth}</div>
-    </div>
-    <div class="forecast-item">
-      <div class="label">Expected hires (this month)</div>
-      <div class="value">~${forecastMonth.toFixed(1)}</div>
-    </div>
-    <div class="forecast-item">
-      <div class="label">Expected hires (this quarter)</div>
-      <div class="value">~${forecastQuarter.toFixed(1)}</div>
-    </div>
-  `;
-}
-
+  
   /* ---------------- VIEW SWITCH ---------------- */
 
   function setView(view) {
