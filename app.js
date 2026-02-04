@@ -895,6 +895,39 @@ function getOfferByRoleFromInventory(inventoryRows, selectedWeekKey, filters = {
 
   return offerByRole;
 }
+  function getHealthByRoleWithOfferOverride({
+  weeklyRows,
+  inventoryRows,
+  endWeekKey,
+  inventoryWeekKey
+}) {
+  // 1) Prefer inventory-based health (because it reflects current funnel status per KW)
+  let health = getHealthByRoleFromInventory(inventoryRows || [], inventoryWeekKey || TODAY_WEEK_KEY) || {};
+
+  // 2) Fallback: if inventory health is empty, use weekly rolling health
+  if (!health || Object.keys(health).length === 0) {
+    health = getHealthByRole(weeklyRows || [], endWeekKey || TODAY_WEEK_KEY) || {};
+  }
+
+  // 3) Offer override: if ANY offer > 0 in inventory for that week -> healthy
+  const wk = (inventoryWeekKey === "all" ? TODAY_WEEK_KEY : inventoryWeekKey) || TODAY_WEEK_KEY;
+
+  (inventoryRows || []).forEach(r => {
+    const role = getField(r, ["role"]) || r.role;
+    if (!role) return;
+
+    if (weekKey(r) !== wk) return;
+
+    const stageRaw = getField(r, ["stage"]) || r.stage;
+    const stageNorm = normalizeStageValue(stageRaw);
+    if (!stageNorm.includes("offer")) return;
+
+    const c = num(getField(r, ["count"]) || r.count);
+    if (c > 0) health[role] = "healthy";
+  });
+
+  return health;
+}
 
 /**
  * ✅ Combined: base from weekly (rolling), override to healthy if offer>0 (inventory)
