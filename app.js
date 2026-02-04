@@ -494,16 +494,33 @@ const MANAGEMENT_UNLOCK_KEY = "management_unlocked";
   }
 
   function setSourcingWeekOptions(select, endWeekKey) {
-    if (!select) return;
-    select.innerHTML = "";
-    const endKw = getWeekNumberFromKey(endWeekKey);
-    const opt = document.createElement("option");
-    opt.value = endWeekKey || "";
-    opt.textContent = endKw ? `Rolling 4w · ending KW ${String(endKw).padStart(2, "0")}` : "Rolling 4w · ending";
-    select.appendChild(opt);
-    select.value = endWeekKey || "";
-    select.disabled = true;
-  }
+  if (!select) return;
+
+  const current = select.value;
+  select.innerHTML = "";
+
+  // Option 1: Rolling 4 weeks (default)
+  const endKw = getWeekNumberFromKey(endWeekKey);
+  const optRolling = document.createElement("option");
+  optRolling.value = endWeekKey || "";
+  optRolling.textContent = endKw
+    ? `Rolling 4w · ending KW ${String(endKw).padStart(2, "0")}`
+    : "Rolling 4w · ending";
+  select.appendChild(optRolling);
+
+  // Option 2: All time
+  const optAll = document.createElement("option");
+  optAll.value = "all";
+  optAll.textContent = "All time";
+  select.appendChild(optAll);
+
+  // keep selection if valid, otherwise default to rolling
+  const allowed = new Set([optRolling.value, "all"]);
+  if (current && allowed.has(current)) select.value = current;
+  else select.value = optRolling.value;
+
+  select.disabled = false; // IMPORTANT: must be selectable now
+}
 
   function setFilterOptions(select, values, allLabel) {
     if (!select) return;
@@ -1427,146 +1444,153 @@ function updatePipelineFilters() {
 
   /* ---------------- RENDER: SOURCING ---------------- */
 
-  function getSourcingWindowWeekKeys(selectedWeekKey) {
-    if (!selectedWeekKey || selectedWeekKey === "all") {
-      const options = state.sourcingOptions || [];
-      const hasToday = options.some(o => o.key === TODAY_WEEK_KEY);
-      const endKey = hasToday ? TODAY_WEEK_KEY : (options[0]?.key || "");
-      return endKey ? getRollingWeekKeys(endKey, 4) : [];
+function getSourcingWindowWeekKeys(selectedWeekKey) {
+  // NEW: "all" means truly all-time (no window)
+  if (selectedWeekKey === "all") return "all";
+
+  // Rolling 4w behavior (unchanged)
+  if (!selectedWeekKey) {
+    const options = state.sourcingOptions || [];
+    const hasToday = options.some(o => o.key === TODAY_WEEK_KEY);
+    const endKey = hasToday ? TODAY_WEEK_KEY : (options[0]?.key || "");
+    return endKey ? getRollingWeekKeys(endKey, 4) : [];
+  }
+
+  // If a specific week key is provided, use rolling 4w ending that week
+  return getRollingWeekKeys(selectedWeekKey, 4);
+}
+
+function updateSourcingFilters() {
+  const selectedWeekKey = state.selectedSourcingWeek || "";
+  const rows = state.sourcingRows || [];
+
+  // NEW: All time should use all rows for filter options
+  const baseRows = selectedWeekKey === "all"
+    ? rows
+    : rows.filter(r => isSourcingWeekInWindow(r, selectedWeekKey));
+
+  const roles = getOrderedValues(baseRows, "all", r => r.role);
+  const recruiters = getOrderedValues(baseRows, "all", r => r.recruiter);
+
+  setFilterOptions($("sourcingRoleSelect"), roles, "All roles");
+  setFilterOptions($("sourcingRecruiterSelect"), recruiters, "All recruiters");
+
+  state.selectedSourcingRole = $("sourcingRoleSelect") ? $("sourcingRoleSelect").value : "all";
+  state.selectedSourcingRecruiter = $("sourcingRecruiterSelect") ? $("sourcingRecruiterSelect").value : "all";
+}
+
+function renderSourcing() {
+  const rows = state.sourcingRows || [];
+  const selectedWeekKey = state.selectedSourcingWeek || "";
+  const selectedRole = state.selectedSourcingRole || "all";
+  const selectedRecruiter = state.selectedSourcingRecruiter || "all";
+
+  const filtered = rows.filter(r => {
+    // NEW: All time includes everything
+    if (selectedWeekKey !== "all" && !isSourcingWeekInWindow(r, selectedWeekKey)) return false;
+    if (selectedRole !== "all" && r.role !== selectedRole) return false;
+    if (selectedRecruiter !== "all" && r.recruiter !== selectedRecruiter) return false;
+    return true;
+  });
+
+  const tbody = $("sourcingTable");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  const thead = document.querySelector("#sourcing table thead");
+  if (thead) {
+    const convLabel = selectedWeekKey === "all" ? "Conv. (all)" : "Conv. (4w)";
+    thead.innerHTML = `
+      <tr>
+        <th>Role</th>
+        <th class="num">Sourced</th>
+        <th class="num">Sourced Screens</th>
+        <th class="num">${convLabel}</th>
+        <th class="num">Connects</th>
+        <th class="num">Connect Screens</th>
+        <th class="num">${convLabel}</th>
+      </tr>
+    `;
+  }
+
+  let totalSourced = 0;
+  let totalSourcedScreens = 0;
+  let totalConnect = 0;
+  let totalConnectScreens = 0;
+
+  const byRole = new Map();
+  filtered.forEach(r => {
+    if (!byRole.has(r.role)) {
+      byRole.set(r.role, {
+        sourced: 0,
+        sourcedScreens: 0,
+        connect: 0,
+        connectScreens: 0
+      });
     }
-    return getRollingWeekKeys(selectedWeekKey, 4);
+    const agg = byRole.get(r.role);
+    const sourced = num(r.sourced);
+    const sourcedScreens = num(r.sourced_screens);
+    const connect = num(r.connect);
+    const connectScreens = num(r.connect_screens);
+
+    agg.sourced += sourced;
+    agg.sourcedScreens += sourcedScreens;
+    agg.connect += connect;
+    agg.connectScreens += connectScreens;
+
+    totalSourced += sourced;
+    totalSourcedScreens += sourcedScreens;
+    totalConnect += connect;
+    totalConnectScreens += connectScreens;
+  });
+
+  const roleOrder = [];
+  const seen = new Set();
+  filtered.forEach(r => {
+    if (!r.role || seen.has(r.role)) return;
+    seen.add(r.role);
+    roleOrder.push(r.role);
+  });
+
+  roleOrder.forEach(role => {
+    const agg = byRole.get(role);
+    const sourcedConv = agg && agg.sourced > 0 ? agg.sourcedScreens / agg.sourced : null;
+    const connectConv = agg && agg.connect > 0 ? agg.connectScreens / agg.connect : null;
+
+    const sourcedValue = agg?.sourced || 0;
+    const sourcedScreensValue = agg?.sourcedScreens || 0;
+    const connectValue = agg?.connect || 0;
+    const connectScreensValue = agg?.connectScreens || 0;
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${role}</td>
+      <td class="num ${getNumberClass(sourcedValue)}">${formatNumber(sourcedValue)}</td>
+      <td class="num ${getNumberClass(sourcedScreensValue)}">${formatNumber(sourcedScreensValue)}</td>
+      <td class="num ${getNumberClass(sourcedConv)}">${formatPercent(sourcedConv)}</td>
+      <td class="num ${getNumberClass(connectValue)}">${formatNumber(connectValue)}</td>
+      <td class="num ${getNumberClass(connectScreensValue)}">${formatNumber(connectScreensValue)}</td>
+      <td class="num ${getNumberClass(connectConv)}">${formatPercent(connectConv)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const overallSourcedConv = totalSourced > 0 ? totalSourcedScreens / totalSourced : null;
+  const overallConnectConv = totalConnect > 0 ? totalConnectScreens / totalConnect : null;
+
+  const convLabel = selectedWeekKey === "all" ? "All-time conversion" : "4-week conversion";
+
+  const summary = $("sourcingSummary");
+  if (summary) {
+    summary.innerHTML = `
+      <div class="kpi"><div class="label">Total Sourced</div><div class="value">${formatNumber(totalSourced)}</div></div>
+      <div class="kpi"><div class="label">Sourced Screens</div><div class="value">${formatNumber(totalSourcedScreens)}</div><div class="sub">${formatPercent(overallSourcedConv)} ${convLabel}</div></div>
+      <div class="kpi"><div class="label">Total Connects</div><div class="value">${formatNumber(totalConnect)}</div></div>
+      <div class="kpi"><div class="label">Connect Screens</div><div class="value">${formatNumber(totalConnectScreens)}</div><div class="sub">${formatPercent(overallConnectConv)} ${convLabel}</div></div>
+    `;
   }
-
-  function isSourcingWeekInWindow(row, selectedWeekKey) {
-    const keys = getSourcingWindowWeekKeys(selectedWeekKey);
-    if (!keys.length) return false;
-    return keys.includes(weekKey(row));
-  }
-
-  function updateSourcingFilters() {
-    const selectedWeekKey = state.selectedSourcingWeek || "";
-    const rows = state.sourcingRows || [];
-    const windowedRows = rows.filter(r => isSourcingWeekInWindow(r, selectedWeekKey));
-    const roles = getOrderedValues(windowedRows, "all", r => r.role);
-    const recruiters = getOrderedValues(windowedRows, "all", r => r.recruiter);
-
-    setFilterOptions($("sourcingRoleSelect"), roles, "All roles");
-    setFilterOptions($("sourcingRecruiterSelect"), recruiters, "All recruiters");
-
-    state.selectedSourcingRole = $("sourcingRoleSelect") ? $("sourcingRoleSelect").value : "all";
-    state.selectedSourcingRecruiter = $("sourcingRecruiterSelect") ? $("sourcingRecruiterSelect").value : "all";
-  }
-
-  function renderSourcing() {
-    const rows = state.sourcingRows || [];
-    const selectedWeekKey = state.selectedSourcingWeek || "";
-    const selectedRole = state.selectedSourcingRole || "all";
-    const selectedRecruiter = state.selectedSourcingRecruiter || "all";
-
-    const filtered = rows.filter(r => {
-      if (!isSourcingWeekInWindow(r, selectedWeekKey)) return false;
-      if (selectedRole !== "all" && r.role !== selectedRole) return false;
-      if (selectedRecruiter !== "all" && r.recruiter !== selectedRecruiter) return false;
-      return true;
-    });
-
-    const tbody = $("sourcingTable");
-    if (!tbody) return;
-    tbody.innerHTML = "";
-
-    const thead = document.querySelector("#sourcing table thead");
-    if (thead) {
-      const convLabel = "Conv. (4w)";
-      thead.innerHTML = `
-        <tr>
-          <th>Role</th>
-          <th class="num">Sourced</th>
-          <th class="num">Sourced Screens</th>
-          <th class="num">${convLabel}</th>
-          <th class="num">Connects</th>
-          <th class="num">Connect Screens</th>
-          <th class="num">${convLabel}</th>
-        </tr>
-      `;
-    }
-
-    let totalSourced = 0;
-    let totalSourcedScreens = 0;
-    let totalConnect = 0;
-    let totalConnectScreens = 0;
-
-    const byRole = new Map();
-    filtered.forEach(r => {
-      if (!byRole.has(r.role)) {
-        byRole.set(r.role, {
-          sourced: 0,
-          sourcedScreens: 0,
-          connect: 0,
-          connectScreens: 0
-        });
-      }
-      const agg = byRole.get(r.role);
-      const sourced = num(r.sourced);
-      const sourcedScreens = num(r.sourced_screens);
-      const connect = num(r.connect);
-      const connectScreens = num(r.connect_screens);
-
-      agg.sourced += sourced;
-      agg.sourcedScreens += sourcedScreens;
-      agg.connect += connect;
-      agg.connectScreens += connectScreens;
-
-      totalSourced += sourced;
-      totalSourcedScreens += sourcedScreens;
-      totalConnect += connect;
-      totalConnectScreens += connectScreens;
-    });
-
-    const roleOrder = [];
-    const seen = new Set();
-    filtered.forEach(r => {
-      if (!r.role || seen.has(r.role)) return;
-      seen.add(r.role);
-      roleOrder.push(r.role);
-    });
-
-    roleOrder.forEach(role => {
-      const agg = byRole.get(role);
-      const sourcedConv = agg && agg.sourced > 0 ? agg.sourcedScreens / agg.sourced : null;
-      const connectConv = agg && agg.connect > 0 ? agg.connectScreens / agg.connect : null;
-
-      const sourcedValue = agg?.sourced || 0;
-      const sourcedScreensValue = agg?.sourcedScreens || 0;
-      const connectValue = agg?.connect || 0;
-      const connectScreensValue = agg?.connectScreens || 0;
-
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${role}</td>
-        <td class="num ${getNumberClass(sourcedValue)}">${formatNumber(sourcedValue)}</td>
-        <td class="num ${getNumberClass(sourcedScreensValue)}">${formatNumber(sourcedScreensValue)}</td>
-        <td class="num ${getNumberClass(sourcedConv)}">${formatPercent(sourcedConv)}</td>
-        <td class="num ${getNumberClass(connectValue)}">${formatNumber(connectValue)}</td>
-        <td class="num ${getNumberClass(connectScreensValue)}">${formatNumber(connectScreensValue)}</td>
-        <td class="num ${getNumberClass(connectConv)}">${formatPercent(connectConv)}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-
-    const overallSourcedConv = totalSourced > 0 ? totalSourcedScreens / totalSourced : null;
-    const overallConnectConv = totalConnect > 0 ? totalConnectScreens / totalConnect : null;
-    const convLabel = "4-week conversion";
-
-    const summary = $("sourcingSummary");
-    if (summary) {
-      summary.innerHTML = `
-        <div class="kpi"><div class="label">Total Sourced</div><div class="value">${formatNumber(totalSourced)}</div></div>
-        <div class="kpi"><div class="label">Sourced Screens</div><div class="value">${formatNumber(totalSourcedScreens)}</div><div class="sub">${formatPercent(overallSourcedConv)} ${convLabel}</div></div>
-        <div class="kpi"><div class="label">Total Connects</div><div class="value">${formatNumber(totalConnect)}</div></div>
-        <div class="kpi"><div class="label">Connect Screens</div><div class="value">${formatNumber(totalConnectScreens)}</div><div class="sub">${formatPercent(overallConnectConv)} ${convLabel}</div></div>
-      `;
-    }
-  }
+}
 
   /* ---------------- RENDER: MANAGEMENT ---------------- */
 
@@ -2075,7 +2099,7 @@ function renderHires() {
 
     const pipelineAllowed = state.pipelineOptions.map(o => o.key);
     const activityAllowed = ["all", ...state.activityOptions.map(o => o.key)];
-    const sourcingAllowed = state.sourcingOptions.map(o => o.key);
+const sourcingAllowed = ["all", ...state.sourcingOptions.map(o => o.key)];
     const managementAllowed = ["all", ...managementOptions.map(o => o.key)];
 
     // PIPELINE: default to current ISO week (if present), else latest
@@ -2088,10 +2112,10 @@ function renderHires() {
       state.selectedActivityWeek = pickPreferredWeekKey(state.activityOptions, PREFERRED_KW, PREFERRED_YEAR) || (state.activityOptions[0]?.key || "all");
     }
 
-    // SOURCING: default to current ISO week (if present), else latest
-    if (!state.selectedSourcingWeek || !sourcingAllowed.includes(state.selectedSourcingWeek)) {
-      state.selectedSourcingWeek = sourcingEndKey;
-    }
+    // SOURCING: default to rolling 4w (ending current week if present), but allow "all"
+if (!state.selectedSourcingWeek || !sourcingAllowed.includes(state.selectedSourcingWeek)) {
+  state.selectedSourcingWeek = sourcingEndKey || "all";
+}
 
     // MANAGEMENT: default to current ISO week (if present), else latest, else all
     if (!state.selectedManagementWeek || !managementAllowed.includes(state.selectedManagementWeek)) {
