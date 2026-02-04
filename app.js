@@ -1455,6 +1455,16 @@ function getSourcingWindowWeekKeys(selectedWeekKey) {
     const endKey = hasToday ? TODAY_WEEK_KEY : (options[0]?.key || "");
     return endKey ? getRollingWeekKeys(endKey, 4) : [];
   }
+  
+  // Helper: checks if a row is inside the selected sourcing window.
+// - selectedWeekKey === "all" => all-time (always true)
+// - otherwise: rolling 4w keys returned by getSourcingWindowWeekKeys(selectedWeekKey)
+function isSourcingWeekInWindow(row, selectedWeekKey) {
+  const windowKeys = getSourcingWindowWeekKeys(selectedWeekKey);
+  if (windowKeys === "all") return true;
+  if (!Array.isArray(windowKeys) || windowKeys.length === 0) return false;
+  return windowKeys.includes(weekKey(row));
+}
 
   // If a specific week key is provided, use rolling 4w ending that week
   return getRollingWeekKeys(selectedWeekKey, 4);
