@@ -808,25 +808,28 @@ state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys)
 
   /* ---------------- HEALTH (RAG) ---------------- */
 
-  function normalizeHealthStage(value) {
-    const normalized = normalizeStageValue(value);
-    const collapsed = normalized.replace(/_/g, "");
-    if (collapsed === "step1") return "step1";
-    if (collapsed === "step2") return "step2";
-    return normalized;
-  }
+function normalizeHealthStage(value) {
+  const normalized = normalizeStageValue(value);
+  const collapsed = normalized.replace(/_/g, "");
+  if (collapsed === "step1") return "step1";
+  if (collapsed === "step2") return "step2";
+  return normalized;
+}
 
-  function computeHealthFromCounts(step1Count, step2Count) {
-    const s1 = num(step1Count);
-    const s2 = num(step2Count);
-    if (s1 === 0 && s2 === 0) return "unknown";
-    if (s1 < 3) return "critical";
-    if (s1 < 6 && s2 < 3) return "critical";
-    if (s1 < 10 && s2 < 4) return "warning";
-    return "healthy";
-  }
+function computeHealthFromCounts(step1Count, step2Count) {
+  const s1 = num(step1Count);
+  const s2 = num(step2Count);
+  if (s1 === 0 && s2 === 0) return "unknown";
+  if (s1 < 3) return "critical";
+  if (s1 < 6 && s2 < 3) return "critical";
+  if (s1 < 10 && s2 < 4) return "warning";
+  return "healthy";
+}
 
-  function getHealthByRole(weeklyRows, endWeekKey, filters = {}) {
+/**
+ * Weekly (Activity) based health – Rolling 4 weeks
+ */
+function getHealthByRole(weeklyRows, endWeekKey, filters = {}) {
   const { roleFilter = "all", recruiterFilter = "all" } = filters;
   const windowKeys = new Set(getRollingWeekKeys(endWeekKey, 4));
   const byRole = new Map();
@@ -856,13 +859,18 @@ state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys)
   return health;
 }
 
-  function getHealthByRoleFromInventory(inventoryRows, selectedWeekKey, filters = {}) {
+/**
+ * Inventory based health – single week
+ * Offer > 0 => always healthy
+ */
+function getHealthByRoleFromInventory(inventoryRows, selectedWeekKey, filters = {}) {
   const { roleFilter = "all", recruiterFilter = "all" } = filters;
 
   const byRole = new Map();
   const offerByRole = new Map();
 
-  const weekKeyToUse = selectedWeekKey === "all" ? TODAY_WEEK_KEY : selectedWeekKey;
+  const weekKeyToUse =
+    selectedWeekKey === "all" ? TODAY_WEEK_KEY : selectedWeekKey;
   if (!weekKeyToUse) return {};
 
   inventoryRows.forEach(r => {
@@ -870,14 +878,17 @@ state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys)
     if (!role) return;
 
     if (roleFilter !== "all" && role !== roleFilter) return;
-    if (recruiterFilter !== "all" && (r.recruiter || "Unassigned") !== recruiterFilter) return;
+    if (
+      recruiterFilter !== "all" &&
+      (r.recruiter || "Unassigned") !== recruiterFilter
+    ) return;
     if (weekKey(r) !== weekKeyToUse) return;
 
     const stageRaw = getField(r, ["stage"]) || r.stage;
     const stageNorm = normalizeStageValue(stageRaw);
     const c = num(getField(r, ["count"]) || r.count);
 
-    // Offer override: sobald Offer > 0 => Role wird healthy
+    // Offer override
     if (stageNorm.includes("offer")) {
       offerByRole.set(role, (offerByRole.get(role) || 0) + c);
     }
@@ -893,34 +904,22 @@ state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys)
 
   const health = {};
 
-  // Rollen, die Step1/2 haben
+  // Roles with Step1/Step2
   byRole.forEach((agg, role) => {
     const base = computeHealthFromCounts(agg.step1, agg.step2);
     const hasOffer = (offerByRole.get(role) || 0) > 0;
     health[role] = hasOffer ? "healthy" : base;
   });
 
-  // Rollen, die NUR Offer haben (kein Step1/2) -> trotzdem healthy
+  // Roles with ONLY offer
   offerByRole.forEach((count, role) => {
     if (count > 0 && !health[role]) {
       health[role] = "healthy";
     }
   });
-  
-      if (stage !== "step1" && stage !== "step2") return;
 
-      if (!byRole.has(r.role)) byRole.set(r.role, { step1: 0, step2: 0 });
-      const agg = byRole.get(r.role);
-      if (stage === "step1") agg.step1 += num(getField(r, ["count"]) || r.count);
-      if (stage === "step2") agg.step2 += num(getField(r, ["count"]) || r.count);
-    });
-
-    const health = {};
-byRole.forEach((agg, role) => {
-  const baseHealth = computeHealthFromCounts(agg.step1, agg.step2);
-  const hasOffer = (offerByRole.get(role) || 0) > 0;
-  health[role] = hasOffer ? "healthy" : baseHealth;
-});
+  return health;
+}
 
   /* ---------------- TABS ---------------- */
 
