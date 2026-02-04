@@ -1050,49 +1050,43 @@ function renderOverview() {
   const rows = state.overviewRows || [];
   const hiredRows = state.hiredRows || [];
 
-  // Health (unverändert, inkl. Offer-Override)
   const healthByRole = getHealthByRoleFromInventory(
     state.pipelineInventoryRows,
     state.selectedPipelineWeek || TODAY_WEEK_KEY
   );
 
-  // ---------------- Hires by role ----------------
-const hiresByRole = {};
-hiredRows.forEach(r => {
-  const role = getField(r, ["role"]);
-  const signatureDate = getField(r, ["signature_date", "signature date"]);
-  const startDate = getField(r, ["start_date", "start date"]);
-  if (!role) return;
-  if (!signatureDate && !startDate) return;
-  hiresByRole[role] = (hiresByRole[role] || 0) + 1;
-});
+  const onHoldRoles = rows.filter(r => {
+    const status = normalizeHeader(getField(r, ["status"]));
+    if (!status) return false;
+    return status === "on_hold" || status === "onhold" || status.includes("hold");
+  }).length;
 
-// ---------------- Openings remaining ----------------
-const openingsRemainingByRole = {};
-overviewRows.forEach(r => {
-  const role = getField(r, ["role"]);
-  const baseOpenings = num(getField(r, ["openings"]));
-  const hires = hiresByRole[role] || 0;
-  openingsRemainingByRole[role] = Math.max(0, baseOpenings - hires);
-});
+  // ---------- Hires by role (only count rows with signature_date OR start_date) ----------
+  const hiresByRole = {};
+  if (hiredRows.length) {
+    hiredRows.forEach(r => {
+      const role = getField(r, ["role"]);
+      const signatureDate = getField(r, ["signature_date", "signature date"]);
+      const startDate = getField(r, ["start_date", "start date"]);
+      if (!role) return;
+      if (!signatureDate && !startDate) return;
+      hiresByRole[role] = (hiresByRole[role] || 0) + 1;
+    });
+  }
 
-// ---------------- KPIs ----------------
-const openRoles = overviewRows.filter(r => {
-  const status = normalizeHeader(getField(r, ["status"]));
-  if (status !== "open") return false;
-  const role = getField(r, ["role"]);
-  return (openingsRemainingByRole[role] || 0) > 0;
-}).length;
+  // ---------- KPIs ----------
+  const openRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
+  const filledRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "filled").length;
 
-const onHoldRoles = overviewRows.filter(r => {
-  const status = normalizeHeader(getField(r, ["status"]));
-  return status === "on_hold" || status === "onhold" || status.includes("hold");
-}).length;
+  const totalOpenings = rows.reduce((sum, r) => {
+    const role = getField(r, ["role"]);
+    const base = num(getField(r, ["openings"]));
+    if (!hiredRows.length) return sum + base;
+    const adjusted = Math.max(0, base - (hiresByRole[role] || 0));
+    return sum + adjusted;
+  }, 0);
 
-const totalHires = Object.values(hiresByRole)
-  .reduce((sum, n) => sum + (Number(n) || 0), 0);
-
-  // ---------------- Health summary ----------------
+  // ---------- Health summary ----------
   const counts = { healthy: 0, warning: 0, critical: 0 };
   rows.forEach(r => {
     const role = getField(r, ["role"]);
@@ -1121,7 +1115,7 @@ const totalHires = Object.values(hiresByRole)
     `;
   }
 
-  // ---------------- Table ----------------
+  // ---------- Table ----------
   const tbody = $("overviewTable");
   if (!tbody) return;
   tbody.innerHTML = "";
@@ -1130,7 +1124,11 @@ const totalHires = Object.values(hiresByRole)
     const role = getField(r, ["role"]);
     const status = getField(r, ["status"]);
     const location = getField(r, ["location"]);
-    const openings = openingsRemainingByRole[role] ?? num(getField(r, ["openings"]));
+    const baseOpenings = num(getField(r, ["openings"]));
+    const openings = hiredRows.length
+      ? Math.max(0, baseOpenings - (hiresByRole[role] || 0))
+      : baseOpenings;
+
     const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap", "owner", "recruiter"]);
     const h = healthByRole[role] || "unknown";
 
