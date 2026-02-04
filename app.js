@@ -827,56 +827,89 @@ state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys)
   }
 
   function getHealthByRole(weeklyRows, endWeekKey, filters = {}) {
-    const { roleFilter = "all", recruiterFilter = "all" } = filters;
-    const windowKeys = new Set(getRollingWeekKeys(endWeekKey, 4));
-    const byRole = new Map();
+  const { roleFilter = "all", recruiterFilter = "all" } = filters;
+  const windowKeys = new Set(getRollingWeekKeys(endWeekKey, 4));
+  const byRole = new Map();
 
-    weeklyRows.forEach(r => {
-      if (!r.role) return;
-      if (roleFilter !== "all" && r.role !== roleFilter) return;
-      if (recruiterFilter !== "all" && r.recruiter !== recruiterFilter) return;
+  weeklyRows.forEach(r => {
+    if (!r.role) return;
+    if (roleFilter !== "all" && r.role !== roleFilter) return;
+    if (recruiterFilter !== "all" && r.recruiter !== recruiterFilter) return;
 
-      const wk = weekKey(r);
-      if (!wk || !windowKeys.has(wk)) return;
+    const wk = weekKey(r);
+    if (!wk || !windowKeys.has(wk)) return;
 
-      const stage = normalizeHealthStage(r.stage);
-      if (stage !== "step1" && stage !== "step2") return;
+    const stage = normalizeHealthStage(r.stage);
+    if (stage !== "step1" && stage !== "step2") return;
 
-      if (!byRole.has(r.role)) byRole.set(r.role, { step1: 0, step2: 0 });
-      const agg = byRole.get(r.role);
-      if (stage === "step1") agg.step1 += num(r.count);
-      if (stage === "step2") agg.step2 += num(r.count);
-    });
+    if (!byRole.has(r.role)) byRole.set(r.role, { step1: 0, step2: 0 });
+    const agg = byRole.get(r.role);
+    if (stage === "step1") agg.step1 += num(r.count);
+    if (stage === "step2") agg.step2 += num(r.count);
+  });
 
-    const health = {};
-    byRole.forEach((agg, role) => {
-  health[role] = computeHealthFromCounts(agg.step1, agg.step2);
-});
-    return health;
-  }
+  const health = {};
+  byRole.forEach((agg, role) => {
+    health[role] = computeHealthFromCounts(agg.step1, agg.step2);
+  });
+
+  return health;
+}
 
   function getHealthByRoleFromInventory(inventoryRows, selectedWeekKey, filters = {}) {
-    const { roleFilter = "all", recruiterFilter = "all" } = filters;
-    const byRole = new Map();
-    const offerByRole = new Map();
-    const weekKeyToUse = selectedWeekKey === "all" ? TODAY_WEEK_KEY : selectedWeekKey;
-    if (!weekKeyToUse) return {};
+  const { roleFilter = "all", recruiterFilter = "all" } = filters;
 
-    inventoryRows.forEach(r => {
-      if (!r.role) return;
-      if (roleFilter !== "all" && r.role !== roleFilter) return;
-      if (recruiterFilter !== "all" && r.recruiter !== recruiterFilter) return;
-      if (weekKey(r) !== weekKeyToUse) return;
+  const byRole = new Map();
+  const offerByRole = new Map();
 
-      const stage = normalizeHealthStage(getField(r, ["stage"]) || r.stage);
-    const stageNorm = normalizeStageValue(getField(r, ["stage"]) || r.stage);
-if (stageNorm.includes("offer")) {
-  if (!byRole.has(r.role)) byRole.set(r.role, { step1: 0, step2: 0 }); // ensure role exists even if only offer
-  offerByRole.set(
-    r.role,
-    (offerByRole.get(r.role) || 0) + num(getField(r, ["count"]) || r.count)
-  );
+  const weekKeyToUse = selectedWeekKey === "all" ? TODAY_WEEK_KEY : selectedWeekKey;
+  if (!weekKeyToUse) return {};
+
+  inventoryRows.forEach(r => {
+    const role = getField(r, ["role"]) || r.role;
+    if (!role) return;
+
+    if (roleFilter !== "all" && role !== roleFilter) return;
+    if (recruiterFilter !== "all" && (r.recruiter || "Unassigned") !== recruiterFilter) return;
+    if (weekKey(r) !== weekKeyToUse) return;
+
+    const stageRaw = getField(r, ["stage"]) || r.stage;
+    const stageNorm = normalizeStageValue(stageRaw);
+    const c = num(getField(r, ["count"]) || r.count);
+
+    // Offer override: sobald Offer > 0 => Role wird healthy
+    if (stageNorm.includes("offer")) {
+      offerByRole.set(role, (offerByRole.get(role) || 0) + c);
+    }
+
+    const stage = normalizeHealthStage(stageRaw);
+    if (stage !== "step1" && stage !== "step2") return;
+
+    if (!byRole.has(role)) byRole.set(role, { step1: 0, step2: 0 });
+    const agg = byRole.get(role);
+    if (stage === "step1") agg.step1 += c;
+    if (stage === "step2") agg.step2 += c;
+  });
+
+  const health = {};
+
+  // Rollen, die Step1/2 haben
+  byRole.forEach((agg, role) => {
+    const base = computeHealthFromCounts(agg.step1, agg.step2);
+    const hasOffer = (offerByRole.get(role) || 0) > 0;
+    health[role] = hasOffer ? "healthy" : base;
+  });
+
+  // Rollen, die NUR Offer haben (kein Step1/2) -> trotzdem healthy
+  offerByRole.forEach((count, role) => {
+    if (count > 0 && !health[role]) {
+      health[role] = "healthy";
+    }
+  });
+
+  return health;
 }
+  
       if (stage !== "step1" && stage !== "step2") return;
 
       if (!byRole.has(r.role)) byRole.set(r.role, { step1: 0, step2: 0 });
