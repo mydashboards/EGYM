@@ -1046,98 +1046,107 @@ function getHealthByRoleFromInventory(inventoryRows, selectedWeekKey, filters = 
 
   /* ---------------- RENDER: OVERVIEW ---------------- */
 
-  function renderOverview() {
-    const rows = state.overviewRows || [];
-    const hiredRows = state.hiredRows || [];
-    const healthByRole = getHealthByRoleWithOfferOverride({
-  weeklyRows: state.pipelineWeeklyRows,
-  inventoryRows: state.pipelineInventoryRows,
-  endWeekKey: TODAY_WEEK_KEY,
-  inventoryWeekKey: state.selectedPipelineWeek || TODAY_WEEK_KEY
+function renderOverview() {
+  const rows = state.overviewRows || [];
+  const hiredRows = state.hiredRows || [];
+
+  // Health (unverändert, inkl. Offer-Override)
+  const healthByRole = getHealthByRoleFromInventory(
+    state.pipelineInventoryRows,
+    state.selectedPipelineWeek || TODAY_WEEK_KEY
+  );
+
+  // ---------------- Hires by role ----------------
+const hiresByRole = {};
+hiredRows.forEach(r => {
+  const role = getField(r, ["role"]);
+  const signatureDate = getField(r, ["signature_date", "signature date"]);
+  const startDate = getField(r, ["start_date", "start date"]);
+  if (!role) return;
+  if (!signatureDate && !startDate) return;
+  hiresByRole[role] = (hiresByRole[role] || 0) + 1;
 });
-    const onHoldRoles = rows.filter(r => {
-      const status = normalizeHeader(getField(r, ["status"]));
-      if (!status) return false;
-      return status === "on_hold" || status === "onhold" || status.includes("hold");
-    }).length;
 
-    const hiresByRole = {};
-    if (hiredRows.length) {
-      hiredRows.forEach(r => {
-        const role = getField(r, ["role"]);
-        const signatureDate = getField(r, ["signature_date", "signature date"]);
-        const startDate = getField(r, ["start_date", "start date"]);
-        if (!role) return;
-        if (!signatureDate && !startDate) return;
-        hiresByRole[role] = (hiresByRole[role] || 0) + 1;
-      });
-    }
+// ---------------- Openings remaining ----------------
+const openingsRemainingByRole = {};
+overviewRows.forEach(r => {
+  const role = getField(r, ["role"]);
+  const baseOpenings = num(getField(r, ["openings"]));
+  const hires = hiresByRole[role] || 0;
+  openingsRemainingByRole[role] = Math.max(0, baseOpenings - hires);
+});
 
-    const openRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
-    const filledRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "filled").length;
-    const totalOpenings = rows.reduce((s, r) => {
-      const role = getField(r, ["role"]);
-      const base = num(getField(r, ["openings"]));
-      if (!hiredRows.length) return s + base;
-      const adjusted = Math.max(0, base - (hiresByRole[role] || 0));
-      return s + adjusted;
-    }, 0);
+// ---------------- KPIs ----------------
+const openRoles = overviewRows.filter(r => {
+  const status = normalizeHeader(getField(r, ["status"]));
+  if (status !== "open") return false;
+  const role = getField(r, ["role"]);
+  return (openingsRemainingByRole[role] || 0) > 0;
+}).length;
 
-    const counts = { healthy: 0, warning: 0, critical: 0 };
-    rows.forEach(r => {
-      const role = getField(r, ["role"]);
-      const h = healthByRole[role] || "unknown";
-      if (h === "healthy") counts.healthy += 1;
-      else if (h === "warning") counts.warning += 1;
-      else if (h === "critical") counts.critical += 1;
-    });
+const onHoldRoles = overviewRows.filter(r => {
+  const status = normalizeHeader(getField(r, ["status"]));
+  return status === "on_hold" || status === "onhold" || status.includes("hold");
+}).length;
 
-    const cardsEl = $("overviewCards");
-    if (cardsEl) {
-      cardsEl.innerHTML = `
-        <div class="kpi"><div class="label">Open Roles</div><div class="value">${openRoles}</div></div>
-        <div class="kpi"><div class="label">On hold</div><div class="value">${onHoldRoles}</div></div>
-        <div class="kpi"><div class="label">Filled Roles</div><div class="value">${filledRoles}</div></div>
-        <div class="kpi"><div class="label">Total Openings</div><div class="value">${totalOpenings}</div></div>
-      `;
-    }
+const totalHires = Object.values(hiresByRole)
+  .reduce((sum, n) => sum + (Number(n) || 0), 0);
 
-    const healthSummaryEl = $("overviewHealthSummary");
-    if (healthSummaryEl) {
-      healthSummaryEl.innerHTML = `
-        <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
-        <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} Needs attention</span></div>
-        <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Critical</span></div>
-      `;
-    }
+  // ---------------- Health summary ----------------
+  const counts = { healthy: 0, warning: 0, critical: 0 };
+  rows.forEach(r => {
+    const role = getField(r, ["role"]);
+    const h = healthByRole[role] || "unknown";
+    if (h === "healthy") counts.healthy += 1;
+    else if (h === "warning") counts.warning += 1;
+    else if (h === "critical") counts.critical += 1;
+  });
 
-    const tbody = $("overviewTable");
-    if (!tbody) return;
-    tbody.innerHTML = "";
-
-    rows.forEach(r => {
-      const role = getField(r, ["role"]);
-      const status = getField(r, ["status"]);
-      const location = getField(r, ["location"]);
-      const baseOpenings = num(getField(r, ["openings"]));
-      const openings = hiredRows.length
-        ? Math.max(0, baseOpenings - (hiresByRole[role] || 0))
-        : baseOpenings;
-      const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap", "owner", "recruiter"]);
-      const h = healthByRole[role] || "unknown";
-
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${role}</td>
-        <td>${status}</td>
-        <td>${location}</td>
-        <td class="num ${getNumberClass(openings)}">${formatNumber(openings)}</td>
-        <td>${owner}</td>
-        <td class="center">${healthDotHTML(h)}</td>
-      `;
-      tbody.appendChild(tr);
-    });
+  const cardsEl = $("overviewCards");
+  if (cardsEl) {
+    cardsEl.innerHTML = `
+      <div class="kpi"><div class="label">Open Roles</div><div class="value">${openRoles}</div></div>
+      <div class="kpi"><div class="label">On hold</div><div class="value">${onHoldRoles}</div></div>
+      <div class="kpi"><div class="label">Filled Roles</div><div class="value">${filledRoles}</div></div>
+      <div class="kpi"><div class="label">Total Openings</div><div class="value">${totalOpenings}</div></div>
+    `;
   }
+
+  const healthSummaryEl = $("overviewHealthSummary");
+  if (healthSummaryEl) {
+    healthSummaryEl.innerHTML = `
+      <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
+      <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} Needs attention</span></div>
+      <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Critical</span></div>
+    `;
+  }
+
+  // ---------------- Table ----------------
+  const tbody = $("overviewTable");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  rows.forEach(r => {
+    const role = getField(r, ["role"]);
+    const status = getField(r, ["status"]);
+    const location = getField(r, ["location"]);
+    const openings = openingsRemainingByRole[role] ?? num(getField(r, ["openings"]));
+    const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap", "owner", "recruiter"]);
+    const h = healthByRole[role] || "unknown";
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${role}</td>
+      <td>${status}</td>
+      <td>${location}</td>
+      <td class="num ${getNumberClass(openings)}">${formatNumber(openings)}</td>
+      <td>${owner}</td>
+      <td class="center">${healthDotHTML(h)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
 
  /* ---------------- RENDER: PIPELINE ---------------- */
   
