@@ -850,14 +850,17 @@ state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys)
 
     const health = {};
     byRole.forEach((agg, role) => {
-      health[role] = computeHealthFromCounts(agg.step1, agg.step2);
-    });
+  const baseHealth = computeHealthFromCounts(agg.step1, agg.step2);
+  const hasOffer = (offerByRole.get(role) || 0) > 0;
+  health[role] = hasOffer ? "healthy" : baseHealth;
+});
     return health;
   }
 
   function getHealthByRoleFromInventory(inventoryRows, selectedWeekKey, filters = {}) {
     const { roleFilter = "all", recruiterFilter = "all" } = filters;
     const byRole = new Map();
+    const offerByRole = new Map();
     const weekKeyToUse = selectedWeekKey === "all" ? TODAY_WEEK_KEY : selectedWeekKey;
     if (!weekKeyToUse) return {};
 
@@ -868,6 +871,13 @@ state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys)
       if (weekKey(r) !== weekKeyToUse) return;
 
       const stage = normalizeHealthStage(getField(r, ["stage"]) || r.stage);
+      const stageNorm = normalizeStageValue(getField(r, ["stage"]) || r.stage);
+if (stageNorm.includes("offer")) {
+  offerByRole.set(
+    r.role,
+    (offerByRole.get(r.role) || 0) + num(getField(r, ["count"]) || r.count)
+  );
+}
       if (stage !== "step1" && stage !== "step2") return;
 
       if (!byRole.has(r.role)) byRole.set(r.role, { step1: 0, step2: 0 });
