@@ -850,9 +850,7 @@ state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys)
 
     const health = {};
     byRole.forEach((agg, role) => {
-  const baseHealth = computeHealthFromCounts(agg.step1, agg.step2);
-  const hasOffer = (offerByRole.get(role) || 0) > 0;
-  health[role] = hasOffer ? "healthy" : baseHealth;
+  health[role] = computeHealthFromCounts(agg.step1, agg.step2);
 });
     return health;
   }
