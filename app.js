@@ -1820,165 +1820,103 @@ function updatePipelineFilters() {
   }
 
   function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
-    const container = $("managementForecast");
-    if (!container) return;
+  const container = $("managementForecast");
+  if (!container) return;
 
-    const quarterMatch = String(state.selectedManagementQuarter || "").match(/^(\d{4})-Q([1-4])$/);
-    const berlinDate = getDateInTimeZone("Europe/Berlin");
-    const currentYear = berlinDate.getUTCFullYear();
-    const currentMonth = berlinDate.getUTCMonth();
-    const currentQuarter = getQuarterForMonth(currentMonth);
-    const selectedYear = quarterMatch ? num(quarterMatch[1]) : currentYear;
-    const selectedQuarter = quarterMatch ? num(quarterMatch[2]) : currentQuarter;
+  // ---------------- CONFIG ----------------
+  const STEP1_PER_HIRE = 25; // Ø 20–30 → bewusst konservativer Mittelwert
+  const ROLLING_WEEKS = 4;
 
-    const quarterStartMonth = (selectedQuarter - 1) * 3;
-    const quarterEndMonth = quarterStartMonth + 2;
-    const remainingMonthsInQuarter = (selectedYear === currentYear && currentMonth >= quarterStartMonth && currentMonth <= quarterEndMonth)
-      ? (quarterEndMonth - currentMonth + 1)
-      : 3;
+  const today = getDateInTimeZone("Europe/Berlin");
+  const currentMonth = today.getUTCMonth();
+  const currentYear = today.getUTCFullYear();
 
-    const inventoryWeekKey = state.selectedManagementWeek && state.selectedManagementWeek !== "all"
-      ? state.selectedManagementWeek
-      : (state.selectedPipelineWeek || state.pipelineOptions[0]?.key || "");
+  const rollingKeys = new Set(getRollingWeekKeys(TODAY_WEEK_KEY, ROLLING_WEEKS));
 
-    const rowsForWeek = inventoryRows.filter(r => weekKey(r) === inventoryWeekKey);
-    const hasFinalStage = rowsForWeek.some(r => normalizeStageValue(getField(r, ["stage"]) || r.stage).includes("final"));
-    const stageMatcher = (stage) => {
-      const normalized = normalizeStageValue(stage);
-      if (hasFinalStage) return normalized.includes("final");
-      return normalized.includes("offer");
-    };
+  // ---------------- STEP 1 (rolling) ----------------
+  const step1ByRole = new Map();
 
-    const finalsByRole = new Map();
-    rowsForWeek.forEach(r => {
-      const role = getField(r, ["role"]) || r.role;
-      const stage = getField(r, ["stage"]) || r.stage;
-      if (!role || !stage || !stageMatcher(stage)) return;
-      finalsByRole.set(role, (finalsByRole.get(role) || 0) + num(getField(r, ["count"]) || r.count));
-    });
+  (state.pipelineWeeklyRows || []).forEach(r => {
+    if (!rollingKeys.has(weekKey(r))) return;
 
-    const hiresByRole = {};
-    hiredRows.forEach(r => {
-      const role = getField(r, ["role"]);
-      const signatureDate = getField(r, ["signature_date", "signature date"]);
-      const startDate = getField(r, ["start_date", "start date"]);
-      if (!role || (!signatureDate && !startDate)) return;
-      hiresByRole[role] = (hiresByRole[role] || 0) + 1;
-    });
+    const role = r.role;
+    if (!role) return;
 
-    const openingsByRole = new Map();
-    overviewRows.forEach(r => {
-      const role = getField(r, ["role"]);
-      const base = num(getField(r, ["openings"]));
-      if (!role) return;
-      const adjusted = hiredRows.length ? Math.max(0, base - (hiresByRole[role] || 0)) : base;
-      openingsByRole.set(role, adjusted);
-    });
+    const stage = normalizeHealthStage(r.stage);
+    if (stage !== "step1") return;
 
-    let expectedHiresQuarterTotal = 0;
-    finalsByRole.forEach((finals, role) => {
-      const openingsRemaining = openingsByRole.has(role) ? openingsByRole.get(role) : 1;
-      const probabilityHireThisQuarter = Math.max(0, Math.min(1, finals / 3));
-      expectedHiresQuarterTotal += probabilityHireThisQuarter * openingsRemaining;
-    });
+    step1ByRole.set(role, (step1ByRole.get(role) || 0) + num(r.count));
+  });
 
-    const expectedHiresThisMonth = remainingMonthsInQuarter > 0
-      ? expectedHiresQuarterTotal / remainingMonthsInQuarter
-      : expectedHiresQuarterTotal;
+  // ---------------- HEALTH GATE ----------------
+  const healthByRole = getHealthByRoleWithOfferOverride({
+    weeklyRows: state.pipelineWeeklyRows,
+    inventoryRows: state.pipelineInventoryRows,
+    endWeekKey: TODAY_WEEK_KEY,
+    inventoryWeekKey: state.selectedPipelineWeek || TODAY_WEEK_KEY
+  });
 
-    container.innerHTML = `
-      <div class="forecast-item">
-        <div class="label">Expected hires (this month)</div>
-        <div class="value">${expectedHiresThisMonth.toFixed(1)}</div>
-      </div>
-      <div class="forecast-item">
-        <div class="label">Expected hires (this quarter)</div>
-        <div class="value">${expectedHiresQuarterTotal.toFixed(1)}</div>
-      </div>
-    `;
-  }
+  // ---------------- HIRES THIS MONTH (ACTUAL) ----------------
+  let hiresThisMonth = 0;
 
-  /* ---------------- RENDER: HIRES ---------------- */
+  (hiredRows || []).forEach(r => {
+    const date =
+      parseDate(getField(r, ["signature_date", "signature date"])) ||
+      parseDate(getField(r, ["start_date", "start date"]));
 
-  function parseDate(value) {
-    if (!value) return null;
-    const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? null : d;
-  }
+    if (!date) return;
+    if (date.getUTCFullYear() !== currentYear) return;
+    if (date.getUTCMonth() !== currentMonth) return;
 
-  function dayDiff(start, end) {
-    if (!start || !end) return null;
-    const ms = end - start;
-    return Number.isFinite(ms) ? Math.round(ms / (1000 * 60 * 60 * 24)) : null;
-  }
+    hiresThisMonth += 1;
+  });
 
-  function average(values) {
-    if (!values.length) return null;
-    return values.reduce((s, v) => s + v, 0) / values.length;
-  }
+  // ---------------- FORECAST LOGIC ----------------
+  let forecastRolling = 0;
 
-  function renderHires() {
-    const rows = state.hiredRows || [];
-    const tbody = $("hiresTable");
-    const empty = $("hiresEmpty");
-    if (!tbody || !empty) return;
+  step1ByRole.forEach((step1Count, role) => {
+    const health = healthByRole[role] || "unknown";
 
-    tbody.innerHTML = "";
+    // ❗ Health-Gate:
+    // If role is healthy ONLY because of Step1 → too early → no forecast yet
+    if (health === "healthy" && step1Count < STEP1_PER_HIRE) return;
 
-    if (!rows.length) {
-      empty.classList.remove("hidden");
-    } else {
-      empty.classList.add("hidden");
-    }
+    forecastRolling += step1Count / STEP1_PER_HIRE;
+  });
 
-    const tthValues = [];
-    const ttfValues = [];
+  // ---------------- OPENINGS CAP ----------------
+  const openingsByRole = new Map();
+  (overviewRows || []).forEach(r => {
+    const role = getField(r, ["role"]);
+    const openings = num(getField(r, ["openings"]));
+    if (!role || !openings) return;
+    openingsByRole.set(role, openings);
+  });
 
-    rows.forEach(r => {
-      const liveDate = parseDate(getField(r, ["live_date", "live date"]));
-      const signatureDate = parseDate(getField(r, ["signature_date", "signature date"]));
-      const startDate = parseDate(getField(r, ["start_date", "start date"]));
-      const firstContact = parseDate(getField(r, ["1st_contact", "first_contact", "1st contact", "first contact"]));
+  const maxPossibleHires = Array.from(openingsByRole.values()).reduce((a, b) => a + b, 0);
+  forecastRolling = Math.min(forecastRolling, maxPossibleHires);
 
-      const tth = dayDiff(liveDate, signatureDate);
-      const ttf = dayDiff(liveDate, startDate);
-      const daysInProcess = dayDiff(firstContact, signatureDate);
+  // ---------------- MONTH vs QUARTER ----------------
+  const monthFraction = 1 / 3; // simple, transparent assumption
+  const forecastMonth = forecastRolling * monthFraction;
+  const forecastQuarter = forecastRolling;
 
-      if (tth !== null) tthValues.push(tth);
-      if (ttf !== null) ttfValues.push(ttf);
-
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${getField(r, ["role"])}</td>
-        <td>${getField(r, ["first_name", "first name"])}</td>
-        <td>${getField(r, ["last_name", "last name"])}</td>
-        <td>${getField(r, ["source"])}</td>
-        <td>${getField(r, ["source"])}</td>
-        <td>${getField(r, ["salary"])}</td>
-        <td>${getField(r, ["live_date", "live date"])}</td>
-        <td>${getField(r, ["1st_contact", "first_contact", "1st contact", "first contact"])}</td>
-        <td>${getField(r, ["signature_date", "signature date"])}</td>
-        <td>${getField(r, ["start_date", "start date"])}</td>
-        <td class="num">${tth !== null ? tth : "—"}</td>
-        <td class="num">${ttf !== null ? ttf : "—"}</td>
-        <td class="num">${daysInProcess !== null ? daysInProcess : "—"}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-
-    const avgTth = average(tthValues);
-    const avgTtf = average(ttfValues);
-
-    const kpis = $("hiresKpis");
-    if (kpis) {
-      kpis.innerHTML = `
-        <div class="kpi"><div class="label">Total Hires</div><div class="value">${formatNumber(rows.length)}</div></div>
-        <div class="kpi"><div class="label">Avg TTH</div><div class="value">${avgTth !== null ? avgTth.toFixed(1) : "—"}</div></div>
-        <div class="kpi"><div class="label">Avg TTF</div><div class="value">${avgTtf !== null ? avgTtf.toFixed(1) : "—"}</div></div>
-        <div class="kpi"><div class="label">Scope</div><div class="value">All time</div></div>
-      `;
-    }
-  }
+  // ---------------- RENDER ----------------
+  container.innerHTML = `
+    <div class="forecast-item">
+      <div class="label">Hires this month (actual)</div>
+      <div class="value">${hiresThisMonth}</div>
+    </div>
+    <div class="forecast-item">
+      <div class="label">Expected hires (this month)</div>
+      <div class="value">~${forecastMonth.toFixed(1)}</div>
+    </div>
+    <div class="forecast-item">
+      <div class="label">Expected hires (this quarter)</div>
+      <div class="value">~${forecastQuarter.toFixed(1)}</div>
+    </div>
+  `;
+}
 
   /* ---------------- VIEW SWITCH ---------------- */
 
