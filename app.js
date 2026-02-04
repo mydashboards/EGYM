@@ -1616,68 +1616,76 @@ function updatePipelineFilters() {
   }
 
   function renderManagementRecruiters({ weeklyRows }) {
-    const tbody = $("managementRecruiterTable");
-    const empty = $("managementRecruiterEmpty");
-    if (!tbody || !empty) return;
+  const tbody = $("managementRecruiterTable");
+  const empty = $("managementRecruiterEmpty");
+  if (!tbody || !empty) return;
 
-    const selectedWeekKey = state.selectedManagementWeek || "";
-    const totalsByRecruiter = new Map();
-    const weekCountByRecruiter = new Map();
-    const allowedRecruiters = new Set(["Alex", "Sven"]);
+  const selectedWeekKey = state.selectedManagementWeek || "";
+  const totalsByRecruiter = new Map();
+  const weekCountByRecruiter = new Map();
+  const allowedRecruiters = new Set(["Alex", "Sven"]);
 
-    weeklyRows.forEach(r => {
-      const recruiter = r.recruiter || "Unassigned";
-      if (!allowedRecruiters.has(recruiter)) return;
-      const wk = weekKey(r);
-      if (!wk) return;
+  weeklyRows.forEach(r => {
+    const recruiter = r.recruiter || "Unassigned";
+    if (!allowedRecruiters.has(recruiter)) return;
+    const wk = weekKey(r);
+    if (!wk) return;
 
-      if (selectedWeekKey !== "all" && wk !== selectedWeekKey) return;
+    if (selectedWeekKey !== "all" && wk !== selectedWeekKey) return;
 
-      if (!totalsByRecruiter.has(recruiter)) {
-        totalsByRecruiter.set(recruiter, { step1: 0 });
-      }
-      if (!weekCountByRecruiter.has(recruiter)) {
-        weekCountByRecruiter.set(recruiter, new Set());
-      }
-      weekCountByRecruiter.get(recruiter).add(wk);
-
-      const stage = normalizeHealthStage(r.stage);
-      if (stage !== "step1") return;
-      const agg = totalsByRecruiter.get(recruiter);
-      agg.step1 += num(r.count);
-    });
-
-    tbody.innerHTML = "";
-    const rows = Array.from(totalsByRecruiter.entries());
-    if (!rows.length) {
-      empty.classList.remove("hidden");
-      return;
+    if (!totalsByRecruiter.has(recruiter)) {
+      totalsByRecruiter.set(recruiter, { step1: 0 });
     }
-    empty.classList.add("hidden");
+    if (!weekCountByRecruiter.has(recruiter)) {
+      weekCountByRecruiter.set(recruiter, new Set());
+    }
+    weekCountByRecruiter.get(recruiter).add(wk);
 
-    rows.forEach(([recruiter, data]) => {
-      const weeksSet = weekCountByRecruiter.get(recruiter) || new Set();
-      const weeksCount = weeksSet.size || 0;
-      const avgStep1 = selectedWeekKey === "all" && weeksCount > 0 ? data.step1 / weeksCount : null;
-      const utilizationBase = selectedWeekKey === "all" ? (avgStep1 || 0) : data.step1;
-      const utilization = Math.round(Math.max(0, Math.min(100, (utilizationBase / 20) * 100)));
-      const barWidth = `${Math.max(0, Math.min(100, utilization))}%`;
+    const stage = normalizeHealthStage(r.stage);
+    if (stage !== "step1") return;
+    const agg = totalsByRecruiter.get(recruiter);
+    agg.step1 += num(r.count);
+  });
 
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${recruiter}</td>
-        <td class="num ${getNumberClass(data.step1)}">${formatNumber(data.step1)}</td>
-        <td class="num ${getNumberClass(avgStep1)}">${avgStep1 === null ? "—" : avgStep1.toFixed(1)}</td>
-        <td class="num">
-          <div class="utilization">
-            <div class="utilization-bar"><span style="width:${barWidth};"></span></div>
-            <span>${utilization}%</span>
-          </div>
-        </td>
-      `;
-      tbody.appendChild(tr);
-    });
+  tbody.innerHTML = "";
+  const rows = Array.from(totalsByRecruiter.entries());
+  if (!rows.length) {
+    empty.classList.remove("hidden");
+    return;
   }
+  empty.classList.add("hidden");
+
+  rows.forEach(([recruiter, data]) => {
+    const weeksSet = weekCountByRecruiter.get(recruiter) || new Set();
+    const weeksCount = weeksSet.size || 0;
+
+    const avgStep1 = selectedWeekKey === "all" && weeksCount > 0 ? data.step1 / weeksCount : null;
+
+    const utilizationBase = selectedWeekKey === "all"
+      ? (avgStep1 || 0)
+      : data.step1;
+
+    // ✅ Allow > 100% in the label
+    const utilization = Math.round(Math.max(0, (utilizationBase / 20) * 100));
+
+    // ✅ Keep the bar capped at 100% to preserve layout
+    const barWidth = `${Math.max(0, Math.min(100, utilization))}%`;
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${recruiter}</td>
+      <td class="num ${getNumberClass(data.step1)}">${formatNumber(data.step1)}</td>
+      <td class="num ${getNumberClass(avgStep1)}">${avgStep1 === null ? "—" : avgStep1.toFixed(1)}</td>
+      <td class="num">
+        <div class="utilization">
+          <div class="utilization-bar"><span style="width:${barWidth};"></span></div>
+          <span>${utilization}%</span>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
 
   function renderManagementRoleInsights({ roleNotesRows, selectedActivityWeek, selectedRole, selectedRecruiter, healthByRole }) {
     const container = $("managementRoleInsights");
