@@ -906,9 +906,6 @@ state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys)
       health[role] = "healthy";
     }
   });
-
-  return health;
-}
   
       if (stage !== "step1" && stage !== "step2") return;
 
@@ -924,7 +921,6 @@ byRole.forEach((agg, role) => {
   const hasOffer = (offerByRole.get(role) || 0) > 0;
   health[role] = hasOffer ? "healthy" : baseHealth;
 });
-return health;
 
   /* ---------------- TABS ---------------- */
 
