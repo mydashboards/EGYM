@@ -871,8 +871,9 @@ state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys)
       if (weekKey(r) !== weekKeyToUse) return;
 
       const stage = normalizeHealthStage(getField(r, ["stage"]) || r.stage);
-      const stageNorm = normalizeStageValue(getField(r, ["stage"]) || r.stage);
+    const stageNorm = normalizeStageValue(getField(r, ["stage"]) || r.stage);
 if (stageNorm.includes("offer")) {
+  if (!byRole.has(r.role)) byRole.set(r.role, { step1: 0, step2: 0 }); // ensure role exists even if only offer
   offerByRole.set(
     r.role,
     (offerByRole.get(r.role) || 0) + num(getField(r, ["count"]) || r.count)
@@ -887,11 +888,12 @@ if (stageNorm.includes("offer")) {
     });
 
     const health = {};
-    byRole.forEach((agg, role) => {
-      health[role] = computeHealthFromCounts(agg.step1, agg.step2);
-    });
-    return health;
-  }
+byRole.forEach((agg, role) => {
+  const baseHealth = computeHealthFromCounts(agg.step1, agg.step2);
+  const hasOffer = (offerByRole.get(role) || 0) > 0;
+  health[role] = hasOffer ? "healthy" : baseHealth;
+});
+return health;
 
   /* ---------------- TABS ---------------- */
 
