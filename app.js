@@ -830,17 +830,20 @@ function computeHealthFromCounts(step1Count, step2Count) {
   return "healthy";
 }
 
-// Base health from pipeline_weekly (rolling 4w) – original behavior
+/**
+ * Base health from pipeline_weekly (rolling 4w) – ORIGINAL behavior
+ */
 function getHealthByRole(weeklyRows, endWeekKey, filters = {}) {
   const { roleFilter = "all", recruiterFilter = "all" } = filters;
   const windowKeys = new Set(getRollingWeekKeys(endWeekKey, 4));
   const byRole = new Map();
 
-  weeklyRows.forEach(r => {
+  (weeklyRows || []).forEach(r => {
     const role = normalizeRoleKey(r.role);
     if (!role) return;
+
     if (roleFilter !== "all" && role !== roleFilter) return;
-    if (recruiterFilter !== "all" && r.recruiter !== recruiterFilter) return;
+    if (recruiterFilter !== "all" && (r.recruiter || "Unassigned") !== recruiterFilter) return;
 
     const wk = weekKey(r);
     if (!wk || !windowKeys.has(wk)) return;
@@ -858,11 +861,12 @@ function getHealthByRole(weeklyRows, endWeekKey, filters = {}) {
   byRole.forEach((agg, role) => {
     health[role] = computeHealthFromCounts(agg.step1, agg.step2);
   });
-
   return health;
 }
 
-// Offer override from pipeline_inventory (single selected week)
+/**
+ * Offer counts from pipeline_inventory for a specific week
+ */
 function getOfferByRoleFromInventory(inventoryRows, selectedWeekKey, filters = {}) {
   const { roleFilter = "all", recruiterFilter = "all" } = filters;
   const offerByRole = new Map();
@@ -870,13 +874,13 @@ function getOfferByRoleFromInventory(inventoryRows, selectedWeekKey, filters = {
   const weekKeyToUse = selectedWeekKey === "all" ? TODAY_WEEK_KEY : selectedWeekKey;
   if (!weekKeyToUse) return offerByRole;
 
-  inventoryRows.forEach(r => {
+  (inventoryRows || []).forEach(r => {
     const role = normalizeRoleKey(getField(r, ["role"]) || r.role);
     if (!role) return;
 
     if (roleFilter !== "all" && role !== roleFilter) return;
 
-    const recruiter = getField(r, ["recruiter"]) || r.recruiter || "Unassigned";
+    const recruiter = (getField(r, ["recruiter"]) || r.recruiter || "Unassigned");
     if (recruiterFilter !== "all" && recruiter !== recruiterFilter) return;
 
     if (weekKey(r) !== weekKeyToUse) return;
@@ -892,17 +896,78 @@ function getOfferByRoleFromInventory(inventoryRows, selectedWeekKey, filters = {
   return offerByRole;
 }
 
-// ✅ Combined: base from weekly (rolling), override to healthy if offer>0 (inventory)
+/**
+ * ✅ Combined: base from weekly (rolling), override to healthy if offer>0 (inventory)
+ * Used for Overview + Management.
+ */
 function getHealthByRoleWithOfferOverride({ weeklyRows, inventoryRows, endWeekKey, inventoryWeekKey, filters = {} }) {
   const base = getHealthByRole(weeklyRows, endWeekKey, filters);
   const offerByRole = getOfferByRoleFromInventory(inventoryRows, inventoryWeekKey, filters);
 
-  // override (and also cover roles that only appear via offer)
   offerByRole.forEach((count, role) => {
     if (count > 0) base[role] = "healthy";
   });
 
   return base;
+}
+
+/**
+ * ✅ Inventory-only health (used by Pipeline table)
+ * Keeps Step1/Step2 thresholds AND adds Offer override (Offer>0 => healthy)
+ */
+function getHealthByRoleFromInventory(inventoryRows, selectedWeekKey, filters = {}) {
+  const { roleFilter = "all", recruiterFilter = "all" } = filters;
+
+  const byRole = new Map();
+  const offerByRole = new Map();
+
+  const weekKeyToUse = selectedWeekKey === "all" ? TODAY_WEEK_KEY : selectedWeekKey;
+  if (!weekKeyToUse) return {};
+
+  (inventoryRows || []).forEach(r => {
+    const role = normalizeRoleKey(getField(r, ["role"]) || r.role);
+    if (!role) return;
+
+    if (roleFilter !== "all" && role !== roleFilter) return;
+
+    const recruiter = (getField(r, ["recruiter"]) || r.recruiter || "Unassigned");
+    if (recruiterFilter !== "all" && recruiter !== recruiterFilter) return;
+
+    if (weekKey(r) !== weekKeyToUse) return;
+
+    const stageRaw = getField(r, ["stage"]) || r.stage;
+    const stageNorm = normalizeStageValue(stageRaw);
+    const c = num(getField(r, ["count"]) || r.count);
+
+    // Offer override tracking
+    if (stageNorm.includes("offer")) {
+      offerByRole.set(role, (offerByRole.get(role) || 0) + c);
+    }
+
+    const stage = normalizeHealthStage(stageRaw);
+    if (stage !== "step1" && stage !== "step2") return;
+
+    if (!byRole.has(role)) byRole.set(role, { step1: 0, step2: 0 });
+    const agg = byRole.get(role);
+    if (stage === "step1") agg.step1 += c;
+    if (stage === "step2") agg.step2 += c;
+  });
+
+  const health = {};
+
+  // Roles with Step1/2
+  byRole.forEach((agg, role) => {
+    const base = computeHealthFromCounts(agg.step1, agg.step2);
+    const hasOffer = (offerByRole.get(role) || 0) > 0;
+    health[role] = hasOffer ? "healthy" : base;
+  });
+
+  // Roles with ONLY Offer (no Step1/2) => still healthy
+  offerByRole.forEach((count, role) => {
+    if (count > 0 && !health[role]) health[role] = "healthy";
+  });
+
+  return health;
 }
 
   /* ---------------- TABS ---------------- */
