@@ -984,7 +984,7 @@ state.pipelineInventoryStageOrder = getStageOrderFromRows(rows, coreKeys)
     if (healthSummaryEl) {
       healthSummaryEl.innerHTML = `
         <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
-        <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} At risk</span></div>
+        <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} Needs attention</span></div>
         <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Critical</span></div>
       `;
     }
@@ -1504,7 +1504,7 @@ function updatePipelineFilters() {
     if (hsEl) {
       hsEl.innerHTML = `
         <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
-        <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} At risk</span></div>
+        <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} Needs attention</span></div>
         <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Critical</span></div>
       `;
     }
