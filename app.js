@@ -1016,10 +1016,12 @@ function getHealthByRoleFromInventory(inventoryRows, selectedWeekKey, filters = 
   function renderOverview() {
     const rows = state.overviewRows || [];
     const hiredRows = state.hiredRows || [];
-    const healthByRole = getHealthByRoleFromInventory(
-      state.pipelineInventoryRows,
-      state.selectedPipelineWeek || TODAY_WEEK_KEY
-    );
+    const healthByRole = getHealthByRoleWithOfferOverride({
+  weeklyRows: state.pipelineWeeklyRows,
+  inventoryRows: state.pipelineInventoryRows,
+  endWeekKey: TODAY_WEEK_KEY,
+  inventoryWeekKey: state.selectedPipelineWeek || TODAY_WEEK_KEY
+});
     const onHoldRoles = rows.filter(r => {
       const status = normalizeHeader(getField(r, ["status"]));
       if (!status) return false;
@@ -1540,10 +1542,12 @@ function updatePipelineFilters() {
     const selectedRole = state.selectedActivityRole || "all";
     const selectedRecruiter = state.selectedActivityRecruiter || "all";
 
-    const healthByRole = getHealthByRoleFromInventory(
-      inventoryRows,
-      state.selectedPipelineWeek || TODAY_WEEK_KEY
-    );
+    const healthByRole = getHealthByRoleWithOfferOverride({
+  weeklyRows,
+  inventoryRows,
+  endWeekKey: TODAY_WEEK_KEY,
+  inventoryWeekKey: state.selectedPipelineWeek || TODAY_WEEK_KEY
+});
 
     const openRoles = overviewRows.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
     const onHoldRoles = overviewRows.filter(r => {
