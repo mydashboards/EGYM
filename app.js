@@ -1064,7 +1064,12 @@ function getHealthByRoleFromInventory(inventoryRows, selectedWeekKey, filters = 
   /* ---------------- RENDER: OVERVIEW ---------------- */
 
 function renderOverview() {
-  const rows = state.overviewRows || [];
+  // ✅ Filter: ignore empty/blank rows (no role) so we don't render "0" ghost rows
+  const rows = (state.overviewRows || []).filter(r => {
+    const role = String(getField(r, ["role"]) || "").trim();
+    return Boolean(role);
+  });
+
   const hiredRows = state.hiredRows || [];
 
   const healthByRole = getHealthByRoleFromInventory(
@@ -1082,7 +1087,7 @@ function renderOverview() {
   const hiresByRole = {};
   if (hiredRows.length) {
     hiredRows.forEach(r => {
-      const role = getField(r, ["role"]);
+      const role = String(getField(r, ["role"]) || "").trim();
       const signatureDate = getField(r, ["signature_date", "signature date"]);
       const startDate = getField(r, ["start_date", "start date"]);
       if (!role) return;
@@ -1096,9 +1101,12 @@ function renderOverview() {
   const filledRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "filled").length;
 
   const totalOpenings = rows.reduce((sum, r) => {
-    const role = getField(r, ["role"]);
+    const role = String(getField(r, ["role"]) || "").trim();
+    if (!role) return sum;
+
     const base = num(getField(r, ["openings"]));
     if (!hiredRows.length) return sum + base;
+
     const adjusted = Math.max(0, base - (hiresByRole[role] || 0));
     return sum + adjusted;
   }, 0);
@@ -1106,7 +1114,8 @@ function renderOverview() {
   // ---------- Health summary ----------
   const counts = { healthy: 0, warning: 0, critical: 0 };
   rows.forEach(r => {
-    const role = getField(r, ["role"]);
+    const role = String(getField(r, ["role"]) || "").trim();
+    if (!role) return;
     const h = healthByRole[role] || "unknown";
     if (h === "healthy") counts.healthy += 1;
     else if (h === "warning") counts.warning += 1;
@@ -1138,7 +1147,9 @@ function renderOverview() {
   tbody.innerHTML = "";
 
   rows.forEach(r => {
-    const role = getField(r, ["role"]);
+    const role = String(getField(r, ["role"]) || "").trim();
+    if (!role) return;
+
     const status = getField(r, ["status"]);
     const location = getField(r, ["location"]);
     const baseOpenings = num(getField(r, ["openings"]));
