@@ -1097,8 +1097,20 @@ function renderOverview() {
   }
 
   // ---------- KPIs ----------
-  const openRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
-  const filledRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "filled").length;
+ const openRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
+
+// Auto-filled if openings after hires reach 0 (only for roles that are not on hold)
+const filledRoles = rows.filter(r => {
+  const status = normalizeHeader(getField(r, ["status"]));
+  if (status === "on_hold" || status === "onhold" || status.includes("hold")) return false;
+
+  const role = getField(r, ["role"]);
+  const baseOpenings = num(getField(r, ["openings"]));
+  const hires = hiresByRole[role] || 0;
+  const remaining = Math.max(0, baseOpenings - hires);
+
+  return baseOpenings > 0 && remaining === 0;
+}).length;
 
   const totalOpenings = rows.reduce((sum, r) => {
     const role = String(getField(r, ["role"]) || "").trim();
