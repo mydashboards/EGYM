@@ -195,15 +195,20 @@ const MANAGEMENT_UNLOCK_KEY = "management_unlocked";
     return rows.filter(row => isDepartmentMatch(getDepartmentValue(row), state.selectedDepartment, state.departmentOptions));
   }
 
-  function applyDepartmentSelection() {
-    state.overviewRows = filterRowsByDepartment(state.allOverviewRows);
-    state.pipelineWeeklyRows = filterRowsByDepartment(state.allPipelineWeeklyRows);
-    state.pipelineInventoryRows = filterRowsByDepartment(state.allPipelineInventoryRows);
-    state.sourcingRows = filterRowsByDepartment(state.allSourcingRows);
-    state.hiredRows = filterRowsByDepartment(state.allHiredRows);
-    state.roleNotesRows = filterRowsByDepartment(state.allRoleNotesRows);
-    state.weeklyUpdatesRows = filterRowsByDepartment(state.allWeeklyUpdatesRows);
-  }
+ function applyDepartmentSelection() {
+  state.overviewRows = filterRowsByDepartment(state.allOverviewRows);
+  state.pipelineWeeklyRows = filterRowsByDepartment(state.allPipelineWeeklyRows);
+  state.pipelineInventoryRows = filterRowsByDepartment(state.allPipelineInventoryRows);
+  state.sourcingRows = filterRowsByDepartment(state.allSourcingRows);
+
+  // ✅ IMPORTANT: hired_data is often department-less.
+  // Keep hires unfiltered; department relevance is implied by role via overviewRows.
+  state.hiredRows = state.allHiredRows || [];
+
+  // These may also be department-less; if you want them filtered later, we can add role-based filtering
+  state.roleNotesRows = filterRowsByDepartment(state.allRoleNotesRows);
+  state.weeklyUpdatesRows = filterRowsByDepartment(state.allWeeklyUpdatesRows);
+}
 
   function getNumberClass(value) {
     if (value === null || value === undefined || value === "") return "";
