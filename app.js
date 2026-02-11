@@ -1064,14 +1064,10 @@ function getHealthByRoleFromInventory(inventoryRows, selectedWeekKey, filters = 
   /* ---------------- RENDER: OVERVIEW ---------------- */
 
 function renderOverview() {
-  // ✅ Filter: ignore empty/blank rows (no role) so we don't render "0" ghost rows
-  const rows = (state.overviewRows || []).filter(r => {
-    const role = String(getField(r, ["role"]) || "").trim();
-    return Boolean(role);
-  });
-
+  const rows = state.overviewRows || [];
   const hiredRows = state.hiredRows || [];
 
+  // Health: keep your current behavior (inventory-based for selected KW)
   const healthByRole = getHealthByRoleFromInventory(
     state.pipelineInventoryRows,
     state.selectedPipelineWeek || TODAY_WEEK_KEY
@@ -1083,11 +1079,11 @@ function renderOverview() {
     return status === "on_hold" || status === "onhold" || status.includes("hold");
   }).length;
 
-  // ---------- Hires by role (only count rows with signature_date OR start_date) ----------
+  // ---------- Hires by role (count only rows with signature_date OR start_date) ----------
   const hiresByRole = {};
   if (hiredRows.length) {
     hiredRows.forEach(r => {
-      const role = String(getField(r, ["role"]) || "").trim();
+      const role = getField(r, ["role"]);
       const signatureDate = getField(r, ["signature_date", "signature date"]);
       const startDate = getField(r, ["start_date", "start date"]);
       if (!role) return;
@@ -1096,38 +1092,46 @@ function renderOverview() {
     });
   }
 
+  // ---------- Openings remaining per role (base openings - hires) ----------
+  const openingsRemainingByRole = {};
+  rows.forEach(r => {
+    const role = getField(r, ["role"]);
+    if (!role) return;
+    const baseOpenings = num(getField(r, ["openings"]));
+    const hires = hiresByRole[role] || 0;
+    openingsRemainingByRole[role] = Math.max(0, baseOpenings - hires);
+  });
+
   // ---------- KPIs ----------
- const openRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
+  const openRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
 
-// Auto-filled if openings after hires reach 0 (only for roles that are not on hold)
-const filledRoles = rows.filter(r => {
-  const status = normalizeHeader(getField(r, ["status"]));
-  if (status === "on_hold" || status === "onhold" || status.includes("hold")) return false;
+  // ✅ AUTO-FILLED: count roles where remaining openings reached 0 (excluding on-hold)
+  const filledRoles = rows.filter(r => {
+    const status = normalizeHeader(getField(r, ["status"]));
+    if (status === "on_hold" || status === "onhold" || status.includes("hold")) return false;
 
-  const role = getField(r, ["role"]);
-  const baseOpenings = num(getField(r, ["openings"]));
-  const hires = hiresByRole[role] || 0;
-  const remaining = Math.max(0, baseOpenings - hires);
+    const role = getField(r, ["role"]);
+    if (!role) return false;
 
-  return baseOpenings > 0 && remaining === 0;
-}).length;
+    const baseOpenings = num(getField(r, ["openings"]));
+    if (baseOpenings <= 0) return false;
+
+    const remaining = openingsRemainingByRole[role];
+    return remaining === 0;
+  }).length;
 
   const totalOpenings = rows.reduce((sum, r) => {
-    const role = String(getField(r, ["role"]) || "").trim();
-    if (!role) return sum;
-
+    const role = getField(r, ["role"]);
     const base = num(getField(r, ["openings"]));
-    if (!hiredRows.length) return sum + base;
-
-    const adjusted = Math.max(0, base - (hiresByRole[role] || 0));
-    return sum + adjusted;
+    if (!role) return sum + base;
+    const remaining = openingsRemainingByRole[role];
+    return sum + (Number.isFinite(remaining) ? remaining : base);
   }, 0);
 
   // ---------- Health summary ----------
   const counts = { healthy: 0, warning: 0, critical: 0 };
   rows.forEach(r => {
-    const role = String(getField(r, ["role"]) || "").trim();
-    if (!role) return;
+    const role = getField(r, ["role"]);
     const h = healthByRole[role] || "unknown";
     if (h === "healthy") counts.healthy += 1;
     else if (h === "warning") counts.warning += 1;
@@ -1159,15 +1163,11 @@ const filledRoles = rows.filter(r => {
   tbody.innerHTML = "";
 
   rows.forEach(r => {
-    const role = String(getField(r, ["role"]) || "").trim();
-    if (!role) return;
-
+    const role = getField(r, ["role"]);
     const status = getField(r, ["status"]);
     const location = getField(r, ["location"]);
     const baseOpenings = num(getField(r, ["openings"]));
-    const openings = hiredRows.length
-      ? Math.max(0, baseOpenings - (hiresByRole[role] || 0))
-      : baseOpenings;
+    const openings = role ? (openingsRemainingByRole[role] ?? baseOpenings) : baseOpenings;
 
     const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap", "owner", "recruiter"]);
     const h = healthByRole[role] || "unknown";
