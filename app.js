@@ -209,23 +209,32 @@ const MANAGEMENT_UNLOCK_KEY = "management_unlocked";
     return options;
   }
 
-  function isDepartmentMatch(rowDept, selectedDepartment, options) {
-    if (!selectedDepartment) return false;
-    const normalizedSelected = normalizeDepartmentValue(selectedDepartment).toLowerCase();
-    const normalizedRow = normalizeDepartmentValue(rowDept).toLowerCase();
-    if (!normalizedRow) {
-      if (options.length === 1) {
-        return normalizeDepartmentValue(options[0]).toLowerCase() === normalizedSelected;
-      }
-      return false;
+function isDepartmentMatch(rowDept, selectedDepartment, options) {
+  // ✅ "All" means: don't filter
+  if (!selectedDepartment || String(selectedDepartment).toLowerCase() === "all") return true;
+
+  const normalizedSelected = normalizeDepartmentValue(selectedDepartment).toLowerCase();
+  const normalizedRow = normalizeDepartmentValue(rowDept).toLowerCase();
+
+  // If row has no department, only match if there is exactly one possible department
+  // (keeps your previous "single dept fallback" behavior)
+  if (!normalizedRow) {
+    if (options.length === 1) {
+      return normalizeDepartmentValue(options[0]).toLowerCase() === normalizedSelected;
     }
-    return normalizedRow === normalizedSelected;
+    return false;
   }
 
-  function filterRowsByDepartment(rows) {
-    if (!state.selectedDepartment) return [];
-    return rows.filter(row => isDepartmentMatch(getDepartmentValue(row), state.selectedDepartment, state.departmentOptions));
-  }
+  return normalizedRow === normalizedSelected;
+}
+
+function filterRowsByDepartment(rows) {
+  // ✅ If no selection or "all": return everything (never empty)
+  if (!state.selectedDepartment || String(state.selectedDepartment).toLowerCase() === "all") return rows || [];
+  return (rows || []).filter(row =>
+    isDepartmentMatch(getDepartmentValue(row), state.selectedDepartment, state.departmentOptions)
+  );
+}
 
  function applyDepartmentSelection() {
   state.overviewRows = filterRowsByDepartment(state.allOverviewRows);
@@ -657,22 +666,36 @@ const MANAGEMENT_UNLOCK_KEY = "management_unlocked";
     else select.value = "all";
   }
 
-  function setDepartmentOptions(select, options, preferredValue) {
-    if (!select) return;
-    select.innerHTML = "";
-    options.forEach(value => {
-      const opt = document.createElement("option");
-      opt.value = value;
-      opt.textContent = value;
-      select.appendChild(opt);
-    });
-    if (preferredValue && options.includes(preferredValue)) {
-      select.value = preferredValue;
-    } else if (options.length) {
-      select.value = options[0];
-    }
-    select.disabled = options.length <= 1;
-  }
+function setDepartmentOptions(select, options, preferredValue) {
+  if (!select) return;
+
+  const opts = Array.isArray(options) ? options : [];
+  const current = preferredValue || select.value || "";
+
+  select.innerHTML = "";
+
+  // ✅ Add "All" first
+  const allOpt = document.createElement("option");
+  allOpt.value = "all";
+  allOpt.textContent = "All";
+  select.appendChild(allOpt);
+
+  // Then actual departments
+  opts.forEach(value => {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = value;
+    select.appendChild(opt);
+  });
+
+  // Choose selection
+  const allowed = new Set(["all", ...opts]);
+  if (allowed.has(current)) select.value = current;
+  else select.value = "all";
+
+  // Always enabled now (All is meaningful even if only 1 dept exists)
+  select.disabled = false;
+}
 
   function setManagementQuarterOptions(select, year, preferredQuarter) {
     if (!select) return;
