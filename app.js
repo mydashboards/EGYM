@@ -133,17 +133,46 @@ const MANAGEMENT_UNLOCK_KEY = "management_unlocked";
     updateDataErrorBanner();
   }
 
+   // --- Department helpers (robust header handling) ---
+
+  function normalizeDepartmentValue(value) {
+    return String(value || "").trim();
+  }
+
+  function getDepartmentValue(row) {
+    // Accept multiple possible header names across sheets
+    const val = getField(row, [
+      "department",
+      "dept",
+      "team",
+      "function",
+      "org",
+      "department_name",
+      "department team",
+      "department_team",
+      "department/team",
+      "department_area",
+      "department area"
+    ]) || row.department;
+
+    return normalizeDepartmentValue(val);
+  }
+
   function getDepartmentList(rows) {
     const ordered = [];
     const seen = new Set();
-    rows.forEach(row => {
+
+    (rows || []).forEach(row => {
       const dept = getDepartmentValue(row);
       if (!dept) return;
+
       const key = dept.toLowerCase();
       if (seen.has(key)) return;
+
       seen.add(key);
       ordered.push(dept);
     });
+
     return ordered;
   }
 
@@ -248,7 +277,83 @@ const MANAGEMENT_UNLOCK_KEY = "management_unlocked";
   }
 
   function getDepartmentValue(row) {
-    return normalizeDepartmentValue(getField(row, ["department"]) || row.department);
+    // Accept multiple possible header names across sheets
+    const val = getField(row, [
+      "department",
+      "dept",
+      "team",
+      "function",
+      "org",
+      "department_name",
+      "department team",
+      "department_team",
+      "department/team",
+      "department_area",
+      "department area"
+    ]) || row.department;
+
+    return normalizeDepartmentValue(val);
+  }
+
+  function getDepartmentList(rows) {
+    const ordered = [];
+    const seen = new Set();
+
+    (rows || []).forEach(row => {
+      const dept = getDepartmentValue(row);
+      if (!dept) return;
+
+      const key = dept.toLowerCase();
+      if (seen.has(key)) return;
+
+      seen.add(key);
+      ordered.push(dept);
+    });
+
+    return ordered;
+  }
+
+    // --- Department helpers (robust header handling) ---
+
+  function normalizeDepartmentValue(value) {
+    return String(value || "").trim();
+  }
+
+  function getDepartmentValue(row) {
+    // Accept multiple possible header names across sheets
+    const val = getField(row, [
+      "department",
+      "dept",
+      "team",
+      "function",
+      "org",
+      "department_name",
+      "department team",
+      "department_team",
+      "department/team",
+      "department_area",
+      "department area"
+    ]) || row.department;
+
+    return normalizeDepartmentValue(val);
+  }
+
+  function getDepartmentList(rows) {
+    const ordered = [];
+    const seen = new Set();
+
+    (rows || []).forEach(row => {
+      const dept = getDepartmentValue(row);
+      if (!dept) return;
+
+      const key = dept.toLowerCase();
+      if (seen.has(key)) return;
+
+      seen.add(key);
+      ordered.push(dept);
+    });
+
+    return ordered;
   }
 
   function parseCSV(text) {
