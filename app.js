@@ -67,10 +67,13 @@ const MANAGEMENT_UNLOCK_KEY = "management_unlocked";
   const VIEW_STORAGE_KEY = "dashboard_view";
   const DEPARTMENT_STORAGE_KEY = "selected_department";
 
-  const state = {
+    const state = {
     view: "contributor",
     selectedDepartment: "",
     departmentOptions: [],
+
+    // ✅ NEW: Overview-only department filter (does NOT affect global department selection)
+    selectedOverviewDepartment: "all",
 
     allOverviewRows: [],
     overviewRows: [],
@@ -643,6 +646,32 @@ const MANAGEMENT_UNLOCK_KEY = "management_unlocked";
     if (normalized.includes("healthy") || normalized.includes("good")) return "healthy";
     return "";
   }
+  
+    /* ---------------- OVERVIEW: DEPARTMENT FILTER ---------------- */
+
+  function setOverviewDepartmentOptions(select, departments) {
+    if (!select) return;
+
+    const current = state.selectedOverviewDepartment || "all";
+    select.innerHTML = "";
+
+    const allOpt = document.createElement("option");
+    allOpt.value = "all";
+    allOpt.textContent = "All";
+    select.appendChild(allOpt);
+
+    (departments || []).forEach(dep => {
+      const opt = document.createElement("option");
+      opt.value = dep;
+      opt.textContent = dep;
+      select.appendChild(opt);
+    });
+
+    const allowed = new Set(["all", ...(departments || [])]);
+    select.value = allowed.has(current) ? current : "all";
+    state.selectedOverviewDepartment = select.value;
+  }
+
 
   /* ---------------- NORMALIZERS ---------------- */
 
@@ -1069,18 +1098,31 @@ function getHealthByRoleFromInventory(inventoryRows, selectedWeekKey, filters = 
   /* ---------------- RENDER: OVERVIEW ---------------- */
 
 function renderOverview() {
-  const rows = state.overviewRows || [];
   const hiredRows = state.hiredRows || [];
+
+  // ✅ Overview-only filtering
+  let rows = state.overviewRows || [];
+  const selectedOverviewDept = state.selectedOverviewDepartment || "all";
+  if (selectedOverviewDept !== "all") {
+    rows = rows.filter(r => {
+      const dept = normalizeDepartmentValue(getField(r, ["department"]) || r.department);
+      return normalizeDepartmentValue(dept).toLowerCase() === normalizeDepartmentValue(selectedOverviewDept).toLowerCase();
+    });
+  }
 
   const healthByRole = getHealthByRoleFromInventory(
     state.pipelineInventoryRows,
     state.selectedPipelineWeek || TODAY_WEEK_KEY
   );
 
-  // ---------- Hires by role (valid hire = signature_date OR start_date) ----------
-  const hiresByRole = {};
-  let filledPositions = 0;
+  const onHoldRoles = rows.filter(r => {
+    const status = normalizeHeader(getField(r, ["status"]));
+    if (!status) return false;
+    return status === "on_hold" || status === "onhold" || status.includes("hold");
+  }).length;
 
+  // ---------- Hires by role (only count rows with signature_date OR start_date) ----------
+  const hiresByRole = {};
   if (hiredRows.length) {
     hiredRows.forEach(r => {
       const role = getField(r, ["role"]);
@@ -1088,45 +1130,20 @@ function renderOverview() {
       const startDate = getField(r, ["start_date", "start date"]);
       if (!role) return;
       if (!signatureDate && !startDate) return;
-
       hiresByRole[role] = (hiresByRole[role] || 0) + 1;
-      filledPositions += 1;
     });
   }
 
-  // ---------- Remaining openings by role ----------
-  const remainingOpeningsByRole = {};
-  rows.forEach(r => {
-    const role = getField(r, ["role"]);
-    if (!role) return;
-    const baseOpenings = num(getField(r, ["openings"]));
-    const hires = hiresByRole[role] || 0;
-    remainingOpeningsByRole[role] = Math.max(0, baseOpenings - hires);
-  });
+  // ---------- KPIs ----------
+  const openRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
+  const filledRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "filled").length;
 
-  // ---------- KPI: On hold ----------
-  const onHoldRoles = rows.filter(r => {
-    const status = normalizeHeader(getField(r, ["status"]));
-    return status === "on_hold" || status === "onhold" || status.includes("hold");
-  }).length;
-
-  // ---------- KPI: Open Roles (status=open AND remaining_openings > 0) ----------
-  const openRoles = rows.filter(r => {
-    const status = normalizeHeader(getField(r, ["status"]));
-    if (status !== "open") return false;
-    const role = getField(r, ["role"]);
-    const remaining = remainingOpeningsByRole[role] ?? num(getField(r, ["openings"]));
-    return remaining > 0;
-  }).length;
-
-  // ---------- KPI: Total Openings (remaining openings, open + on hold) ----------
   const totalOpenings = rows.reduce((sum, r) => {
-    const status = normalizeHeader(getField(r, ["status"]));
-    if (!(status === "open" || status === "on_hold" || status === "onhold" || status.includes("hold"))) return sum;
-
     const role = getField(r, ["role"]);
-    const remaining = remainingOpeningsByRole[role] ?? num(getField(r, ["openings"]));
-    return sum + remaining;
+    const base = num(getField(r, ["openings"]));
+    if (!hiredRows.length) return sum + base;
+    const adjusted = Math.max(0, base - (hiresByRole[role] || 0));
+    return sum + adjusted;
   }, 0);
 
   // ---------- Health summary ----------
@@ -1139,13 +1156,12 @@ function renderOverview() {
     else if (h === "critical") counts.critical += 1;
   });
 
-  // ---------- KPI cards ----------
   const cardsEl = $("overviewCards");
   if (cardsEl) {
     cardsEl.innerHTML = `
       <div class="kpi"><div class="label">Open Roles</div><div class="value">${openRoles}</div></div>
       <div class="kpi"><div class="label">On hold</div><div class="value">${onHoldRoles}</div></div>
-      <div class="kpi"><div class="label">Filled Positions</div><div class="value">${filledPositions}</div></div>
+      <div class="kpi"><div class="label">Filled Roles</div><div class="value">${filledRoles}</div></div>
       <div class="kpi"><div class="label">Total Openings</div><div class="value">${totalOpenings}</div></div>
     `;
   }
@@ -1168,10 +1184,9 @@ function renderOverview() {
     const role = getField(r, ["role"]);
     const status = getField(r, ["status"]);
     const location = getField(r, ["location"]);
-
     const baseOpenings = num(getField(r, ["openings"]));
-    const openings = role
-      ? (remainingOpeningsByRole[role] ?? baseOpenings)
+    const openings = hiredRows.length
+      ? Math.max(0, baseOpenings - (hiresByRole[role] || 0))
       : baseOpenings;
 
     const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap", "owner", "recruiter"]);
@@ -1189,7 +1204,6 @@ function renderOverview() {
     tbody.appendChild(tr);
   });
 }
-
 
  /* ---------------- RENDER: PIPELINE ---------------- */
   
@@ -2152,7 +2166,7 @@ function renderHires() {
 
   /* ---------------- WEEK SELECTIONS ---------------- */
 
-  function syncWeekSelections() {
+    function syncWeekSelections() {
     state.pipelineOptions = getWeekOptions(state.pipelineInventoryRows.length ? state.pipelineInventoryRows : state.pipelineWeeklyRows);
     state.activityOptions = getWeekOptions(state.pipelineWeeklyRows);
     state.sourcingOptions = getWeekOptions(state.sourcingRows);
@@ -2167,7 +2181,7 @@ function renderHires() {
 
     const pipelineAllowed = state.pipelineOptions.map(o => o.key);
     const activityAllowed = ["all", ...state.activityOptions.map(o => o.key)];
-const sourcingAllowed = ["all", ...state.sourcingOptions.map(o => o.key)];
+    const sourcingAllowed = ["all", ...state.sourcingOptions.map(o => o.key)];
     const managementAllowed = ["all", ...managementOptions.map(o => o.key)];
 
     // PIPELINE: default to current ISO week (if present), else latest
@@ -2181,9 +2195,9 @@ const sourcingAllowed = ["all", ...state.sourcingOptions.map(o => o.key)];
     }
 
     // SOURCING: default to rolling 4w (ending current week if present), but allow "all"
-if (!state.selectedSourcingWeek || !sourcingAllowed.includes(state.selectedSourcingWeek)) {
-  state.selectedSourcingWeek = sourcingEndKey || "all";
-}
+    if (!state.selectedSourcingWeek || !sourcingAllowed.includes(state.selectedSourcingWeek)) {
+      state.selectedSourcingWeek = sourcingEndKey || "all";
+    }
 
     // MANAGEMENT: default to current ISO week (if present), else latest, else all
     if (!state.selectedManagementWeek || !managementAllowed.includes(state.selectedManagementWeek)) {
@@ -2204,10 +2218,12 @@ if (!state.selectedSourcingWeek || !sourcingAllowed.includes(state.selectedSourc
     setManagementQuarterOptions($("managementQuarterSelect"), currentYear, currentQuarter);
     if ($("managementQuarterSelect")) $("managementQuarterSelect").value = state.selectedManagementQuarter;
 
-updatePipelineFilters();
-updateActivityFilters();
-updateSourcingFilters();
+    // ✅ NEW: Overview-only department dropdown options
+    setOverviewDepartmentOptions($("overviewDepartmentSelect"), state.departmentOptions);
 
+    updatePipelineFilters();
+    updateActivityFilters();
+    updateSourcingFilters();
   }
 
   function renderAll() {
@@ -2459,6 +2475,10 @@ on("viewManagement", "click", () => {
   on("pipelineWeekSelect", "change", handlePipelineWeekChange);
   on("pipelineRecruiterSelect", "change", () => { state.selectedPipelineRecruiter = $("pipelineRecruiterSelect") ? $("pipelineRecruiterSelect").value : "all"; renderPipeline(); renderManagement(); });
   on("activityWeekSelect", "change", handleActivityWeekChange);
+    on("overviewDepartmentSelect", "change", () => {
+    state.selectedOverviewDepartment = $("overviewDepartmentSelect") ? $("overviewDepartmentSelect").value : "all";
+    renderOverview();
+  });
   on("sourcingWeekSelect", "change", handleSourcingWeekChange);
   on("activityRoleSelect", "change", handleActivityRoleChange);
   on("activityRecruiterSelect", "change", handleActivityRecruiterChange);
