@@ -1228,16 +1228,20 @@ function getHealthByRoleFromInventory(inventoryRows, selectedWeekKey, filters = 
 function renderOverview() {
   const hiredRows = state.hiredRows || [];
 
-  // ✅ Overview-only filtering
-  let rows = state.overviewRows || [];
+  // ✅ Overview always starts from the FULL overview dataset (NOT globally filtered)
+  let rows = state.allOverviewRows || [];
+
+  // ✅ Overview-only department dropdown
   const selectedOverviewDept = state.selectedOverviewDepartment || "all";
   if (selectedOverviewDept !== "all") {
+    const want = normalizeDepartmentValue(selectedOverviewDept).toLowerCase();
     rows = rows.filter(r => {
-      const dept = normalizeDepartmentValue(getField(r, ["department"]) || r.department);
-      return normalizeDepartmentValue(dept).toLowerCase() === normalizeDepartmentValue(selectedOverviewDept).toLowerCase();
+      const dept = normalizeDepartmentValue(getField(r, ["department"]) || r.department).toLowerCase();
+      return dept === want;
     });
   }
 
+  // Health by role from inventory (week selection)
   const healthByRole = getHealthByRoleFromInventory(
     state.pipelineInventoryRows,
     state.selectedPipelineWeek || TODAY_WEEK_KEY
@@ -1249,7 +1253,7 @@ function renderOverview() {
     return status === "on_hold" || status === "onhold" || status.includes("hold");
   }).length;
 
-  // ---------- Hires by role (only count rows with signature_date OR start_date) ----------
+  // ---------- Hires by role (valid hire = signature_date OR start_date) ----------
   const hiresByRole = {};
   if (hiredRows.length) {
     hiredRows.forEach(r => {
@@ -1263,15 +1267,23 @@ function renderOverview() {
   }
 
   // ---------- KPIs ----------
-  const openRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
-  const filledRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "filled").length;
+  const openRoles = rows.filter(r => {
+    const status = normalizeHeader(getField(r, ["status"]));
+    if (status !== "open") return false;
+
+    const role = getField(r, ["role"]);
+    const baseOpenings = num(getField(r, ["openings"]));
+    const remaining = Math.max(0, baseOpenings - (hiresByRole[role] || 0));
+    return remaining > 0;
+  }).length;
+
+  const filledPositions = Object.values(hiresByRole).reduce((a, b) => a + b, 0);
 
   const totalOpenings = rows.reduce((sum, r) => {
     const role = getField(r, ["role"]);
     const base = num(getField(r, ["openings"]));
-    if (!hiredRows.length) return sum + base;
-    const adjusted = Math.max(0, base - (hiresByRole[role] || 0));
-    return sum + adjusted;
+    const remaining = Math.max(0, base - (hiresByRole[role] || 0));
+    return sum + remaining;
   }, 0);
 
   // ---------- Health summary ----------
@@ -1289,7 +1301,7 @@ function renderOverview() {
     cardsEl.innerHTML = `
       <div class="kpi"><div class="label">Open Roles</div><div class="value">${openRoles}</div></div>
       <div class="kpi"><div class="label">On hold</div><div class="value">${onHoldRoles}</div></div>
-      <div class="kpi"><div class="label">Filled Roles</div><div class="value">${filledRoles}</div></div>
+      <div class="kpi"><div class="label">Filled Positions</div><div class="value">${filledPositions}</div></div>
       <div class="kpi"><div class="label">Total Openings</div><div class="value">${totalOpenings}</div></div>
     `;
   }
@@ -1312,10 +1324,9 @@ function renderOverview() {
     const role = getField(r, ["role"]);
     const status = getField(r, ["status"]);
     const location = getField(r, ["location"]);
+
     const baseOpenings = num(getField(r, ["openings"]));
-    const openings = hiredRows.length
-      ? Math.max(0, baseOpenings - (hiresByRole[role] || 0))
-      : baseOpenings;
+    const openings = Math.max(0, baseOpenings - (hiresByRole[role] || 0));
 
     const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap", "owner", "recruiter"]);
     const h = healthByRole[role] || "unknown";
