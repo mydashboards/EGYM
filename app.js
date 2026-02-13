@@ -1072,20 +1072,15 @@ function renderOverview() {
   const rows = state.overviewRows || [];
   const hiredRows = state.hiredRows || [];
 
-  // Health: keep your current behavior (inventory-based for selected KW)
   const healthByRole = getHealthByRoleFromInventory(
     state.pipelineInventoryRows,
     state.selectedPipelineWeek || TODAY_WEEK_KEY
   );
 
-  const onHoldRoles = rows.filter(r => {
-    const status = normalizeHeader(getField(r, ["status"]));
-    if (!status) return false;
-    return status === "on_hold" || status === "onhold" || status.includes("hold");
-  }).length;
-
-  // ---------- Hires by role (count only rows with signature_date OR start_date) ----------
+  // ---------- Hires by role (valid hire = signature_date OR start_date) ----------
   const hiresByRole = {};
+  let filledPositions = 0;
+
   if (hiredRows.length) {
     hiredRows.forEach(r => {
       const role = getField(r, ["role"]);
@@ -1093,44 +1088,45 @@ function renderOverview() {
       const startDate = getField(r, ["start_date", "start date"]);
       if (!role) return;
       if (!signatureDate && !startDate) return;
+
       hiresByRole[role] = (hiresByRole[role] || 0) + 1;
+      filledPositions += 1;
     });
   }
 
-  // ---------- Openings remaining per role (base openings - hires) ----------
-  const openingsRemainingByRole = {};
+  // ---------- Remaining openings by role ----------
+  const remainingOpeningsByRole = {};
   rows.forEach(r => {
     const role = getField(r, ["role"]);
     if (!role) return;
     const baseOpenings = num(getField(r, ["openings"]));
     const hires = hiresByRole[role] || 0;
-    openingsRemainingByRole[role] = Math.max(0, baseOpenings - hires);
+    remainingOpeningsByRole[role] = Math.max(0, baseOpenings - hires);
   });
 
-  // ---------- KPIs ----------
-  const openRoles = rows.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
-
-  // ✅ AUTO-FILLED: count roles where remaining openings reached 0 (excluding on-hold)
-  const filledRoles = rows.filter(r => {
+  // ---------- KPI: On hold ----------
+  const onHoldRoles = rows.filter(r => {
     const status = normalizeHeader(getField(r, ["status"]));
-    if (status === "on_hold" || status === "onhold" || status.includes("hold")) return false;
-
-    const role = getField(r, ["role"]);
-    if (!role) return false;
-
-    const baseOpenings = num(getField(r, ["openings"]));
-    if (baseOpenings <= 0) return false;
-
-    const remaining = openingsRemainingByRole[role];
-    return remaining === 0;
+    return status === "on_hold" || status === "onhold" || status.includes("hold");
   }).length;
 
-  const totalOpenings = rows.reduce((sum, r) => {
+  // ---------- KPI: Open Roles (status=open AND remaining_openings > 0) ----------
+  const openRoles = rows.filter(r => {
+    const status = normalizeHeader(getField(r, ["status"]));
+    if (status !== "open") return false;
     const role = getField(r, ["role"]);
-    const base = num(getField(r, ["openings"]));
-    if (!role) return sum + base;
-    const remaining = openingsRemainingByRole[role];
-    return sum + (Number.isFinite(remaining) ? remaining : base);
+    const remaining = remainingOpeningsByRole[role] ?? num(getField(r, ["openings"]));
+    return remaining > 0;
+  }).length;
+
+  // ---------- KPI: Total Openings (remaining openings, open + on hold) ----------
+  const totalOpenings = rows.reduce((sum, r) => {
+    const status = normalizeHeader(getField(r, ["status"]));
+    if (!(status === "open" || status === "on_hold" || status === "onhold" || status.includes("hold"))) return sum;
+
+    const role = getField(r, ["role"]);
+    const remaining = remainingOpeningsByRole[role] ?? num(getField(r, ["openings"]));
+    return sum + remaining;
   }, 0);
 
   // ---------- Health summary ----------
@@ -1143,12 +1139,13 @@ function renderOverview() {
     else if (h === "critical") counts.critical += 1;
   });
 
+  // ---------- KPI cards ----------
   const cardsEl = $("overviewCards");
   if (cardsEl) {
     cardsEl.innerHTML = `
       <div class="kpi"><div class="label">Open Roles</div><div class="value">${openRoles}</div></div>
       <div class="kpi"><div class="label">On hold</div><div class="value">${onHoldRoles}</div></div>
-      <div class="kpi"><div class="label">Filled Roles</div><div class="value">${filledRoles}</div></div>
+      <div class="kpi"><div class="label">Filled Positions</div><div class="value">${filledPositions}</div></div>
       <div class="kpi"><div class="label">Total Openings</div><div class="value">${totalOpenings}</div></div>
     `;
   }
@@ -1171,8 +1168,11 @@ function renderOverview() {
     const role = getField(r, ["role"]);
     const status = getField(r, ["status"]);
     const location = getField(r, ["location"]);
+
     const baseOpenings = num(getField(r, ["openings"]));
-    const openings = role ? (openingsRemainingByRole[role] ?? baseOpenings) : baseOpenings;
+    const openings = role
+      ? (remainingOpeningsByRole[role] ?? baseOpenings)
+      : baseOpenings;
 
     const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap", "owner", "recruiter"]);
     const h = healthByRole[role] || "unknown";
@@ -1660,27 +1660,48 @@ function renderSourcing() {
   inventoryWeekKey: state.selectedPipelineWeek || TODAY_WEEK_KEY
 });
 
-    const openRoles = overviewRows.filter(r => normalizeHeader(getField(r, ["status"])) === "open").length;
-    const onHoldRoles = overviewRows.filter(r => {
-      const status = normalizeHeader(getField(r, ["status"]));
-      if (!status) return false;
-      return status === "on_hold" || status === "onhold" || status.includes("hold");
-    }).length;
-
-    const rollingWeekKeys = new Set(getRollingWeekKeys(TODAY_WEEK_KEY, 4));
-    const step1ScreensRolling = weeklyRows.reduce((sum, r) => {
-      if (!rollingWeekKeys.has(weekKey(r))) return sum;
-      const stage = normalizeHealthStage(r.stage);
-      if (stage !== "step1") return sum;
-      return sum + num(r.count);
-    }, 0);
-
-    const totalHires = hiredRows.reduce((sum, r) => {
+        // ---------- Filled Positions (all time, valid hire = signature_date OR start_date) ----------
+    let filledPositions = 0;
+    const hiresByRole = {};
+    (hiredRows || []).forEach(r => {
       const role = getField(r, ["role"]);
       const signatureDate = getField(r, ["signature_date", "signature date"]);
       const startDate = getField(r, ["start_date", "start date"]);
-      if (!role || (!signatureDate && !startDate)) return sum;
-      return sum + 1;
+      if (!role) return;
+      if (!signatureDate && !startDate) return;
+      hiresByRole[role] = (hiresByRole[role] || 0) + 1;
+      filledPositions += 1;
+    });
+
+    // ---------- Remaining openings by role ----------
+    const remainingOpeningsByRole = {};
+    (overviewRows || []).forEach(r => {
+      const role = getField(r, ["role"]);
+      if (!role) return;
+      const baseOpenings = num(getField(r, ["openings"]));
+      remainingOpeningsByRole[role] = Math.max(0, baseOpenings - (hiresByRole[role] || 0));
+    });
+
+    // ---------- KPIs ----------
+    const onHoldRoles = overviewRows.filter(r => {
+      const status = normalizeHeader(getField(r, ["status"]));
+      return status === "on_hold" || status === "onhold" || status.includes("hold");
+    }).length;
+
+    const openRoles = overviewRows.filter(r => {
+      const status = normalizeHeader(getField(r, ["status"]));
+      if (status !== "open") return false;
+      const role = getField(r, ["role"]);
+      const remaining = remainingOpeningsByRole[role] ?? num(getField(r, ["openings"]));
+      return remaining > 0;
+    }).length;
+
+    const totalOpenings = overviewRows.reduce((sum, r) => {
+      const status = normalizeHeader(getField(r, ["status"]));
+      if (!(status === "open" || status === "on_hold" || status === "onhold" || status.includes("hold"))) return sum;
+      const role = getField(r, ["role"]);
+      const remaining = remainingOpeningsByRole[role] ?? num(getField(r, ["openings"]));
+      return sum + remaining;
     }, 0);
 
     const kpisEl = $("managementKpis");
@@ -1688,8 +1709,8 @@ function renderSourcing() {
       kpisEl.innerHTML = `
         <div class="kpi"><div class="label">Open Roles</div><div class="value">${formatNumber(openRoles)}</div></div>
         <div class="kpi"><div class="label">On hold</div><div class="value">${formatNumber(onHoldRoles)}</div></div>
-        <div class="kpi"><div class="label">Step1 Screens</div><div class="value">${formatNumber(step1ScreensRolling)}</div><div class="sub">Rolling 4 weeks</div></div>
-        <div class="kpi"><div class="label">Hires</div><div class="value">${formatNumber(totalHires)}</div><div class="sub">All time${hiredRows.length ? "" : " · No hire data yet."}</div></div>
+        <div class="kpi"><div class="label">Filled Positions</div><div class="value">${formatNumber(filledPositions)}</div><div class="sub">All time${hiredRows.length ? "" : " · No hire data yet."}</div></div>
+        <div class="kpi"><div class="label">Total Openings</div><div class="value">${formatNumber(totalOpenings)}</div></div>
       `;
     }
 
