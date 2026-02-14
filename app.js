@@ -1446,22 +1446,31 @@ function renderPipeline() {
     selectedWeekKey || TODAY_WEEK_KEY
   );
 
-  // stable role list (no duplicates), respecting filters
-  const roleList = [];
-  const seen = new Set();
+ // stable role list (no duplicates), respecting filters
+const roleList = [];
+const seen = new Set();
 
-  inv.forEach(r => {
-    if (!isWeekMatch(r, selectedWeekKey)) return;
+inv.forEach(r => {
+  if (!isWeekMatch(r, selectedWeekKey)) return;
 
-    const recruiter = getField(r, ["recruiter"]) || r.recruiter || "Unassigned";
-    if (selectedRecruiter !== "all" && recruiter !== selectedRecruiter) return;
+  const recruiter = getField(r, ["recruiter"]) || r.recruiter || "Unassigned";
+  if (selectedRecruiter !== "all" && recruiter !== selectedRecruiter) return;
 
-    const role = getField(r, ["role"]) || r.role;
-    if (!role || seen.has(role)) return;
+  const role = getField(r, ["role"]) || r.role;
+  if (!role || seen.has(role)) return;
 
-    seen.add(role);
-    roleList.push(role);
+  // has any non-zero stage count for this role in the current table context?
+  const sm = countsByRole.get(role) || new Map();
+  let hasData = false;
+  stages.forEach(stageKey => {
+    if ((sm.get(stageKey) || 0) > 0) hasData = true;
   });
+
+  if (!shouldShowRoleOutsideOverview(role, hasData)) return;
+
+  seen.add(role);
+  roleList.push(role);
+});
 
   // empty state
   if (!roleList.length) {
@@ -1591,21 +1600,35 @@ function updatePipelineFilters() {
 
     const stages = getActivityStages(filtered, state.pipelineWeeklyStageOrder);
     const roles = [];
-    const seen = new Set();
-    const countsByRole = new Map();
+const seen = new Set();
+const countsByRole = new Map();
 
-    filtered.forEach(r => {
-      if (!r.role) return;
-      if (!seen.has(r.role)) {
-        seen.add(r.role);
-        roles.push(r.role);
-      }
+filtered.forEach(r => {
+  const role = r.role;
+  if (!role) return;
 
-      if (!r.stage || String(r.stage).startsWith("__")) return;
-      if (!countsByRole.has(r.role)) countsByRole.set(r.role, new Map());
-      const sm = countsByRole.get(r.role);
-      sm.set(r.stage, (sm.get(r.stage) || 0) + num(r.count));
-    });
+  if (!countsByRole.has(role)) countsByRole.set(role, new Map());
+
+  if (r.stage && !String(r.stage).startsWith("__")) {
+    const sm = countsByRole.get(role);
+    const current = sm.get(r.stage) || 0;
+    sm.set(r.stage, current + num(r.count));
+  }
+});
+
+// Decide which roles to show (hide on-hold until any >0)
+Array.from(countsByRole.keys()).forEach(role => {
+  const sm = countsByRole.get(role) || new Map();
+  let hasData = false;
+  sm.forEach(v => { if (num(v) > 0) hasData = true; });
+
+  if (!shouldShowRoleOutsideOverview(role, hasData)) return;
+
+  if (!seen.has(role)) {
+    seen.add(role);
+    roles.push(role);
+  }
+});
 
     const thead = document.querySelector("#activity table thead");
     if (thead) {
@@ -1760,13 +1783,25 @@ function renderSourcing() {
     totalConnectScreens += connectScreens;
   });
 
-  const roleOrder = [];
-  const seen = new Set();
-  filtered.forEach(r => {
-    if (!r.role || seen.has(r.role)) return;
-    seen.add(r.role);
-    roleOrder.push(r.role);
-  });
+const roleOrder = [];
+const seen = new Set();
+
+filtered.forEach(r => {
+  const role = r.role;
+  if (!role || seen.has(role)) return;
+
+  // has any meaningful sourcing data in current filter context?
+  const hasData =
+    (num(r.sourced) > 0) ||
+    (num(r.connect) > 0) ||
+    (num(r.sourced_screens) > 0) ||
+    (num(r.connect_screens) > 0);
+
+  if (!shouldShowRoleOutsideOverview(role, hasData)) return;
+
+  seen.add(role);
+  roleOrder.push(role);
+});
 
   roleOrder.forEach(role => {
     const agg = byRole.get(role);
