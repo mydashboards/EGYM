@@ -1878,17 +1878,14 @@ filtered.forEach(r => {
     });
 
     // ---------- Remaining openings by role ----------
-    const remainingOpeningsByRole = {};
-   (overviewRows || []).forEach(r => {
+const remainingOpeningsByRole = {};
+(overviewRows || []).forEach(r => {
   const role = String(getField(r, ["role"]) || "").trim();
   if (!role) return;
 
-  // Hide on-hold roles from forecast (dropdown + "all roles" calc)
-  if (isOnHoldRole(role)) return;
-
-  if (seen.has(role)) return;
-  seen.add(role);
-  roleList.push(role);
+  const baseOpenings = num(getField(r, ["openings"]));
+  const remaining = Math.max(0, baseOpenings - (hiresByRole[role] || 0));
+  remainingOpeningsByRole[role] = remaining;
 });
 
     // ---------- KPIs ----------
