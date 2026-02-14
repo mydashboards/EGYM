@@ -10,7 +10,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-
   <link rel="stylesheet" href="./styles.css" />
 </head>
 
@@ -68,15 +67,15 @@
 
           <div class="card">
             <div class="card-head">
-  <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
-    <h2>Roles</h2>
+              <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+                <h2>Roles</h2>
+                <label style="display:flex;align-items:center;gap:8px;">
+                  <span class="muted small">Department</span>
+                  <select id="overviewDepartmentSelect"></select>
+                </label>
+              </div>
+            </div>
 
-    <label style="display:flex;align-items:center;gap:8px;">
-      <span class="muted small">Department</span>
-      <select id="overviewDepartmentSelect"></select>
-    </label>
-  </div>
-</div>
             <div class="table-wrap">
               <table>
                 <thead>
@@ -98,21 +97,19 @@
         <!-- PIPELINE -->
         <section id="pipeline" class="panel">
           <div class="panel-head">
-            <div>
-              <h2>Pipeline</h2>
-            </div>
+            <div><h2>Pipeline</h2></div>
+
             <div class="filters">
-  <label>
-    <span>Week</span>
-    <select id="pipelineWeekSelect"></select>
-  </label>
+              <label>
+                <span>Week</span>
+                <select id="pipelineWeekSelect"></select>
+              </label>
 
-  <label>
-    <span>Recruiter</span>
-    <select id="pipelineRecruiterSelect"></select>
-  </label>
+              <label>
+                <span>Recruiter</span>
+                <select id="pipelineRecruiterSelect"></select>
+              </label>
 
-              <!-- Department (Pipeline) -->
               <label>
                 <span>Department</span>
                 <select id="pipelineDepartmentSelect"></select>
@@ -142,16 +139,14 @@
         <!-- ACTIVITY -->
         <section id="activity" class="panel">
           <div class="panel-head">
-            <div>
-              <h2>Activity</h2>
-            </div>
+            <div><h2>Activity</h2></div>
+
             <div class="filters">
               <label>
                 <span>Week</span>
                 <select id="activityWeekSelect"></select>
               </label>
 
-              <!-- Department (Activity) -->
               <label>
                 <span>Department</span>
                 <select id="activityDepartmentSelect"></select>
@@ -161,6 +156,7 @@
                 <span>Role</span>
                 <select id="activityRoleSelect"></select>
               </label>
+
               <label>
                 <span>Recruiter</span>
                 <select id="activityRecruiterSelect"></select>
@@ -186,16 +182,14 @@
         <!-- SOURCING -->
         <section id="sourcing" class="panel">
           <div class="panel-head">
-            <div>
-              <h2>Sourcing</h2>
-            </div>
+            <div><h2>Sourcing</h2></div>
+
             <div class="filters">
               <label>
                 <span>Week</span>
                 <select id="sourcingWeekSelect"></select>
               </label>
 
-              <!-- Department (Sourcing) -->
               <label>
                 <span>Department</span>
                 <select id="sourcingDepartmentSelect"></select>
@@ -205,6 +199,7 @@
                 <span>Role</span>
                 <select id="sourcingRoleSelect"></select>
               </label>
+
               <label>
                 <span>Recruiter</span>
                 <select id="sourcingRecruiterSelect"></select>
@@ -292,38 +287,31 @@
           </div>
           <div id="managementKpis" class="kpi-grid"></div>
         </div>
+
         <div class="card">
           <div class="card-head">
             <h3>Pipeline Health</h3>
           </div>
           <div id="managementHealthSummary" class="health-row"></div>
         </div>
-       <div class="card">
-  <div class="card">
-  <div class="card-head" style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
-    <div>
-      <h3>Hiring Forecast</h3>
-      <p class="muted small">Horizon: today → end of current month. Step1 = rolling 4W, Finals/Offers = inventory snapshot (selected KW).</p>
-    </div>
 
-    <label style="min-width:260px;">
-      <span class="muted small">Role</span>
-      <select id="managementForecastRoleSelect"></select>
-    </label>
-  </div>
+        <!-- Hiring Forecast (single clean card) -->
+        <div class="card">
+          <div class="card-head" style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
+            <div>
+              <h3>Hiring Forecast</h3>
+              <p class="muted small">Horizon: today → end of current month. Step1 = rolling 4W, Finals/Offers = inventory snapshot (selected KW).</p>
+            </div>
 
-  <div id="managementForecast"></div>
-</div>
-          
-  <div class="filters" style="padding: 0 18px 12px;">
-    <label>
-      <span>Role</span>
-      <select id="managementForecastRoleSelect"></select>
-    </label>
-  </div>
+            <label style="min-width:260px;">
+              <span class="muted small">Role</span>
+              <select id="managementForecastRoleSelect"></select>
+            </label>
+          </div>
 
-  <div id="managementForecast"></div>
-</div>
+          <div id="managementForecast"></div>
+        </div>
+
         <div class="card">
           <div class="card-head">
             <h3>Recruiter Utilization</h3>
@@ -343,6 +331,7 @@
             </table>
           </div>
         </div>
+
         <div class="card">
           <div class="card-head">
             <h3>Weekly Updates</h3>
