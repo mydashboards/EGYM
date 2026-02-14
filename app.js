@@ -92,6 +92,7 @@ const MANAGEMENT_UNLOCK_KEY = "management_unlocked";
     roleNotesRows: [],
     allWeeklyUpdatesRows: [],
     weeklyUpdatesRows: [],
+    roleStatusByRole: {},   // role -> normalized status (open/on_hold/...)
 
     pipelineOptions: [],
     activityOptions: [],
@@ -774,6 +775,20 @@ function setDepartmentOptions(select, options, preferredValue) {
     if (normalized.includes("healthy") || normalized.includes("good")) return "healthy";
     return "";
   }
+  
+  function isOnHoldRole(role) {
+  const st = normalizeHeader(state.roleStatusByRole?.[role] || "");
+  return st === "on_hold" || st === "onhold" || st.includes("hold");
+}
+
+// show role in non-overview tabs only if:
+// - role is NOT on hold, OR
+// - there is at least one meaningful data point (>0) in the current filtered dataset
+function shouldShowRoleOutsideOverview(role, hasData) {
+  if (!role) return false;
+  if (!isOnHoldRole(role)) return true;
+  return !!hasData;
+}
   
     /* ---------------- OVERVIEW: DEPARTMENT FILTER ---------------- */
 
@@ -2443,6 +2458,14 @@ function renderHires() {
       }
 
       state.allOverviewRows = overviewRows || [];
+      // Build role -> status map from overview (used to hide "on hold" roles in other tabs until data exists)
+state.roleStatusByRole = {};
+(state.allOverviewRows || []).forEach(r => {
+  const role = String(getField(r, ["role"]) || "").trim();
+  if (!role) return;
+  const status = normalizeHeader(getField(r, ["status"]));
+  state.roleStatusByRole[role] = status; // e.g. "open", "on_hold"
+});
       const pipelineWeeklyRows = pipelineWeeklyRaw?.rows || pipelineWeeklyRaw || [];
       const pipelineWeeklyHeaders = pipelineWeeklyRaw?.headers || [];
       state.allPipelineWeeklyRows = normalizePipelineWeekly(pipelineWeeklyRows, pipelineWeeklyHeaders);
