@@ -2344,7 +2344,9 @@ filtered.forEach(r => {
             <td class="num ${getNumberClass(result.finals)}">${formatNumber(result.finals)}</td>
             <td class="num ${getNumberClass(result.offers)}">${formatNumber(result.offers)}</td>
             <td class="num ${getNumberClass(result.expected)}">~${Number(result.expected).toFixed(1)}</td>
-            <td class="center"><span class="pill">${result.badge} · ${confPct}</span></td>
+            <td class="center">
+  ${selectedRole === "all" ? "—" : `<span class="pill">${result.badge} · ${confPct}</span>`}
+</td>
           </tr>
         </tbody>
       </table>
