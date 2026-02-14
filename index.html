@@ -299,9 +299,19 @@
           <div id="managementHealthSummary" class="health-row"></div>
         </div>
        <div class="card">
-  <div class="card-head">
-    <h3>Hiring Forecast</h3>
+  <div class="card">
+  <div class="card-head" style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
+    <div>
+      <h3>Hiring Forecast</h3>
+      <p class="muted small">Horizon: today → end of current month. Step1 = rolling 4W, Finals/Offers = inventory snapshot (selected KW).</p>
+    </div>
+
+    <label style="min-width:260px;">
+      <span class="muted small">Role</span>
+      <select id="managementForecastRoleSelect"></select>
+    </label>
   </div>
+
   <div id="managementForecast"></div>
 </div>
           
