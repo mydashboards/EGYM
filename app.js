@@ -2157,7 +2157,8 @@ filtered.forEach(r => {
 
  function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
   const container = $("managementForecast");
-  if (!container) return;
+  const roleSelect = $("managementForecastRoleSelect");
+  if (!container || !roleSelect) return;
 
   // ---------------- CONFIG ----------------
   const STEP1_PER_HIRE = 25;
@@ -2166,27 +2167,51 @@ filtered.forEach(r => {
   const rollingKeys = new Set(getRollingWeekKeys(TODAY_WEEK_KEY, ROLLING_WEEKS));
   const invWeekKey = (state.selectedPipelineWeek || TODAY_WEEK_KEY);
 
-  // --- Build role list from overview (stable) ---
+  // --- Build role list from overview (stable order) ---
   const roleList = [];
   const seen = new Set();
   (overviewRows || []).forEach(r => {
-    const role = getField(r, ["role"]);
+    const role = String(getField(r, ["role"]) || "").trim();
     if (!role) return;
     if (seen.has(role)) return;
     seen.add(role);
     roleList.push(role);
   });
 
-  // Selected role (persist in state)
-  if (!state.selectedForecastRole) state.selectedForecastRole = "all";
-  if (state.selectedForecastRole !== "all" && !roleList.includes(state.selectedForecastRole)) {
-    state.selectedForecastRole = "all";
+  // --- Populate TOP dropdown (index.html) ---
+  {
+    const current = state.selectedForecastRole || "all";
+    roleSelect.innerHTML = "";
+
+    const optAll = document.createElement("option");
+    optAll.value = "all";
+    optAll.textContent = "All roles";
+    roleSelect.appendChild(optAll);
+
+    roleList.forEach(role => {
+      const opt = document.createElement("option");
+      opt.value = role;
+      opt.textContent = role;
+      roleSelect.appendChild(opt);
+    });
+
+    const allowed = new Set(["all", ...roleList]);
+    roleSelect.value = allowed.has(current) ? current : "all";
+    state.selectedForecastRole = roleSelect.value;
+
+    // IMPORTANT: avoid multiple addEventListener() on rerenders
+    roleSelect.onchange = () => {
+      state.selectedForecastRole = roleSelect.value || "all";
+      renderManagementForecast({ inventoryRows, overviewRows, hiredRows });
+    };
   }
+
+  const selectedRole = state.selectedForecastRole || "all";
 
   // ---------------- HIRES BY ROLE (valid = signature_date OR start_date) ----------------
   const hiresByRole = {};
   (hiredRows || []).forEach(r => {
-    const role = getField(r, ["role"]);
+    const role = String(getField(r, ["role"]) || "").trim();
     if (!role) return;
 
     const signatureDate = getField(r, ["signature_date", "signature date"]);
@@ -2199,7 +2224,7 @@ filtered.forEach(r => {
   // ---------------- REMAINING OPENINGS BY ROLE ----------------
   const remainingOpeningsByRole = {};
   (overviewRows || []).forEach(r => {
-    const role = getField(r, ["role"]);
+    const role = String(getField(r, ["role"]) || "").trim();
     if (!role) return;
 
     const baseOpenings = num(getField(r, ["openings"]));
@@ -2212,7 +2237,7 @@ filtered.forEach(r => {
     const wk = weekKey(r);
     if (!wk || !rollingKeys.has(wk)) return;
 
-    const role = r.role;
+    const role = String(r.role || "").trim();
     if (!role) return;
 
     const stage = normalizeHealthStage(r.stage);
@@ -2228,19 +2253,15 @@ filtered.forEach(r => {
   (inventoryRows || []).forEach(r => {
     if (weekKey(r) !== invWeekKey) return;
 
-    const role = getField(r, ["role"]) || r.role;
+    const role = String(getField(r, ["role"]) || r.role || "").trim();
     if (!role) return;
 
     const stageRaw = getField(r, ["stage"]) || r.stage;
     const stageNorm = normalizeStageValue(stageRaw);
     const c = num(getField(r, ["count"]) || r.count);
 
-    if (stageNorm.includes("final")) {
-      finalsByRole.set(role, (finalsByRole.get(role) || 0) + c);
-    }
-    if (stageNorm.includes("offer")) {
-      offersByRole.set(role, (offersByRole.get(role) || 0) + c);
-    }
+    if (stageNorm.includes("final")) finalsByRole.set(role, (finalsByRole.get(role) || 0) + c);
+    if (stageNorm.includes("offer")) offersByRole.set(role, (offersByRole.get(role) || 0) + c);
   });
 
   // ---------------- CONFIDENCE LOGIC ----------------
@@ -2261,13 +2282,20 @@ filtered.forEach(r => {
     return Math.min(1, Math.max(0, conf));
   }
 
-  function badgeForConfidence(conf) {
-    if (conf >= 0.85) return { label: "High", conf };
-    if (conf >= 0.65) return { label: "Medium", conf };
-    return { label: "Low", conf };
+  function pillClass(conf) {
+    // requested: 0 => red, medium => yellow, >=90% => green
+    if (conf >= 0.90) return "good";
+    if (conf >= 0.65) return "warn";
+    return "bad";
   }
 
-  // ---------------- COMPUTE (role or all roles) ----------------
+  function labelForConfidence(conf) {
+    if (conf >= 0.90) return "High";
+    if (conf >= 0.65) return "Medium";
+    return "Low";
+  }
+
+  // ---------------- COMPUTE ----------------
   function computeForRole(role) {
     const step1 = step1ByRole.get(role) || 0;
     const finals = finalsByRole.get(role) || 0;
@@ -2276,7 +2304,6 @@ filtered.forEach(r => {
 
     const base = step1 / STEP1_PER_HIRE;
 
-    // simple floors based on signals
     const boosted = Math.max(
       base,
       offers > 0 ? 0.9 : 0,
@@ -2286,9 +2313,7 @@ filtered.forEach(r => {
     const expected = Math.min(remaining, boosted);
 
     const conf = confidenceWithSignals(step1, finals, offers);
-    const badge = badgeForConfidence(conf);
-
-    return { step1, finals, offers, expected, conf: badge.conf, badge: badge.label };
+    return { step1, finals, offers, expected, conf };
   }
 
   function computeAll() {
@@ -2303,28 +2328,20 @@ filtered.forEach(r => {
     });
 
     const conf = confidenceWithSignals(step1, finals, offers);
-    const badge = badgeForConfidence(conf);
-    return { step1, finals, offers, expected, conf: badge.conf, badge: badge.label };
+    return { step1, finals, offers, expected, conf };
   }
 
-  const selectedRole = state.selectedForecastRole || "all";
   const result = (selectedRole === "all") ? computeAll() : computeForRole(selectedRole);
 
   // ---------------- RENDER ----------------
-  const confPct = `${Math.round(result.conf * 100)}%`;
   const scope = selectedRole === "all" ? "All roles" : selectedRole;
 
-  container.innerHTML = `
-    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
-      <label>
-        <span style="font-size:12px;opacity:0.6;">Role</span><br/>
-        <select id="forecastRoleSelect">
-          <option value="all"${selectedRole === "all" ? " selected" : ""}>All roles</option>
-          ${roleList.map(r => `<option value="${r}"${r === selectedRole ? " selected" : ""}>${r}</option>`).join("")}
-        </select>
-      </label>
-    </div>
+  // only show badge for specific role (not all roles)
+  const confPct = `${Math.round(result.conf * 100)}%`;
+  const confLabel = labelForConfidence(result.conf);
+  const confPill = `<span class="pill ${pillClass(result.conf)}">${confLabel} · ${confPct}</span>`;
 
+  container.innerHTML = `
     <div class="table-wrap">
       <table>
         <thead>
@@ -2333,7 +2350,7 @@ filtered.forEach(r => {
             <th class="num">Step1 (4W)</th>
             <th class="num">Finals (KW)</th>
             <th class="num">Offers (KW)</th>
-            <th class="num">Expected hires (4W)</th>
+            <th class="num">Expected hires</th>
             <th class="center">Confidence</th>
           </tr>
         </thead>
@@ -2344,25 +2361,16 @@ filtered.forEach(r => {
             <td class="num ${getNumberClass(result.finals)}">${formatNumber(result.finals)}</td>
             <td class="num ${getNumberClass(result.offers)}">${formatNumber(result.offers)}</td>
             <td class="num ${getNumberClass(result.expected)}">~${Number(result.expected).toFixed(1)}</td>
-            <td class="center">
-  ${selectedRole === "all" ? "—" : `<span class="pill">${result.badge} · ${confPct}</span>`}
-</td>
+            <td class="center">${selectedRole === "all" ? "—" : confPill}</td>
           </tr>
         </tbody>
       </table>
+
       <p class="muted small" style="margin:10px 2px 0;">
-        Basis: Step1 rolling 4W / ${STEP1_PER_HIRE}. Finals/Offers aus pipeline_inventory für ${invWeekKey}. Expected hires capped by remaining openings.
+        Horizon: today → end of current month. Step1 = rolling 4W / ${STEP1_PER_HIRE}. Finals/Offers = pipeline_inventory for ${invWeekKey}.
       </p>
     </div>
   `;
-
-  const sel = $("forecastRoleSelect");
-  if (sel) {
-    sel.addEventListener("change", () => {
-      state.selectedForecastRole = sel.value || "all";
-      renderManagementForecast({ inventoryRows, overviewRows, hiredRows });
-    });
-  }
 }
 
 /* ---------------- RENDER: HIRES ---------------- */
