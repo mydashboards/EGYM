@@ -286,3 +286,21 @@ tbody tr:hover{background:rgba(255,255,255,.02)}
   .overview-top{grid-template-columns:1fr}
   .kpi-grid{grid-template-columns:repeat(2, minmax(0,1fr))}
 }
+/* Forecast confidence pills */
+.pill.good {
+  border-color: rgba(34, 197, 94, 0.55);
+  background: rgba(34, 197, 94, 0.14);
+  color: rgba(34, 197, 94, 0.95);
+}
+
+.pill.warn {
+  border-color: rgba(234, 179, 8, 0.55);
+  background: rgba(234, 179, 8, 0.14);
+  color: rgba(234, 179, 8, 0.95);
+}
+
+.pill.bad {
+  border-color: rgba(239, 68, 68, 0.55);
+  background: rgba(239, 68, 68, 0.14);
+  color: rgba(239, 68, 68, 0.95);
+}
