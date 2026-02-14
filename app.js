@@ -1879,12 +1879,17 @@ filtered.forEach(r => {
 
     // ---------- Remaining openings by role ----------
     const remainingOpeningsByRole = {};
-    (overviewRows || []).forEach(r => {
-      const role = getField(r, ["role"]);
-      if (!role) return;
-      const baseOpenings = num(getField(r, ["openings"]));
-      remainingOpeningsByRole[role] = Math.max(0, baseOpenings - (hiresByRole[role] || 0));
-    });
+   (overviewRows || []).forEach(r => {
+  const role = String(getField(r, ["role"]) || "").trim();
+  if (!role) return;
+
+  // Hide on-hold roles from forecast (dropdown + "all roles" calc)
+  if (isOnHoldRole(role)) return;
+
+  if (seen.has(role)) return;
+  seen.add(role);
+  roleList.push(role);
+});
 
     // ---------- KPIs ----------
     const onHoldRoles = overviewRows.filter(r => {
@@ -2366,9 +2371,6 @@ filtered.forEach(r => {
         </tbody>
       </table>
 
-      <p class="muted small" style="margin:10px 2px 0;">
-        Horizon: today → end of current month. Step1 = rolling 4W / ${STEP1_PER_HIRE}. Finals/Offers = pipeline_inventory for ${invWeekKey}.
-      </p>
     </div>
   `;
 }
