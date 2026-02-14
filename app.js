@@ -2160,7 +2160,7 @@ filtered.forEach(r => {
     `;
   }
 
- function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
+function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
   const container = $("managementForecast");
   const roleSelect = $("managementForecastRoleSelect");
   if (!container || !roleSelect) return;
@@ -2171,47 +2171,6 @@ filtered.forEach(r => {
 
   const rollingKeys = new Set(getRollingWeekKeys(TODAY_WEEK_KEY, ROLLING_WEEKS));
   const invWeekKey = (state.selectedPipelineWeek || TODAY_WEEK_KEY);
-
-  // --- Build role list from overview (stable order) ---
-  const roleList = [];
-  const seen = new Set();
-  (overviewRows || []).forEach(r => {
-    const role = String(getField(r, ["role"]) || "").trim();
-    if (!role) return;
-    if (seen.has(role)) return;
-    seen.add(role);
-    roleList.push(role);
-  });
-
-  // --- Populate TOP dropdown (index.html) ---
-  {
-    const current = state.selectedForecastRole || "all";
-    roleSelect.innerHTML = "";
-
-    const optAll = document.createElement("option");
-    optAll.value = "all";
-    optAll.textContent = "All roles";
-    roleSelect.appendChild(optAll);
-
-    roleList.forEach(role => {
-      const opt = document.createElement("option");
-      opt.value = role;
-      opt.textContent = role;
-      roleSelect.appendChild(opt);
-    });
-
-    const allowed = new Set(["all", ...roleList]);
-    roleSelect.value = allowed.has(current) ? current : "all";
-    state.selectedForecastRole = roleSelect.value;
-
-    // IMPORTANT: avoid multiple addEventListener() on rerenders
-    roleSelect.onchange = () => {
-      state.selectedForecastRole = roleSelect.value || "all";
-      renderManagementForecast({ inventoryRows, overviewRows, hiredRows });
-    };
-  }
-
-  const selectedRole = state.selectedForecastRole || "all";
 
   // ---------------- HIRES BY ROLE (valid = signature_date OR start_date) ----------------
   const hiresByRole = {};
@@ -2269,6 +2228,63 @@ filtered.forEach(r => {
     if (stageNorm.includes("offer")) offersByRole.set(role, (offersByRole.get(role) || 0) + c);
   });
 
+  // ---------------- ROLE LIST (hide on-hold until data exists) ----------------
+  // Rule: On-hold roles should NOT show up in dropdown/table unless there is any signal data.
+  const roleList = [];
+  const seen = new Set();
+  (overviewRows || []).forEach(r => {
+    const role = String(getField(r, ["role"]) || "").trim();
+    if (!role) return;
+    if (seen.has(role)) return;
+
+    const hasData =
+      (num(step1ByRole.get(role) || 0) > 0) ||
+      (num(finalsByRole.get(role) || 0) > 0) ||
+      (num(offersByRole.get(role) || 0) > 0);
+
+    // reuse your global logic (on-hold only shown if hasData)
+    if (!shouldShowRoleOutsideOverview(role, hasData)) return;
+
+    seen.add(role);
+    roleList.push(role);
+  });
+
+  // If the selected role vanished (e.g. became on-hold w/o data), reset to all
+  if (!state.selectedForecastRole) state.selectedForecastRole = "all";
+  if (state.selectedForecastRole !== "all" && !roleList.includes(state.selectedForecastRole)) {
+    state.selectedForecastRole = "all";
+  }
+
+  // --- Populate TOP dropdown (index.html) ---
+  {
+    const current = state.selectedForecastRole || "all";
+    roleSelect.innerHTML = "";
+
+    const optAll = document.createElement("option");
+    optAll.value = "all";
+    optAll.textContent = "All roles";
+    roleSelect.appendChild(optAll);
+
+    roleList.forEach(role => {
+      const opt = document.createElement("option");
+      opt.value = role;
+      opt.textContent = role;
+      roleSelect.appendChild(opt);
+    });
+
+    const allowed = new Set(["all", ...roleList]);
+    roleSelect.value = allowed.has(current) ? current : "all";
+    state.selectedForecastRole = roleSelect.value;
+
+    // IMPORTANT: avoid multiple addEventListener() on rerenders
+    roleSelect.onchange = () => {
+      state.selectedForecastRole = roleSelect.value || "all";
+      renderManagementForecast({ inventoryRows, overviewRows, hiredRows });
+    };
+  }
+
+  const selectedRole = state.selectedForecastRole || "all";
+
   // ---------------- CONFIDENCE LOGIC ----------------
   function confidenceFromStep1(step1) {
     const s1 = num(step1);
@@ -2288,7 +2304,7 @@ filtered.forEach(r => {
   }
 
   function pillClass(conf) {
-    // requested: 0 => red, medium => yellow, >=90% => green
+    // requested: Low/0 => red, Medium => yellow, >=90% => green
     if (conf >= 0.90) return "good";
     if (conf >= 0.65) return "warn";
     return "bad";
@@ -2316,8 +2332,8 @@ filtered.forEach(r => {
     );
 
     const expected = Math.min(remaining, boosted);
-
     const conf = confidenceWithSignals(step1, finals, offers);
+
     return { step1, finals, offers, expected, conf };
   }
 
@@ -2341,7 +2357,6 @@ filtered.forEach(r => {
   // ---------------- RENDER ----------------
   const scope = selectedRole === "all" ? "All roles" : selectedRole;
 
-  // only show badge for specific role (not all roles)
   const confPct = `${Math.round(result.conf * 100)}%`;
   const confLabel = labelForConfidence(result.conf);
   const confPill = `<span class="pill ${pillClass(result.conf)}">${confLabel} · ${confPct}</span>`;
@@ -2370,7 +2385,6 @@ filtered.forEach(r => {
           </tr>
         </tbody>
       </table>
-
     </div>
   `;
 }
