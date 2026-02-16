@@ -1271,6 +1271,29 @@ function renderOverview() {
 
   // ---------- Hires by role (valid hire = signature_date OR start_date) ----------
   const hiresByRole = {};
+  // ---------------- TTF by role ----------------
+const ttfByRole = {};
+
+(hiredRows || []).forEach(r => {
+  const role = String(getField(r, ["role"]) || "").trim();
+  if (!role) return;
+
+  const start = getField(r, ["start_date", "start date"]);
+  const created = getField(r, ["created_date", "created date"]);
+
+  if (!start || !created) return;
+
+  const startDate = new Date(start);
+  const createdDate = new Date(created);
+
+  if (isNaN(startDate) || isNaN(createdDate)) return;
+
+  const diffDays = Math.max(0, (startDate - createdDate) / (1000 * 60 * 60 * 24));
+
+  if (!ttfByRole[role]) ttfByRole[role] = [];
+  ttfByRole[role].push(diffDays);
+});
+  
   if (hiredRows.length) {
     hiredRows.forEach(r => {
       const role = getField(r, ["role"]);
@@ -2319,10 +2342,19 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
 
     // Confidence (simple, explainable)
     let conf = 0.07; // baseline
-    if (offers > 0) conf = 0.95;
-    else if (finals > 0) conf = 0.70;
-    else if (step1 >= 10) conf = 0.30;
-    else if (step1 > 0) conf = 0.15;
+  if (offers > 0) conf = 0.95;
+else if (finals > 0) conf = 0.70;
+else if (step1 >= 10) conf = 0.30;
+else if (step1 > 0) conf = 0.15;
+
+// ----- TTF adjustment -----
+const ttfList = ttfByRole[role] || [];
+if (ttfList.length > 0) {
+  const avgTTF = ttfList.reduce((a,b) => a+b, 0) / ttfList.length;
+
+  if (avgTTF <= 30) conf += 0.10;      // fast hire historically
+  else if (avgTTF > 60) conf -= 0.10;  // slow historically
+}
 
     // clamp
     conf = Math.min(1, Math.max(0, conf));
