@@ -2358,11 +2358,14 @@ const ttfByRole = {};
 
     const expectedRaw = Math.max(expOffers, expFinals, expStep1);
     const expected = Math.min(remaining, expectedRaw);
-
+so
     // Confidence (simple, explainable)
     let conf = 0.07; // baseline
-  if (offers > 0) conf = 0.95;
-else if (finals > 0) conf = 0.70;
+if (offers > 0) {
+  conf = 0.95;
+} else if (finals > 0) {
+  conf = Math.min(0.90, 0.60 + finals * 0.10);
+}
 else if (step1 >= 10) conf = 0.30;
 else if (step1 > 0) conf = 0.15;
 
