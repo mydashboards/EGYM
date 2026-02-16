@@ -2341,44 +2341,45 @@ const ttfByRole = {};
 
   // ---------------- COMPUTE ----------------
   function computeForRole(role) {
-    const remaining = remainingOpeningsByRole[role] ?? 0;
-    const step1 = num(step1ByRole4w.get(role) || 0);
-    const finals = num(finalsByRole.get(role) || 0);
-    const offers = num(offersByRole.get(role) || 0);
+  const remaining = remainingOpeningsByRole[role] ?? 0;
+  const step1 = num(step1ByRole4w.get(role) || 0);
+  const finals = num(finalsByRole.get(role) || 0);
+  const offers = num(offersByRole.get(role) || 0);
 
-    // Expected hires (simple rule)
-    const expOffers = offers;            // strongest
-    const expFinals = finals * 0.5;      // medium
-    const expStep1  = step1 / STEP1_PER_HIRE; // early signal
+  // Expected hires (simple rule)
+  const expOffers = offers;                 // strongest
+  const expFinals = finals * 0.5;           // medium
+  const expStep1  = step1 / STEP1_PER_HIRE; // early signal
 
-    const expectedRaw = Math.max(expOffers, expFinals, expStep1);
-const expectedRaw = Math.max(expOffers, expFinals, expStep1);
-const expected = Math.min(remaining, expectedRaw);
+  const expectedRaw = Math.max(expOffers, expFinals, expStep1);
+  const expected = Math.min(remaining, expectedRaw);
 
-// Confidence (simple, explainable)
-let conf = 0.07; // baseline
-if (offers > 0) {
-  conf = 0.95;
-} else if (finals > 0) {
-  conf = Math.min(0.90, 0.60 + finals * 0.10);
-}
-else if (step1 >= 10) conf = 0.30;
-else if (step1 > 0) conf = 0.15;
-
-// ----- TTF adjustment -----
-const ttfList = ttfByRole[role] || [];
-if (ttfList.length > 0) {
-  const avgTTF = ttfList.reduce((a,b) => a+b, 0) / ttfList.length;
-
-  if (avgTTF <= 30) conf += 0.10;      // fast hire historically
-  else if (avgTTF > 60) conf -= 0.10;  // slow historically
-}
-
-    // clamp
-    conf = Math.min(1, Math.max(0, conf));
-
-    return { step1, finals, offers, expected, conf };
+  // Confidence (simple, explainable)
+  let conf = 0.07; // baseline
+  if (offers > 0) {
+    conf = 0.95;
+  } else if (finals > 0) {
+    conf = Math.min(0.90, 0.60 + finals * 0.10);
+  } else if (step1 >= 10) {
+    conf = 0.30;
+  } else if (step1 > 0) {
+    conf = 0.15;
   }
+
+  // ----- TTF adjustment -----
+  const ttfList = ttfByRole[role] || [];
+  if (ttfList.length > 0) {
+    const avgTTF = ttfList.reduce((a, b) => a + b, 0) / ttfList.length;
+
+    if (avgTTF <= 30) conf += 0.10;      // fast hire historically
+    else if (avgTTF > 60) conf -= 0.10;  // slow historically
+  }
+
+  // clamp
+  conf = Math.min(1, Math.max(0, conf));
+
+  return { step1, finals, offers, expected, conf };
+}
 
   function computeAll() {
     let step1 = 0, finals = 0, offers = 0, expected = 0;
