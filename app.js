@@ -2164,11 +2164,14 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
   if (!container || !roleSelect) return;
 
   // ---------------- CONFIG ----------------
-  const STEP1_PER_HIRE = 25;
-  const ROLLING_WEEKS = 4;
+  const PROJECTION_WEEKS = 4;
 
-  const rollingKeys = new Set(getRollingWeekKeys(TODAY_WEEK_KEY, ROLLING_WEEKS));
-  const invWeekKey = (state.selectedPipelineWeek || TODAY_WEEK_KEY);
+  // Smoothing to avoid 0/0 and extreme rates for small samples
+  function smoothRate(h, n, alpha = 1, beta = 10) {
+    const hh = num(h);
+    const nn = num(n);
+    return (hh + alpha) / (nn + beta);
+  }
 
   // ---------------- HIRES BY ROLE (valid = signature_date OR start_date) ----------------
   const hiresByRole = {};
@@ -2193,24 +2196,46 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
     remainingOpeningsByRole[role] = Math.max(0, baseOpenings - (hiresByRole[role] || 0));
   });
 
-  // ---------------- STEP1 (rolling 4w) from pipeline_weekly ----------------
-  const step1ByRole = new Map();
-  (state.pipelineWeeklyRows || []).forEach(r => {
-    const wk = weekKey(r);
-    if (!wk || !rollingKeys.has(wk)) return;
+  // ---------------- ALL-TIME FUNNEL ACTIVITY (pipeline_weekly) ----------------
+  // We use all available data to compute throughput and conversion rates.
+  const step1Total = new Map();         // role -> total Step1 (all time)
+  const finalTotal = new Map();         // role -> total Finals (all time; based on stage activity)
+  const offerTotal = new Map();         // role -> total Offers (all time; based on stage activity)
+  const step1Weeks = new Map();         // role -> Set(weekKey) where Step1 appears (for avg/week)
 
+  (state.pipelineWeeklyRows || []).forEach(r => {
     const role = String(r.role || "").trim();
     if (!role) return;
 
-    const stage = normalizeHealthStage(r.stage);
-    if (stage !== "step1") return;
+    const wk = weekKey(r);
+    const stage = normalizeStageValue(r.stage);
+    const c = num(r.count);
 
-    step1ByRole.set(role, (step1ByRole.get(role) || 0) + num(r.count));
+    if (stage.replace(/_/g, "") === "step1") {
+      step1Total.set(role, (step1Total.get(role) || 0) + c);
+      if (wk) {
+        if (!step1Weeks.has(role)) step1Weeks.set(role, new Set());
+        step1Weeks.get(role).add(wk);
+      }
+      return;
+    }
+
+    // Finals / Offers: tolerate naming variations
+    if (stage.includes("final")) {
+      finalTotal.set(role, (finalTotal.get(role) || 0) + c);
+      return;
+    }
+    if (stage.includes("offer")) {
+      offerTotal.set(role, (offerTotal.get(role) || 0) + c);
+      return;
+    }
   });
 
-  // ---------------- FINALS / OFFERS (inventory selected week) ----------------
-  const finalsByRole = new Map();
-  const offersByRole = new Map();
+  // ---------------- CURRENT PIPELINE SIGNALS (inventory selected KW) ----------------
+  const invWeekKey = (state.selectedPipelineWeek || TODAY_WEEK_KEY);
+
+  const finalsCurrent = new Map(); // role -> finals in selected KW (snapshot)
+  const offersCurrent = new Map(); // role -> offers in selected KW (snapshot)
 
   (inventoryRows || []).forEach(r => {
     if (weekKey(r) !== invWeekKey) return;
@@ -2222,38 +2247,36 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
     const stageNorm = normalizeStageValue(stageRaw);
     const c = num(getField(r, ["count"]) || r.count);
 
-    if (stageNorm.includes("final")) finalsByRole.set(role, (finalsByRole.get(role) || 0) + c);
-    if (stageNorm.includes("offer")) offersByRole.set(role, (offersByRole.get(role) || 0) + c);
+    if (stageNorm.includes("final")) finalsCurrent.set(role, (finalsCurrent.get(role) || 0) + c);
+    if (stageNorm.includes("offer")) offersCurrent.set(role, (offersCurrent.get(role) || 0) + c);
   });
 
   // ---------------- ROLE LIST (hide on-hold until data exists) ----------------
-  // Rule: On-hold roles should NOT show up in dropdown/table unless there is any signal data.
   const roleList = [];
   const seen = new Set();
+
   (overviewRows || []).forEach(r => {
     const role = String(getField(r, ["role"]) || "").trim();
-    if (!role) return;
-    if (seen.has(role)) return;
+    if (!role || seen.has(role)) return;
 
     const hasData =
-      (num(step1ByRole.get(role) || 0) > 0) ||
-      (num(finalsByRole.get(role) || 0) > 0) ||
-      (num(offersByRole.get(role) || 0) > 0);
+      (num(step1Total.get(role) || 0) > 0) ||
+      (num(finalsCurrent.get(role) || 0) > 0) ||
+      (num(offersCurrent.get(role) || 0) > 0);
 
-    // reuse your global logic (on-hold only shown if hasData)
     if (!shouldShowRoleOutsideOverview(role, hasData)) return;
 
     seen.add(role);
     roleList.push(role);
   });
 
-  // If the selected role vanished (e.g. became on-hold w/o data), reset to all
+  // keep selection valid
   if (!state.selectedForecastRole) state.selectedForecastRole = "all";
   if (state.selectedForecastRole !== "all" && !roleList.includes(state.selectedForecastRole)) {
     state.selectedForecastRole = "all";
   }
 
-  // --- Populate TOP dropdown (index.html) ---
+  // dropdown
   {
     const current = state.selectedForecastRole || "all";
     roleSelect.innerHTML = "";
@@ -2274,7 +2297,6 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
     roleSelect.value = allowed.has(current) ? current : "all";
     state.selectedForecastRole = roleSelect.value;
 
-    // IMPORTANT: avoid multiple addEventListener() on rerenders
     roleSelect.onchange = () => {
       state.selectedForecastRole = roleSelect.value || "all";
       renderManagementForecast({ inventoryRows, overviewRows, hiredRows });
@@ -2283,26 +2305,23 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
 
   const selectedRole = state.selectedForecastRole || "all";
 
-  // ---------------- CONFIDENCE LOGIC ----------------
-  function confidenceFromStep1(step1) {
-    const s1 = num(step1);
-    if (s1 >= 25) return 1.0;
-    if (s1 >= 20) return 0.85;
-    if (s1 >= 15) return 0.75;
-    if (s1 >= 10) return 0.50;
-    if (s1 >= 5)  return 0.25;
-    return s1 > 0 ? 0.10 : 0.0;
-  }
+  // ---------------- CONFIDENCE HELPERS ----------------
+  function confidenceWithSignals({ projectedExpected, remaining, finalsNow, offersNow }) {
+    const rem = Math.max(0, num(remaining));
+    const exp = Math.max(0, num(projectedExpected));
 
-  function confidenceWithSignals(step1, finals, offers) {
-    let conf = confidenceFromStep1(step1);
-    if (num(finals) > 0) conf = Math.max(conf, 0.75);
-    if (num(offers) > 0) conf = Math.max(conf, 0.90);
+    // baseline from how much of remaining we expect to cover in next 4w
+    let conf = rem > 0 ? Math.min(1, exp / rem) : 1;
+
+    // stage depth boosts
+    if (num(finalsNow) > 0) conf = Math.max(conf, 0.75);
+    if (num(offersNow) > 0) conf = Math.max(conf, 0.90);
+
+    // clamp
     return Math.min(1, Math.max(0, conf));
   }
 
   function pillClass(conf) {
-    // requested: Low/0 => red, Medium => yellow, >=90% => green
     if (conf >= 0.90) return "good";
     if (conf >= 0.65) return "warn";
     return "bad";
@@ -2316,38 +2335,65 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
 
   // ---------------- COMPUTE ----------------
   function computeForRole(role) {
-    const step1 = step1ByRole.get(role) || 0;
-    const finals = finalsByRole.get(role) || 0;
-    const offers = offersByRole.get(role) || 0;
+    const hires = hiresByRole[role] || 0;
+
+    const s1Total = step1Total.get(role) || 0;
+    const s1WeeksCount = (step1Weeks.get(role)?.size || 0) || 1; // avoid div by 0
+    const s1AvgPerWeek = s1Total / s1WeeksCount;
+
+    // Project next 4 weeks based on historical throughput
+    const s1Projected4w = s1AvgPerWeek * PROJECTION_WEEKS;
+
+    const fAll = finalTotal.get(role) || 0;
+    const oAll = offerTotal.get(role) || 0;
+
+    const fNow = finalsCurrent.get(role) || 0;
+    const oNow = offersCurrent.get(role) || 0;
+
     const remaining = remainingOpeningsByRole[role] ?? 0;
 
-    const base = step1 / STEP1_PER_HIRE;
+    // Historical conversion rates (smoothed)
+    const rStep1 = smoothRate(hires, s1Total);  // hires per Step1
+    const rFinal = smoothRate(hires, fAll);
+    const rOffer = smoothRate(hires, oAll);
 
-    const boosted = Math.max(
-      base,
-      offers > 0 ? 0.9 : 0,
-      finals > 0 ? 0.75 : 0
-    );
+    // Expected hires signals
+    const expFromStep1 = s1Projected4w * rStep1;
+    const expFromFinals = fNow * rFinal;
+    const expFromOffers = oNow * rOffer;
 
-    const expected = Math.min(remaining, boosted);
-    const conf = confidenceWithSignals(step1, finals, offers);
+    const expected = Math.min(remaining, Math.max(expFromStep1, expFromFinals, expFromOffers));
 
-    return { step1, finals, offers, expected, conf };
+    const conf = confidenceWithSignals({
+      projectedExpected: expected,
+      remaining,
+      finalsNow: fNow,
+      offersNow: oNow
+    });
+
+    return { step1_4w_proj: s1Projected4w, finals: fNow, offers: oNow, expected, conf };
   }
 
   function computeAll() {
-    let step1 = 0, finals = 0, offers = 0, expected = 0;
+    let s1p = 0, f = 0, o = 0, expected = 0, remaining = 0;
 
     roleList.forEach(role => {
       const r = computeForRole(role);
-      step1 += r.step1;
-      finals += r.finals;
-      offers += r.offers;
+      s1p += r.step1_4w_proj;
+      f += r.finals;
+      o += r.offers;
       expected += r.expected;
+      remaining += (remainingOpeningsByRole[role] ?? 0);
     });
 
-    const conf = confidenceWithSignals(step1, finals, offers);
-    return { step1, finals, offers, expected, conf };
+    const conf = confidenceWithSignals({
+      projectedExpected: expected,
+      remaining,
+      finalsNow: f,
+      offersNow: o
+    });
+
+    return { step1_4w_proj: s1p, finals: f, offers: o, expected, conf };
   }
 
   const result = (selectedRole === "all") ? computeAll() : computeForRole(selectedRole);
@@ -2365,7 +2411,7 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
         <thead>
           <tr>
             <th>Scope</th>
-            <th class="num">Step1 (4W)</th>
+            <th class="num">Step1 (proj. 4W)</th>
             <th class="num">Finals (KW)</th>
             <th class="num">Offers (KW)</th>
             <th class="num">Expected hires</th>
@@ -2375,7 +2421,7 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
         <tbody>
           <tr>
             <td>${scope}</td>
-            <td class="num ${getNumberClass(result.step1)}">${formatNumber(result.step1)}</td>
+            <td class="num ${getNumberClass(result.step1_4w_proj)}">${Number(result.step1_4w_proj).toFixed(1)}</td>
             <td class="num ${getNumberClass(result.finals)}">${formatNumber(result.finals)}</td>
             <td class="num ${getNumberClass(result.offers)}">${formatNumber(result.offers)}</td>
             <td class="num ${getNumberClass(result.expected)}">~${Number(result.expected).toFixed(1)}</td>
