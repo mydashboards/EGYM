@@ -2419,7 +2419,7 @@ const s1AvgPerWeek = s1Total / weeksCount;
         <thead>
           <tr>
             <th>Scope</th>
-            <th class="num">Step1 (proj. 4W)</th>
+            <th class="num">Step1 (est. next 4w)</th>
             <th class="num">Finals (KW)</th>
             <th class="num">Offers (KW)</th>
             <th class="num">Expected hires</th>
