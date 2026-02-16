@@ -1959,62 +1959,68 @@ if (hsEl) {
   const empty = $("managementRecruiterEmpty");
   if (!tbody || !empty) return;
 
-  const selectedWeekKey = state.selectedManagementWeek || "";
-  const totalsByRecruiter = new Map();
-  const weekCountByRecruiter = new Map();
   const allowedRecruiters = new Set(["Alex", "Sven"]);
 
-  weeklyRows.forEach(r => {
+  // Pick the most recent week that has ANY Step1 data (so it's stable until current week is filled)
+  const step1Weeks = new Set();
+  (weeklyRows || []).forEach(r => {
     const recruiter = r.recruiter || "Unassigned";
     if (!allowedRecruiters.has(recruiter)) return;
+
     const wk = weekKey(r);
     if (!wk) return;
 
-    if (selectedWeekKey !== "all" && wk !== selectedWeekKey) return;
+    const stage = normalizeHealthStage(r.stage);
+    const c = num(r.count);
+    if (stage === "step1" && c > 0) step1Weeks.add(wk);
+  });
 
-    if (!totalsByRecruiter.has(recruiter)) {
-      totalsByRecruiter.set(recruiter, { step1: 0 });
-    }
-    if (!weekCountByRecruiter.has(recruiter)) {
-      weekCountByRecruiter.set(recruiter, new Set());
-    }
-    weekCountByRecruiter.get(recruiter).add(wk);
+  const sortedWeeks = Array.from(step1Weeks).sort((a, b) => {
+    const A = getWeekYearFromKey(a);
+    const B = getWeekYearFromKey(b);
+    if (!A || !B) return 0;
+    if (A.year !== B.year) return B.year - A.year;
+    return B.kw - A.kw;
+  });
+
+  const displayWeekKey = sortedWeeks[0] || ""; // latest week with Step1>0
+
+  const totalsByRecruiter = new Map();
+  allowedRecruiters.forEach(r => totalsByRecruiter.set(r, { step1: 0 }));
+
+  (weeklyRows || []).forEach(r => {
+    const recruiter = r.recruiter || "Unassigned";
+    if (!allowedRecruiters.has(recruiter)) return;
+
+    if (!displayWeekKey) return;
+    if (weekKey(r) !== displayWeekKey) return;
 
     const stage = normalizeHealthStage(r.stage);
     if (stage !== "step1") return;
-    const agg = totalsByRecruiter.get(recruiter);
-    agg.step1 += num(r.count);
+
+    totalsByRecruiter.get(recruiter).step1 += num(r.count);
   });
 
   tbody.innerHTML = "";
+
   const rows = Array.from(totalsByRecruiter.entries());
-  if (!rows.length) {
+  const hasAny = rows.some(([, d]) => num(d.step1) > 0);
+
+  if (!hasAny) {
     empty.classList.remove("hidden");
     return;
   }
   empty.classList.add("hidden");
 
   rows.forEach(([recruiter, data]) => {
-    const weeksSet = weekCountByRecruiter.get(recruiter) || new Set();
-    const weeksCount = weeksSet.size || 0;
-
-    const avgStep1 = selectedWeekKey === "all" && weeksCount > 0 ? data.step1 / weeksCount : null;
-
-    const utilizationBase = selectedWeekKey === "all"
-      ? (avgStep1 || 0)
-      : data.step1;
-
-    // ✅ Allow > 100% in the label
-    const utilization = Math.round(Math.max(0, (utilizationBase / 20) * 100));
-
-    // ✅ Keep the bar capped at 100% to preserve layout
+    const utilization = Math.round(Math.max(0, (num(data.step1) / 20) * 100));
     const barWidth = `${Math.max(0, Math.min(100, utilization))}%`;
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${recruiter}</td>
       <td class="num ${getNumberClass(data.step1)}">${formatNumber(data.step1)}</td>
-      <td class="num ${getNumberClass(avgStep1)}">${avgStep1 === null ? "—" : avgStep1.toFixed(1)}</td>
+      <td class="num">—</td>
       <td class="num">
         <div class="utilization">
           <div class="utilization-bar"><span style="width:${barWidth};"></span></div>
@@ -2198,10 +2204,10 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
 
   // ---------------- ALL-TIME FUNNEL ACTIVITY (pipeline_weekly) ----------------
   // We use all available data to compute throughput and conversion rates.
-  const step1Total = new Map();         // role -> total Step1 (all time)
-  const finalTotal = new Map();         // role -> total Finals (all time; based on stage activity)
-  const offerTotal = new Map();         // role -> total Offers (all time; based on stage activity)
-  const step1Weeks = new Map();         // role -> Set(weekKey) where Step1 appears (for avg/week)
+ const step1Total = new Map();         // role -> total Step1 (all time)
+const finalTotal = new Map();         // role -> total Finals (all time; based on stage activity)
+const offerTotal = new Map();         // role -> total Offers (all time; based on stage activity)
+const weeksSeenByRole = new Map();    // role -> Set(weekKey) where ANY data exists (for avg/week baseline)
 
   (state.pipelineWeeklyRows || []).forEach(r => {
     const role = String(r.role || "").trim();
@@ -2211,14 +2217,16 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
     const stage = normalizeStageValue(r.stage);
     const c = num(r.count);
 
-    if (stage.replace(/_/g, "") === "step1") {
-      step1Total.set(role, (step1Total.get(role) || 0) + c);
-      if (wk) {
-        if (!step1Weeks.has(role)) step1Weeks.set(role, new Set());
-        step1Weeks.get(role).add(wk);
-      }
-      return;
-    }
+  // Track weeks where we have ANY data for the role
+if (wk) {
+  if (!weeksSeenByRole.has(role)) weeksSeenByRole.set(role, new Set());
+  weeksSeenByRole.get(role).add(wk);
+}
+
+if (stage.replace(/_/g, "") === "step1") {
+  step1Total.set(role, (step1Total.get(role) || 0) + c);
+  return;
+}
 
     // Finals / Offers: tolerate naming variations
     if (stage.includes("final")) {
@@ -2338,8 +2346,8 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
     const hires = hiresByRole[role] || 0;
 
     const s1Total = step1Total.get(role) || 0;
-    const s1WeeksCount = (step1Weeks.get(role)?.size || 0) || 1; // avoid div by 0
-    const s1AvgPerWeek = s1Total / s1WeeksCount;
+    const weeksCount = (weeksSeenByRole.get(role)?.size || 0) || 1; // avoid div by 0
+const s1AvgPerWeek = s1Total / weeksCount;
 
     // Project next 4 weeks based on historical throughput
     const s1Projected4w = s1AvgPerWeek * PROJECTION_WEEKS;
