@@ -2214,6 +2214,25 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
     hiresByRole[role] = (hiresByRole[role] || 0) + 1;
   });
 
+  // ---------------- TTF BY ROLE (avg from hired_data) ----------------
+const ttfByRole = {};
+(hiredRows || []).forEach(r => {
+  const role = String(getField(r, ["role"]) || "").trim();
+  if (!role) return;
+
+  const start = getField(r, ["start_date", "start date"]);
+  const created = getField(r, ["created_date", "created date"]);
+  if (!start || !created) return;
+
+  const startDate = new Date(start);
+  const createdDate = new Date(created);
+  if (isNaN(startDate) || isNaN(createdDate)) return;
+
+  const diffDays = Math.max(0, (startDate - createdDate) / (1000 * 60 * 60 * 24));
+  if (!ttfByRole[role]) ttfByRole[role] = [];
+  ttfByRole[role].push(diffDays);
+});
+
   // ---------------- REMAINING OPENINGS BY ROLE ----------------
   const remainingOpeningsByRole = {};
   (overviewRows || []).forEach(r => {
