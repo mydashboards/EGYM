@@ -2324,12 +2324,7 @@ const ttfByRole = {};
     const allowed = new Set(["all", ...roleList]);
     roleSelect.value = allowed.has(current) ? current : "all";
     state.selectedForecastRole = roleSelect.value;
-
-    roleSelect.onchange = () => {
-      state.selectedForecastRole = roleSelect.value || "all";
-      renderManagementForecast({ inventoryRows, overviewRows, hiredRows });
-    };
-  }
+}
 
   // ---------------- CONFIDENCE UI ----------------
   function pillClass(conf) {
@@ -2357,10 +2352,11 @@ const ttfByRole = {};
     const expStep1  = step1 / STEP1_PER_HIRE; // early signal
 
     const expectedRaw = Math.max(expOffers, expFinals, expStep1);
-    const expected = Math.min(remaining, expectedRaw);
-so
-    // Confidence (simple, explainable)
-    let conf = 0.07; // baseline
+const expectedRaw = Math.max(expOffers, expFinals, expStep1);
+const expected = Math.min(remaining, expectedRaw);
+
+// Confidence (simple, explainable)
+let conf = 0.07; // baseline
 if (offers > 0) {
   conf = 0.95;
 } else if (finals > 0) {
