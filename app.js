@@ -1322,14 +1322,14 @@ function renderOverview() {
     `;
   }
 
-  const healthSummaryEl = $("overviewHealthSummary");
-  if (healthSummaryEl) {
-    healthSummaryEl.innerHTML = `
-      <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
-      <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} Needs attention</span></div>
-      <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Critical</span></div>
-    `;
-  }
+ const healthSummaryEl = $("overviewHealthSummary");
+if (healthSummaryEl) {
+  healthSummaryEl.innerHTML = `
+    <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
+    <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} Attention</span></div>
+    <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Action</span></div>
+  `;
+}
 
   // ---------- Table ----------
   const tbody = $("overviewTable");
@@ -1846,7 +1846,8 @@ filtered.forEach(r => {
   /* ---------------- RENDER: MANAGEMENT ---------------- */
 
   function renderManagement() {
-    const overviewRows = state.overviewRows || [];
+    // ✅ Management KPIs must match Overview: start from FULL overview dataset (not globally department-filtered)
+const overviewRows = state.allOverviewRows || [];
     const hiredRows = state.hiredRows || [];
     const weeklyRows = state.pipelineWeeklyRows || [];
     const inventoryRows = state.pipelineInventoryRows || [];
@@ -1929,14 +1930,14 @@ const remainingOpeningsByRole = {};
       else if (value === "critical") counts.critical += 1;
     });
 
-    const hsEl = $("managementHealthSummary");
-    if (hsEl) {
-      hsEl.innerHTML = `
-        <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
-        <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} Needs attention</span></div>
-        <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Critical</span></div>
-      `;
-    }
+  const hsEl = $("managementHealthSummary");
+if (hsEl) {
+  hsEl.innerHTML = `
+    <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
+    <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} Attention</span></div>
+    <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Action</span></div>
+  `;
+}
 
     renderManagementRecruiters({ weeklyRows });
 
