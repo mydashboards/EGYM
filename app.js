@@ -2169,15 +2169,14 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
   const roleSelect = $("managementForecastRoleSelect");
   if (!container || !roleSelect) return;
 
-  // ---------------- CONFIG ----------------
-  const PROJECTION_WEEKS = 4;
+  // ---------------- SIMPLE FORECAST RULES (manager-proof) ----------------
+  // 1) Offers (KW) -> Expected hires = offers (High)
+  // 2) Finals (KW) -> Expected hires = finals * 0.5 (Medium)
+  // 3) Step1 (rolling 4W) -> Expected hires = step1 / 25 (Low)
+  // 4) Nothing -> 0 (Very Low)
 
-  // Smoothing to avoid 0/0 and extreme rates for small samples
-  function smoothRate(h, n, alpha = 1, beta = 10) {
-    const hh = num(h);
-    const nn = num(n);
-    return (hh + alpha) / (nn + beta);
-  }
+  const STEP1_PER_HIRE = 25;
+  const ROLLING_WEEKS = 4;
 
   // ---------------- HIRES BY ROLE (valid = signature_date OR start_date) ----------------
   const hiresByRole = {};
@@ -2202,48 +2201,28 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
     remainingOpeningsByRole[role] = Math.max(0, baseOpenings - (hiresByRole[role] || 0));
   });
 
-  // ---------------- ALL-TIME FUNNEL ACTIVITY (pipeline_weekly) ----------------
-  // We use all available data to compute throughput and conversion rates.
- const step1Total = new Map();         // role -> total Step1 (all time)
-const finalTotal = new Map();         // role -> total Finals (all time; based on stage activity)
-const offerTotal = new Map();         // role -> total Offers (all time; based on stage activity)
-const weeksSeenByRole = new Map();    // role -> Set(weekKey) where ANY data exists (for avg/week baseline)
+  // ---------------- STEP1 (rolling 4w) from pipeline_weekly ----------------
+  const endWeekKey = state.selectedPipelineWeek || TODAY_WEEK_KEY;
+  const rollingKeys = new Set(getRollingWeekKeys(endWeekKey, ROLLING_WEEKS));
 
+  const step1ByRole4w = new Map();
   (state.pipelineWeeklyRows || []).forEach(r => {
+    const wk = weekKey(r);
+    if (!wk || !rollingKeys.has(wk)) return;
+
     const role = String(r.role || "").trim();
     if (!role) return;
 
-    const wk = weekKey(r);
-    const stage = normalizeStageValue(r.stage);
-    const c = num(r.count);
+    const stage = normalizeHealthStage(r.stage);
+    if (stage !== "step1") return;
 
-  // Track weeks where we have ANY data for the role
-if (wk) {
-  if (!weeksSeenByRole.has(role)) weeksSeenByRole.set(role, new Set());
-  weeksSeenByRole.get(role).add(wk);
-}
-
-if (stage.replace(/_/g, "") === "step1") {
-  step1Total.set(role, (step1Total.get(role) || 0) + c);
-  return;
-}
-
-    // Finals / Offers: tolerate naming variations
-    if (stage.includes("final")) {
-      finalTotal.set(role, (finalTotal.get(role) || 0) + c);
-      return;
-    }
-    if (stage.includes("offer")) {
-      offerTotal.set(role, (offerTotal.get(role) || 0) + c);
-      return;
-    }
+    step1ByRole4w.set(role, (step1ByRole4w.get(role) || 0) + num(r.count));
   });
 
-  // ---------------- CURRENT PIPELINE SIGNALS (inventory selected KW) ----------------
-  const invWeekKey = (state.selectedPipelineWeek || TODAY_WEEK_KEY);
-
-  const finalsCurrent = new Map(); // role -> finals in selected KW (snapshot)
-  const offersCurrent = new Map(); // role -> offers in selected KW (snapshot)
+  // ---------------- FINALS / OFFERS (inventory selected week snapshot) ----------------
+  const invWeekKey = state.selectedPipelineWeek || TODAY_WEEK_KEY;
+  const finalsByRole = new Map();
+  const offersByRole = new Map();
 
   (inventoryRows || []).forEach(r => {
     if (weekKey(r) !== invWeekKey) return;
@@ -2255,22 +2234,21 @@ if (stage.replace(/_/g, "") === "step1") {
     const stageNorm = normalizeStageValue(stageRaw);
     const c = num(getField(r, ["count"]) || r.count);
 
-    if (stageNorm.includes("final")) finalsCurrent.set(role, (finalsCurrent.get(role) || 0) + c);
-    if (stageNorm.includes("offer")) offersCurrent.set(role, (offersCurrent.get(role) || 0) + c);
+    if (stageNorm.includes("final")) finalsByRole.set(role, (finalsByRole.get(role) || 0) + c);
+    if (stageNorm.includes("offer")) offersByRole.set(role, (offersByRole.get(role) || 0) + c);
   });
 
   // ---------------- ROLE LIST (hide on-hold until data exists) ----------------
   const roleList = [];
   const seen = new Set();
-
   (overviewRows || []).forEach(r => {
     const role = String(getField(r, ["role"]) || "").trim();
     if (!role || seen.has(role)) return;
 
     const hasData =
-      (num(step1Total.get(role) || 0) > 0) ||
-      (num(finalsCurrent.get(role) || 0) > 0) ||
-      (num(offersCurrent.get(role) || 0) > 0);
+      num(step1ByRole4w.get(role) || 0) > 0 ||
+      num(finalsByRole.get(role) || 0) > 0 ||
+      num(offersByRole.get(role) || 0) > 0;
 
     if (!shouldShowRoleOutsideOverview(role, hasData)) return;
 
@@ -2311,107 +2289,73 @@ if (stage.replace(/_/g, "") === "step1") {
     };
   }
 
-  const selectedRole = state.selectedForecastRole || "all";
-
-  // ---------------- CONFIDENCE HELPERS ----------------
-  function confidenceWithSignals({ projectedExpected, remaining, finalsNow, offersNow }) {
-    const rem = Math.max(0, num(remaining));
-    const exp = Math.max(0, num(projectedExpected));
-
-    // baseline from how much of remaining we expect to cover in next 4w
-    let conf = rem > 0 ? Math.min(1, exp / rem) : 1;
-
-    // stage depth boosts
-    if (num(finalsNow) > 0) conf = Math.max(conf, 0.75);
-    if (num(offersNow) > 0) conf = Math.max(conf, 0.90);
-
-    // clamp
-    return Math.min(1, Math.max(0, conf));
-  }
-
+  // ---------------- CONFIDENCE UI ----------------
   function pillClass(conf) {
     if (conf >= 0.90) return "good";
-    if (conf >= 0.65) return "warn";
+    if (conf >= 0.60) return "warn";
     return "bad";
   }
-
   function labelForConfidence(conf) {
     if (conf >= 0.90) return "High";
-    if (conf >= 0.65) return "Medium";
-    return "Low";
+    if (conf >= 0.60) return "Medium";
+    if (conf > 0.10) return "Low";
+    return "Very Low";
   }
 
   // ---------------- COMPUTE ----------------
   function computeForRole(role) {
-    const hires = hiresByRole[role] || 0;
-
-    const s1Total = step1Total.get(role) || 0;
-    const weeksCount = (weeksSeenByRole.get(role)?.size || 0) || 1; // avoid div by 0
-const s1AvgPerWeek = s1Total / weeksCount;
-
-    // Project next 4 weeks based on historical throughput
-    const s1Projected4w = s1AvgPerWeek * PROJECTION_WEEKS;
-
-    const fAll = finalTotal.get(role) || 0;
-    const oAll = offerTotal.get(role) || 0;
-
-    const fNow = finalsCurrent.get(role) || 0;
-    const oNow = offersCurrent.get(role) || 0;
-
     const remaining = remainingOpeningsByRole[role] ?? 0;
+    const step1 = num(step1ByRole4w.get(role) || 0);
+    const finals = num(finalsByRole.get(role) || 0);
+    const offers = num(offersByRole.get(role) || 0);
 
-    // Historical conversion rates (smoothed)
-    const rStep1 = smoothRate(hires, s1Total);  // hires per Step1
-    const rFinal = smoothRate(hires, fAll);
-    const rOffer = smoothRate(hires, oAll);
+    // Expected hires (simple rule)
+    const expOffers = offers;            // strongest
+    const expFinals = finals * 0.5;      // medium
+    const expStep1  = step1 / STEP1_PER_HIRE; // early signal
 
-    // Expected hires signals
-    const expFromStep1 = s1Projected4w * rStep1;
-    const expFromFinals = fNow * rFinal;
-    const expFromOffers = oNow * rOffer;
+    const expectedRaw = Math.max(expOffers, expFinals, expStep1);
+    const expected = Math.min(remaining, expectedRaw);
 
-    const expected = Math.min(remaining, Math.max(expFromStep1, expFromFinals, expFromOffers));
+    // Confidence (simple, explainable)
+    let conf = 0.07; // baseline
+    if (offers > 0) conf = 0.95;
+    else if (finals > 0) conf = 0.70;
+    else if (step1 >= 10) conf = 0.30;
+    else if (step1 > 0) conf = 0.15;
 
-    const conf = confidenceWithSignals({
-      projectedExpected: expected,
-      remaining,
-      finalsNow: fNow,
-      offersNow: oNow
-    });
+    // clamp
+    conf = Math.min(1, Math.max(0, conf));
 
-    return { step1_4w_proj: s1Projected4w, finals: fNow, offers: oNow, expected, conf };
+    return { step1, finals, offers, expected, conf };
   }
 
   function computeAll() {
-    let s1p = 0, f = 0, o = 0, expected = 0, remaining = 0;
+    let step1 = 0, finals = 0, offers = 0, expected = 0;
+    let remaining = 0;
 
     roleList.forEach(role => {
       const r = computeForRole(role);
-      s1p += r.step1_4w_proj;
-      f += r.finals;
-      o += r.offers;
+      step1 += r.step1;
+      finals += r.finals;
+      offers += r.offers;
       expected += r.expected;
       remaining += (remainingOpeningsByRole[role] ?? 0);
     });
 
-    const conf = confidenceWithSignals({
-      projectedExpected: expected,
-      remaining,
-      finalsNow: f,
-      offersNow: o
-    });
-
-    return { step1_4w_proj: s1p, finals: f, offers: o, expected, conf };
+    // Aggregate confidence for "All roles" is not super meaningful -> keep it blank in UI
+    return { step1, finals, offers, expected, conf: null };
   }
 
+  const selectedRole = state.selectedForecastRole || "all";
   const result = (selectedRole === "all") ? computeAll() : computeForRole(selectedRole);
 
   // ---------------- RENDER ----------------
   const scope = selectedRole === "all" ? "All roles" : selectedRole;
 
-  const confPct = `${Math.round(result.conf * 100)}%`;
-  const confLabel = labelForConfidence(result.conf);
-  const confPill = `<span class="pill ${pillClass(result.conf)}">${confLabel} · ${confPct}</span>`;
+  const confCell = (selectedRole === "all" || result.conf === null)
+    ? "—"
+    : `<span class="pill ${pillClass(result.conf)}">${labelForConfidence(result.conf)} · ${Math.round(result.conf * 100)}%</span>`;
 
   container.innerHTML = `
     <div class="table-wrap">
@@ -2419,7 +2363,7 @@ const s1AvgPerWeek = s1Total / weeksCount;
         <thead>
           <tr>
             <th>Scope</th>
-            <th class="num">Step1 (est. next 4w)</th>
+            <th class="num">Step1 (4W)</th>
             <th class="num">Finals (KW)</th>
             <th class="num">Offers (KW)</th>
             <th class="num">Expected hires</th>
@@ -2429,11 +2373,11 @@ const s1AvgPerWeek = s1Total / weeksCount;
         <tbody>
           <tr>
             <td>${scope}</td>
-            <td class="num ${getNumberClass(result.step1_4w_proj)}">${Number(result.step1_4w_proj).toFixed(1)}</td>
+            <td class="num ${getNumberClass(result.step1)}">${formatNumber(result.step1)}</td>
             <td class="num ${getNumberClass(result.finals)}">${formatNumber(result.finals)}</td>
             <td class="num ${getNumberClass(result.offers)}">${formatNumber(result.offers)}</td>
             <td class="num ${getNumberClass(result.expected)}">~${Number(result.expected).toFixed(1)}</td>
-            <td class="center">${selectedRole === "all" ? "—" : confPill}</td>
+            <td class="center">${confCell}</td>
           </tr>
         </tbody>
       </table>
