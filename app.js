@@ -2447,7 +2447,7 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
     if (managementView) managementView.classList.toggle("hidden", isContributor);
   }
 
- /* ---------------- WEEK SELECTIONS ---------------- */
+/* ---------------- WEEK SELECTIONS ---------------- */
 
 function syncWeekSelections() {
   // Safe value getter (no optional chaining -> avoids parser issues in older environments)
@@ -2458,21 +2458,20 @@ function syncWeekSelections() {
 
   // --- preserve current selections (don't reset on refresh)
   const prev = {
-    pipelineWeek: $("pipelineWeekSelect")?.value || state.selectedPipelineWeek || "",
-    activityWeek: $("activityWeekSelect")?.value || state.selectedActivityWeek || "all",
-    sourcingWeek: $("sourcingWeekSelect")?.value || state.selectedSourcingWeek || "",
-    managementWeek: $("managementWeekSelect")?.value || state.selectedManagementWeek || "all",
-    managementQuarter: $("managementQuarterSelect")?.value || state.selectedManagementQuarter || "",
+    pipelineWeek: getSelectValue("pipelineWeekSelect", state.selectedPipelineWeek || ""),
+    activityWeek: getSelectValue("activityWeekSelect", state.selectedActivityWeek || "all"),
+    sourcingWeek: getSelectValue("sourcingWeekSelect", state.selectedSourcingWeek || ""),
+    managementWeek: getSelectValue("managementWeekSelect", state.selectedManagementWeek || "all"),
+    managementQuarter: getSelectValue("managementQuarterSelect", state.selectedManagementQuarter || ""),
 
-    pipelineRecruiter: $("pipelineRecruiterSelect")?.value || state.selectedPipelineRecruiter || "all",
-    activityRole: $("activityRoleSelect")?.value || state.selectedActivityRole || "all",
-    activityRecruiter: $("activityRecruiterSelect")?.value || state.selectedActivityRecruiter || "all",
-    sourcingRole: $("sourcingRoleSelect")?.value || state.selectedSourcingRole || "all",
-    sourcingRecruiter: $("sourcingRecruiterSelect")?.value || state.selectedSourcingRecruiter || "all",
+    pipelineRecruiter: getSelectValue("pipelineRecruiterSelect", state.selectedPipelineRecruiter || "all"),
+    activityRole: getSelectValue("activityRoleSelect", state.selectedActivityRole || "all"),
+    activityRecruiter: getSelectValue("activityRecruiterSelect", state.selectedActivityRecruiter || "all"),
+    sourcingRole: getSelectValue("sourcingRoleSelect", state.selectedSourcingRole || "all"),
+    sourcingRecruiter: getSelectValue("sourcingRecruiterSelect", state.selectedSourcingRecruiter || "all"),
 
-    forecastRole: $("managementForecastRoleSelect")?.value || state.selectedForecastRole || "all"
+    forecastRole: getSelectValue("managementForecastRoleSelect", state.selectedForecastRole || "all")
   };
-    state.selectedForecastRole = prev.forecastRole || state.selectedForecastRole || "all";
 
   // ✅ keep state in sync (OUTSIDE the object literal!)
   state.selectedForecastRole = prev.forecastRole || state.selectedForecastRole || "all";
@@ -2483,31 +2482,31 @@ function syncWeekSelections() {
   const currentQuarter = getQuarterForMonth(berlinDate.getUTCMonth());
 
   state.pipelineOptions = getWeekOptions(
-    state.pipelineInventoryRows.length
+    (state.pipelineInventoryRows && state.pipelineInventoryRows.length)
       ? state.pipelineInventoryRows
-      : state.pipelineWeeklyRows
+      : (state.pipelineWeeklyRows || [])
   );
 
-  state.activityOptions = getWeekOptions(state.pipelineWeeklyRows);
-  state.sourcingOptions = getWeekOptions(state.sourcingRows);
+  state.activityOptions = getWeekOptions(state.pipelineWeeklyRows || []);
+  state.sourcingOptions = getWeekOptions(state.sourcingRows || []);
 
   setSelectOptions($("pipelineWeekSelect"), state.pipelineOptions, false);
   setSelectOptions($("activityWeekSelect"), state.activityOptions, true);
 
   const sourcingEndKey =
     pickPreferredWeekKey(state.sourcingOptions, PREFERRED_KW, PREFERRED_YEAR) ||
-    state.sourcingOptions[0]?.key ||
+    (state.sourcingOptions[0] ? state.sourcingOptions[0].key : "") ||
     "";
 
   setSourcingWeekOptions($("sourcingWeekSelect"), sourcingEndKey);
 
-  const managementOptions = getWeekOptions(state.pipelineWeeklyRows);
+  const managementOptions = getWeekOptions(state.pipelineWeeklyRows || []);
   setSelectOptions($("managementWeekSelect"), managementOptions, true);
 
-  const pipelineAllowed = state.pipelineOptions.map(o => o.key);
-  const activityAllowed = ["all", ...state.activityOptions.map(o => o.key)];
-  const sourcingAllowed = ["all", ...state.sourcingOptions.map(o => o.key)];
-  const managementAllowed = ["all", ...managementOptions.map(o => o.key)];
+  const pipelineAllowed = (state.pipelineOptions || []).map(o => o.key);
+  const activityAllowed = ["all"].concat((state.activityOptions || []).map(o => o.key));
+  const sourcingAllowed = ["all"].concat((state.sourcingOptions || []).map(o => o.key));
+  const managementAllowed = ["all"].concat((managementOptions || []).map(o => o.key));
 
   // PIPELINE
   if (prev.pipelineWeek && pipelineAllowed.includes(prev.pipelineWeek)) {
@@ -2515,7 +2514,7 @@ function syncWeekSelections() {
   } else {
     state.selectedPipelineWeek =
       pickPreferredWeekKey(state.pipelineOptions, PREFERRED_KW, PREFERRED_YEAR) ||
-      state.pipelineOptions[0]?.key ||
+      ((state.pipelineOptions[0] && state.pipelineOptions[0].key) ? state.pipelineOptions[0].key : "") ||
       "";
   }
 
@@ -2525,7 +2524,7 @@ function syncWeekSelections() {
   } else {
     state.selectedActivityWeek =
       pickPreferredWeekKey(state.activityOptions, PREFERRED_KW, PREFERRED_YEAR) ||
-      state.activityOptions[0]?.key ||
+      ((state.activityOptions[0] && state.activityOptions[0].key) ? state.activityOptions[0].key : "all") ||
       "all";
   }
 
@@ -2542,7 +2541,7 @@ function syncWeekSelections() {
   } else {
     state.selectedManagementWeek =
       pickPreferredWeekKey(managementOptions, PREFERRED_KW, PREFERRED_YEAR) ||
-      managementOptions[0]?.key ||
+      ((managementOptions[0] && managementOptions[0].key) ? managementOptions[0].key : "all") ||
       "all";
   }
 
@@ -2551,20 +2550,15 @@ function syncWeekSelections() {
     state.selectedManagementQuarter = prev.managementQuarter;
   } else if (
     !state.selectedManagementQuarter ||
-    !String(state.selectedManagementQuarter).startsWith(`${currentYear}-Q`)
+    !String(state.selectedManagementQuarter).startsWith(String(currentYear) + "-Q")
   ) {
     state.selectedManagementQuarter = getQuarterLabel(currentYear, currentQuarter);
   }
 
-  setManagementQuarterOptions(
-    $("managementQuarterSelect"),
-    currentYear,
-    currentQuarter
-  );
+  setManagementQuarterOptions($("managementQuarterSelect"), currentYear, currentQuarter);
 
-  if ($("managementQuarterSelect")) {
-    $("managementQuarterSelect").value = state.selectedManagementQuarter;
-  }
+  const mq = $("managementQuarterSelect");
+  if (mq) mq.value = state.selectedManagementQuarter;
 
   // overview department dropdown
   setOverviewDepartmentOptions($("overviewDepartmentSelect"), state.departmentOptions);
@@ -2574,11 +2568,20 @@ function syncWeekSelections() {
   updateSourcingFilters();
 
   // restore filter selections if still available
-  if ($("pipelineRecruiterSelect")) $("pipelineRecruiterSelect").value = prev.pipelineRecruiter;
-  if ($("activityRoleSelect")) $("activityRoleSelect").value = prev.activityRole;
-  if ($("activityRecruiterSelect")) $("activityRecruiterSelect").value = prev.activityRecruiter;
-  if ($("sourcingRoleSelect")) $("sourcingRoleSelect").value = prev.sourcingRole;
-  if ($("sourcingRecruiterSelect")) $("sourcingRecruiterSelect").value = prev.sourcingRecruiter;
+  const pr = $("pipelineRecruiterSelect");
+  if (pr) pr.value = prev.pipelineRecruiter;
+
+  const ar = $("activityRoleSelect");
+  if (ar) ar.value = prev.activityRole;
+
+  const acr = $("activityRecruiterSelect");
+  if (acr) acr.value = prev.activityRecruiter;
+
+  const sr = $("sourcingRoleSelect");
+  if (sr) sr.value = prev.sourcingRole;
+
+  const scr = $("sourcingRecruiterSelect");
+  if (scr) scr.value = prev.sourcingRecruiter;
 
   // sync state from restored UI
   state.selectedPipelineRecruiter = getSelectValue("pipelineRecruiterSelect", state.selectedPipelineRecruiter || "all");
@@ -2587,18 +2590,23 @@ function syncWeekSelections() {
   state.selectedSourcingRole = getSelectValue("sourcingRoleSelect", state.selectedSourcingRole || "all");
   state.selectedSourcingRecruiter = getSelectValue("sourcingRecruiterSelect", state.selectedSourcingRecruiter || "all");
 
+  // forecast role (keep dropdown selection if present)
+  const fr = $("managementForecastRoleSelect");
+  if (fr) fr.value = state.selectedForecastRole || "all";
 }
-  
-  function renderAll() {
-  if (!state.selectedDepartment) {
-    return;
-  }
+
+function renderAll() {
+  if (!state.selectedDepartment) return;
 
   renderOverview();
   renderPipeline();
   renderActivity();
   renderSourcing();
-  renderHires();
+
+  // If you removed the Hires tab/function, comment this out.
+  // If the tab still exists, make sure renderHires() exists.
+  // renderHires();
+
   renderManagement();
 }
 
