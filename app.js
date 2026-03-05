@@ -2395,39 +2395,60 @@ else if (a.step1 >= 5) conf = 0.55;
 else if (anyPipeline) conf = 0.40;
 
   function computeAll() {
-    const out = { step1: 0, tech: 0, finals: 0, offers: 0, expected: 0, conf: null };
+  const out = { step1: 0, tech: 0, finals: 0, offers: 0, expected: 0, conf: null };
 
-    let anyOffer = 0, anyFinal2 = 0, anyFinal1 = 0, anyTech10 = 0, anyTech5 = 0, anyPipeline = 0;
+  let anyOffer = 0;
+  let anyFinal2 = 0;
+  let anyFinal1 = 0;
+  let anyTech10 = 0;
+  let anyTech5 = 0;
+  let anyPipeline = 0;
 
-    roleList.forEach(role => {
-      const r = computeForRole(role);
-      out.step1 += r.step1;
-      out.tech += r.tech;
-      out.finals += r.finals;
-      out.offers += r.offers;
-      out.expected += r.expected;
+  roleList.forEach(role => {
+    const r = computeForRole(role);
 
-      if (r.offers > 0) anyOffer += 1;
-      if (r.finals >= 2) anyFinal2 += 1;
-      if (r.finals >= 1) anyFinal1 += 1;
-      if (r.tech >= 10) anyTech10 += 1;
-      if (r.tech >= 5) anyTech5 += 1;
-      if ((r.step1 + r.tech + r.finals + r.offers) > 0) anyPipeline += 1;
-    });
+    out.step1 += r.step1;
+    out.tech += r.tech;
+    out.finals += r.finals;
+    out.offers += r.offers;
+    out.expected += r.expected;
 
-    // give "All roles" a confidence too (otherwise UI feels broken)
-   let conf = 0.07;
-if (anyOffer) conf = 0.95;
-else if (anyFinal2) conf = 0.95;
-else if (anyFinal1 || anyTech10) conf = 0.90;
-else if (anyTech5) conf = 0.80;
-else if (out.step1 >= 25) conf = 0.95;
-else if (out.step1 >= 20) conf = 0.90;
-else if (out.step1 >= 15) conf = 0.80;
-else if (out.step1 >= 10) conf = 0.70;
-else if (out.step1 >= 5) conf = 0.55;
-else if (anyPipeline) conf = 0.40;
+    if (r.offers > 0) anyOffer += 1;
+    if (r.finals >= 2) anyFinal2 += 1;
+    if (r.finals >= 1) anyFinal1 += 1;
+    if (r.tech >= 10) anyTech10 += 1;
+    if (r.tech >= 5) anyTech5 += 1;
+    if ((r.step1 + r.tech + r.finals + r.offers) > 0) anyPipeline += 1;
+  });
+
+  let conf = 0.07;
+
+  if (anyOffer) {
+    conf = 0.95;
+  } else if (anyFinal2) {
+    conf = 0.95;
+  } else if (anyFinal1 || anyTech10) {
+    conf = 0.90;
+  } else if (anyTech5) {
+    conf = 0.80;
+  } else if (out.step1 >= 25) {
+    conf = 0.95;
+  } else if (out.step1 >= 20) {
+    conf = 0.90;
+  } else if (out.step1 >= 15) {
+    conf = 0.80;
+  } else if (out.step1 >= 10) {
+    conf = 0.70;
+  } else if (out.step1 >= 5) {
+    conf = 0.55;
+  } else if (anyPipeline) {
+    conf = 0.40;
   }
+
+  out.conf = conf;
+
+  return out;
+}
 
   const selectedRole = state.selectedForecastRole || "all";
   const result = (selectedRole === "all") ? computeAll() : computeForRole(selectedRole);
