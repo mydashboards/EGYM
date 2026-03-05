@@ -2394,6 +2394,16 @@ else if (a.step1 >= 10) conf = 0.70;
 else if (a.step1 >= 5) conf = 0.55;
 else if (anyPipeline) conf = 0.40;
 
+return {
+  step1: a.step1,
+  tech: a.tech,
+  finals: a.final,
+  offers: a.offer,
+  expected,
+  conf
+};
+}
+  
   function computeAll() {
   const out = { step1: 0, tech: 0, finals: 0, offers: 0, expected: 0, conf: null };
 
