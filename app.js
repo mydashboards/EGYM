@@ -1981,7 +1981,7 @@ if (hsEl) {
 
     renderManagementWeeklyUpdates({ weeklyUpdatesRows, selectedRole });
 
-    renderManagementForecast({ inventoryRows, overviewRows, hiredRows });
+renderManagementForecast({ inventoryRows, overviewRows, hiredRows, weeklyRows });
   }
 
  function renderManagementRecruiters({ weeklyRows }) {
@@ -2184,8 +2184,7 @@ if (hsEl) {
     `;
   }
 
-function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
-  const container = $("managementForecast");
+function renderManagementForecast({ inventoryRows, overviewRows, hiredRows, weeklyRows }) {  const container = $("managementForecast");
   const roleSelect = $("managementForecastRoleSelect");
   if (!container || !roleSelect) return;
 
@@ -2223,7 +2222,27 @@ if (selected && selected !== "all") {
     invWeekKey = invWeeksSorted[1];
   }
 }
-  
+  // Step1 rolling 4W from pipeline_weekly (ending in invWeekKey)
+const rollingKeys = new Set(getRollingWeekKeys(invWeekKey, 4));
+const step1RollingByRole = new Map();
+
+(weeklyRows || []).forEach(r => {
+  const wk = weekKey(r);
+  if (!wk || !rollingKeys.has(wk)) return;
+
+  const role = String(getField(r, ["role"]) || r.role || "").trim();
+  if (!role) return;
+
+  const stageRaw = getField(r, ["stage"]) || r.stage;
+  if (!stageRaw) return;
+
+  const s = normalizeStageValue(stageRaw).replace(/_/g, "");
+  if (s !== "step1" && s !== "firstinterview" && s !== "1stinterview") return;
+
+  const c = num(getField(r, ["count"]) || r.count);
+  step1RollingByRole.set(role, (step1RollingByRole.get(role) || 0) + c);
+});
+                                                                                           
   function stageBucket(stageRaw) {
     const s = normalizeStageValue(stageRaw); // normalized snake-ish
     const collapsed = s.replace(/_/g, "");
@@ -2304,8 +2323,8 @@ if (!isWeekMatch(r, invWeekKey)) return;
     const role = String(getField(r, ["role"]) || "").trim();
     if (!role || seen.has(role)) return;
 
-    const a = aggByRole.get(role) || { step1: 0, tech: 0, final: 0, offer: 0 };
-    const hasData = (a.step1 + a.tech + a.final + a.offer) > 0;
+ const a = aggByRole.get(role) || { step1: 0, tech: 0, final: 0, offer: 0 };
+const step1Rolling = num(step1RollingByRole.get(role) || 0);
 
     if (!shouldShowRoleOutsideOverview(role, hasData)) return;
 
@@ -2375,12 +2394,13 @@ function computeForRole(role) {
   // - finals => 0.5 per final
   // - tech => 1 hire per 10 in tech
   // - step1 => 1 hire per 50 in step1 (very conservative "early funnel")
-  const expectedRaw = Math.max(
-    num(a.offer),
-    num(a.final) * 0.5,
-    num(a.tech) / 10,
-    num(a.step1) / 50
-  );
+ const expectedFromStep1 = step1Rolling / 25; // rolling 4W: 25 Step1 => 1.0 hire
+const expectedRaw = Math.max(
+  num(a.offer),
+  num(a.final) * 0.5,
+  num(a.tech) / 10,
+  expectedFromStep1
+);
 
   const expected = Math.min(remaining, expectedRaw);
 
@@ -2400,7 +2420,7 @@ function computeForRole(role) {
   else if (a.step1 >= 5) conf = 0.55;
   else if (anyPipeline) conf = 0.40;
 
-  return { step1: a.step1, tech: a.tech, finals: a.final, offers: a.offer, expected, conf };
+return { step1: step1Rolling, tech: a.tech, finals: a.final, offers: a.offer, expected, conf };
 }
 
 function computeAll() {
