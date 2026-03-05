@@ -2543,7 +2543,21 @@ function renderHires() {
   }
 
   /* ---------------- WEEK SELECTIONS ---------------- */
+  // --- preserve current selections (don't reset on refresh)
+  const prev = {
+    pipelineWeek: $("pipelineWeekSelect")?.value || state.selectedPipelineWeek || "",
+    activityWeek: $("activityWeekSelect")?.value || state.selectedActivityWeek || "all",
+    sourcingWeek: $("sourcingWeekSelect")?.value || state.selectedSourcingWeek || "",
+    managementWeek: $("managementWeekSelect")?.value || state.selectedManagementWeek || "all",
+    managementQuarter: $("managementQuarterSelect")?.value || state.selectedManagementQuarter || "",
 
+    pipelineRecruiter: $("pipelineRecruiterSelect")?.value || state.selectedPipelineRecruiter || "all",
+    activityRole: $("activityRoleSelect")?.value || state.selectedActivityRole || "all",
+    activityRecruiter: $("activityRecruiterSelect")?.value || state.selectedActivityRecruiter || "all",
+    sourcingRole: $("sourcingRoleSelect")?.value || state.selectedSourcingRole || "all",
+    sourcingRecruiter: $("sourcingRecruiterSelect")?.value || state.selectedSourcingRecruiter || "all"
+  };
+  
     function syncWeekSelections() {
     state.pipelineOptions = getWeekOptions(state.pipelineInventoryRows.length ? state.pipelineInventoryRows : state.pipelineWeeklyRows);
     state.activityOptions = getWeekOptions(state.pipelineWeeklyRows);
@@ -2562,41 +2576,45 @@ function renderHires() {
     const sourcingAllowed = ["all", ...state.sourcingOptions.map(o => o.key)];
     const managementAllowed = ["all", ...managementOptions.map(o => o.key)];
 
-    // PIPELINE: default to current ISO week (if present), else latest
-    if (!state.selectedPipelineWeek || !pipelineAllowed.includes(state.selectedPipelineWeek)) {
-      state.selectedPipelineWeek = pickPreferredWeekKey(state.pipelineOptions, PREFERRED_KW, PREFERRED_YEAR) || (state.pipelineOptions[0]?.key || "");
+        // PIPELINE: keep current selection if still valid
+    if (prev.pipelineWeek && pipelineAllowed.includes(prev.pipelineWeek)) {
+      state.selectedPipelineWeek = prev.pipelineWeek;
+    } else {
+      state.selectedPipelineWeek =
+        pickPreferredWeekKey(state.pipelineOptions, PREFERRED_KW, PREFERRED_YEAR) ||
+        (state.pipelineOptions[0]?.key || "");
     }
 
-    // ACTIVITY: default to current ISO week (if present), else latest, else all
-    if (!state.selectedActivityWeek || !activityAllowed.includes(state.selectedActivityWeek)) {
-      state.selectedActivityWeek = pickPreferredWeekKey(state.activityOptions, PREFERRED_KW, PREFERRED_YEAR) || (state.activityOptions[0]?.key || "all");
+    // ACTIVITY: keep current selection if still valid
+    if (prev.activityWeek && activityAllowed.includes(prev.activityWeek)) {
+      state.selectedActivityWeek = prev.activityWeek;
+    } else {
+      state.selectedActivityWeek =
+        pickPreferredWeekKey(state.activityOptions, PREFERRED_KW, PREFERRED_YEAR) ||
+        (state.activityOptions[0]?.key || "all");
     }
 
-    // SOURCING: default to rolling 4w (ending current week if present), but allow "all"
-    if (!state.selectedSourcingWeek || !sourcingAllowed.includes(state.selectedSourcingWeek)) {
-      state.selectedSourcingWeek = sourcingEndKey || "all";
+    // SOURCING: keep current selection if still valid (note: dropdown is disabled anyway)
+    if (prev.sourcingWeek && sourcingAllowed.includes(prev.sourcingWeek)) {
+      state.selectedSourcingWeek = prev.sourcingWeek;
+    } else {
+      state.selectedSourcingWeek = sourcingEndKey;
     }
 
-    // MANAGEMENT: default to current ISO week (if present), else latest, else all
-    if (!state.selectedManagementWeek || !managementAllowed.includes(state.selectedManagementWeek)) {
-      state.selectedManagementWeek = pickPreferredWeekKey(managementOptions, PREFERRED_KW, PREFERRED_YEAR) || (managementOptions[0]?.key || "all");
+    // MANAGEMENT: keep current selection if still valid
+    if (prev.managementWeek && managementAllowed.includes(prev.managementWeek)) {
+      state.selectedManagementWeek = prev.managementWeek;
+    } else {
+      state.selectedManagementWeek =
+        pickPreferredWeekKey(managementOptions, PREFERRED_KW, PREFERRED_YEAR) ||
+        (managementOptions[0]?.key || "all");
     }
 
-    if ($("pipelineWeekSelect")) $("pipelineWeekSelect").value = state.selectedPipelineWeek;
-    if ($("activityWeekSelect")) $("activityWeekSelect").value = state.selectedActivityWeek;
-    if ($("sourcingWeekSelect")) $("sourcingWeekSelect").value = state.selectedSourcingWeek;
-    if ($("managementWeekSelect")) $("managementWeekSelect").value = state.selectedManagementWeek;
-      on("managementForecastRoleSelect", "change", () => {
-  state.selectedForecastRole = $("managementForecastRoleSelect") ? $("managementForecastRoleSelect").value : "all";
-  renderManagement();
-});
-
-    const berlinDate = getDateInTimeZone("Europe/Berlin");
-    const currentYear = berlinDate.getUTCFullYear();
-    const currentQuarter = getQuarterForMonth(berlinDate.getUTCMonth());
-    if (!state.selectedManagementQuarter || !String(state.selectedManagementQuarter).startsWith(`${currentYear}-Q`)) {
-      state.selectedManagementQuarter = getQuarterLabel(currentYear, currentQuarter);
-    }
+   if (prev.managementQuarter) {
+  state.selectedManagementQuarter = prev.managementQuarter;
+} else if (!state.selectedManagementQuarter || !String(state.selectedManagementQuarter).startsWith(`${currentYear}-Q`)) {
+  state.selectedManagementQuarter = getQuarterLabel(currentYear, currentQuarter);
+}
     setManagementQuarterOptions($("managementQuarterSelect"), currentYear, currentQuarter);
     if ($("managementQuarterSelect")) $("managementQuarterSelect").value = state.selectedManagementQuarter;
 
@@ -2607,6 +2625,19 @@ function renderHires() {
     updateActivityFilters();
     updateSourcingFilters();
   }
+      // restore filter selections if still available
+    if ($("pipelineRecruiterSelect")) $("pipelineRecruiterSelect").value = prev.pipelineRecruiter;
+    if ($("activityRoleSelect")) $("activityRoleSelect").value = prev.activityRole;
+    if ($("activityRecruiterSelect")) $("activityRecruiterSelect").value = prev.activityRecruiter;
+    if ($("sourcingRoleSelect")) $("sourcingRoleSelect").value = prev.sourcingRole;
+    if ($("sourcingRecruiterSelect")) $("sourcingRecruiterSelect").value = prev.sourcingRecruiter;
+
+    // sync state from restored UI (safe)
+    state.selectedPipelineRecruiter = $("pipelineRecruiterSelect")?.value || state.selectedPipelineRecruiter;
+    state.selectedActivityRole = $("activityRoleSelect")?.value || state.selectedActivityRole;
+    state.selectedActivityRecruiter = $("activityRecruiterSelect")?.value || state.selectedActivityRecruiter;
+    state.selectedSourcingRole = $("sourcingRoleSelect")?.value || state.selectedSourcingRole;
+    state.selectedSourcingRecruiter = $("sourcingRecruiterSelect")?.value || state.selectedSourcingRecruiter;
 
   function renderAll() {
     if (!state.selectedDepartment) {
