@@ -2189,43 +2189,36 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
   const roleSelect = $("managementForecastRoleSelect");
   if (!container || !roleSelect) return;
 
-  // ---------------- SIMPLE FORECAST RULES (manager-proof) ----------------
-  // Offers (KW) -> Expected hires = offers (High)
-  // Finals (KW) -> Expected hires = finals * 0.5 (Medium)
-  // Step1 (period) -> Expected hires = step1 / 25 (Low)
-  const STEP1_PER_HIRE = 25;
-  const FINALS_TO_HIRE = 0.5;
+  // ---------- Helpers ----------
+  const invWeekKey = state.selectedPipelineWeek || TODAY_WEEK_KEY;
 
-  // ---------------- Time helpers (ISO week -> Monday date) ----------------
-  function getMondayOfISOWeek(year, week) {
-    // ISO week: week 1 contains Jan 4th
-    const jan4 = new Date(Date.UTC(year, 0, 4));
-    const day = jan4.getUTCDay() || 7; // 1..7 (Mon..Sun)
-    const mondayWeek1 = new Date(jan4);
-    mondayWeek1.setUTCDate(jan4.getUTCDate() - (day - 1));
-    const monday = new Date(mondayWeek1);
-    monday.setUTCDate(mondayWeek1.getUTCDate() + (week - 1) * 7);
-    return monday; // UTC date
+  function stageBucket(stageRaw) {
+    const s = normalizeStageValue(stageRaw); // normalized snake-ish
+    const collapsed = s.replace(/_/g, "");
+
+    // offers
+    if (s.includes("offer")) return "offer";
+
+    // finals
+    if (s.includes("final")) return "final";
+
+    // tech interview (try to be robust)
+    if (
+      (s.includes("technical") && s.includes("interview")) ||
+      (s.includes("tech") && s.includes("interview")) ||
+      s.includes("coding") ||
+      s.includes("assignment") ||
+      s.includes("takehome") ||
+      s.includes("case_study")
+    ) return "tech";
+
+    // step1 / first interview-ish
+    if (collapsed === "step1" || s.includes("first_interview") || s.includes("1st_interview")) return "step1";
+
+    return "other";
   }
 
-  function isWeekInMonth(year, kw, targetYear, targetMonthIndex) {
-    if (!year || !kw) return false;
-    const monday = getMondayOfISOWeek(year, kw);
-    const m = monday.getUTCMonth();
-    const y = monday.getUTCFullYear();
-    return y === targetYear && m === targetMonthIndex;
-  }
-
-  // Berlin current month & next month (UTC-based but derived from Berlin date)
-  const berlinDate = getDateInTimeZone("Europe/Berlin");
-  const currentMonthYear = berlinDate.getUTCFullYear();
-  const currentMonthIndex = berlinDate.getUTCMonth();
-
-  const nextMonthDate = new Date(Date.UTC(currentMonthYear, currentMonthIndex + 1, 1));
-  const nextMonthYear = nextMonthDate.getUTCFullYear();
-  const nextMonthIndex = nextMonthDate.getUTCMonth();
-
-  // ---------------- HIRES BY ROLE (valid = signature_date OR start_date) ----------------
+  // ---------- Hires by role (valid = signature_date OR start_date) ----------
   const hiresByRole = {};
   (hiredRows || []).forEach(r => {
     const role = String(getField(r, ["role"]) || "").trim();
@@ -2238,19 +2231,18 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
     hiresByRole[role] = (hiresByRole[role] || 0) + 1;
   });
 
-  // ---------------- REMAINING OPENINGS BY ROLE ----------------
+  // ---------- Remaining openings by role ----------
   const remainingOpeningsByRole = {};
   (overviewRows || []).forEach(r => {
     const role = String(getField(r, ["role"]) || "").trim();
     if (!role) return;
+
     const baseOpenings = num(getField(r, ["openings"]));
     remainingOpeningsByRole[role] = Math.max(0, baseOpenings - (hiresByRole[role] || 0));
   });
 
-  // ---------------- FINALS / OFFERS (inventory selected week snapshot) ----------------
-  const invWeekKey = state.selectedPipelineWeek || TODAY_WEEK_KEY;
-  const finalsByRole = new Map();
-  const offersByRole = new Map();
+  // ---------- Aggregate inventory snapshot by role ----------
+  const aggByRole = new Map(); // role -> {step1, tech, final, offer}
 
   (inventoryRows || []).forEach(r => {
     if (weekKey(r) !== invWeekKey) return;
@@ -2259,49 +2251,29 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
     if (!role) return;
 
     const stageRaw = getField(r, ["stage"]) || r.stage;
-    const stageNorm = normalizeStageValue(stageRaw);
+    if (!stageRaw) return;
+
+    const bucket = stageBucket(stageRaw);
     const c = num(getField(r, ["count"]) || r.count);
 
-    if (stageNorm.includes("final")) finalsByRole.set(role, (finalsByRole.get(role) || 0) + c);
-    if (stageNorm.includes("offer")) offersByRole.set(role, (offersByRole.get(role) || 0) + c);
+    if (!aggByRole.has(role)) aggByRole.set(role, { step1: 0, tech: 0, final: 0, offer: 0 });
+    const a = aggByRole.get(role);
+
+    if (bucket === "step1") a.step1 += c;
+    else if (bucket === "tech") a.tech += c;
+    else if (bucket === "final") a.final += c;
+    else if (bucket === "offer") a.offer += c;
   });
 
-  // ---------------- STEP1 BY ROLE (Current month MTD + Next month outlook) ----------------
-  const step1ByRoleCurrentMonth = new Map();
-  const step1ByRoleNextMonth = new Map();
-
-  (state.pipelineWeeklyRows || []).forEach(r => {
-    const year = num(getField(r, ["year"])) || num(r.year);
-    const kw = num(getField(r, ["kw"])) || num(r.kw);
-
-    const role = String(r.role || "").trim();
-    if (!role) return;
-
-    const stage = normalizeHealthStage(r.stage);
-    if (stage !== "step1") return;
-
-    const c = num(r.count);
-
-    if (isWeekInMonth(year, kw, currentMonthYear, currentMonthIndex)) {
-      step1ByRoleCurrentMonth.set(role, (step1ByRoleCurrentMonth.get(role) || 0) + c);
-    }
-    if (isWeekInMonth(year, kw, nextMonthYear, nextMonthIndex)) {
-      step1ByRoleNextMonth.set(role, (step1ByRoleNextMonth.get(role) || 0) + c);
-    }
-  });
-
-  // ---------------- ROLE LIST (from overview; hide on-hold until data exists) ----------------
+  // ---------- Role list (from overview; hide on-hold unless data exists) ----------
   const roleList = [];
   const seen = new Set();
   (overviewRows || []).forEach(r => {
     const role = String(getField(r, ["role"]) || "").trim();
     if (!role || seen.has(role)) return;
 
-    const hasData =
-      num(step1ByRoleCurrentMonth.get(role) || 0) > 0 ||
-      num(step1ByRoleNextMonth.get(role) || 0) > 0 ||
-      num(finalsByRole.get(role) || 0) > 0 ||
-      num(offersByRole.get(role) || 0) > 0;
+    const a = aggByRole.get(role) || { step1: 0, tech: 0, final: 0, offer: 0 };
+    const hasData = (a.step1 + a.tech + a.final + a.offer) > 0;
 
     if (!shouldShowRoleOutsideOverview(role, hasData)) return;
 
@@ -2309,13 +2281,12 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
     roleList.push(role);
   });
 
-  // keep selection valid
+  // ---------- Dropdown ----------
   if (!state.selectedForecastRole) state.selectedForecastRole = "all";
   if (state.selectedForecastRole !== "all" && !roleList.includes(state.selectedForecastRole)) {
     state.selectedForecastRole = "all";
   }
 
-  // dropdown
   {
     const current = state.selectedForecastRole || "all";
     roleSelect.innerHTML = "";
@@ -2337,88 +2308,96 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
     state.selectedForecastRole = roleSelect.value;
   }
 
-  // ---------------- CONFIDENCE (your rules) ----------------
+  // ---------- Confidence UI ----------
   function pillClass(conf) {
     if (conf >= 0.90) return "good";
     if (conf >= 0.60) return "warn";
     return "bad";
   }
   function labelForConfidence(conf) {
-    if (conf >= 0.95) return "High";
     if (conf >= 0.90) return "High";
     if (conf >= 0.60) return "Medium";
     if (conf > 0.10) return "Low";
     return "Very Low";
   }
 
-  function confidenceFromSignals({ offers, finals, step1 }) {
-    // 95% should be the max
-    if (offers > 0) return 0.95;
+  // ---------- Core forecast logic (inventory-based) ----------
+  // Goal: simple + “manager-proof”
+  // - Offer > 0 => 95% (always the max)
+  // - Finals >= 2 OR Tech >= 10 => 90%
+  // - Finals == 1 OR Tech >= 5 => 70%
+  // - Otherwise: 30% if any pipeline exists, else 7%
+  //
+  // Expected hires:
+  // - offers => 1:1
+  // - finals => 0.5 per final
+  // - tech => 1 hire per 10 in tech stage
+  // Take the max signal, cap at remaining openings.
 
-    if (finals >= 2) return 0.95;
-    if (finals === 1) return 0.90;
-
-    if (step1 >= 25) return 0.95;
-    if (step1 >= 15) return 0.80;
-    if (step1 >= 10) return 0.60;
-    if (step1 > 0) return 0.30;
-    return 0.07;
-  }
-
-  function computeForRole(role, whichPeriod /* "current" | "next" */) {
+  function computeForRole(role) {
     const remaining = remainingOpeningsByRole[role] ?? 0;
+    const a = aggByRole.get(role) || { step1: 0, tech: 0, final: 0, offer: 0 };
 
-    const step1 =
-      whichPeriod === "current"
-        ? num(step1ByRoleCurrentMonth.get(role) || 0)
-        : num(step1ByRoleNextMonth.get(role) || 0);
+    const expectedRaw = Math.max(
+      num(a.offer),          // strongest
+      num(a.final) * 0.5,    // medium
+      num(a.tech) / 10       // “10 tech => ~1 hire”
+    );
 
-    const finals = num(finalsByRole.get(role) || 0);
-    const offers = num(offersByRole.get(role) || 0);
-
-    const expected_from_offers = offers;
-    const expected_from_finals = finals * FINALS_TO_HIRE;
-    const expected_from_step1 = step1 / STEP1_PER_HIRE;
-
-    const expectedRaw = Math.max(expected_from_offers, expected_from_finals, expected_from_step1);
     const expected = Math.min(remaining, expectedRaw);
 
-    const conf = confidenceFromSignals({ offers, finals, step1 });
+    // confidence
+    let conf = 0.07; // baseline
+    const anyPipeline = (a.step1 + a.tech + a.final + a.offer) > 0;
 
-    return { step1, finals, offers, expected, conf };
+    if (a.offer > 0) conf = 0.95;
+    else if (a.final >= 2 || a.tech >= 10) conf = 0.90;
+    else if (a.final >= 1 || a.tech >= 5) conf = 0.70;
+    else if (anyPipeline) conf = 0.30;
+
+    return { step1: a.step1, tech: a.tech, finals: a.final, offers: a.offer, expected, conf };
   }
 
-  function computeAll(whichPeriod) {
-    let step1 = 0, finals = 0, offers = 0, expected = 0;
+  function computeAll() {
+    const out = { step1: 0, tech: 0, finals: 0, offers: 0, expected: 0, conf: null };
+
+    let anyOffer = 0, anyFinal2 = 0, anyFinal1 = 0, anyTech10 = 0, anyTech5 = 0, anyPipeline = 0;
+
     roleList.forEach(role => {
-      const r = computeForRole(role, whichPeriod);
-      step1 += r.step1;
-      finals += r.finals;
-      offers += r.offers;
-      expected += r.expected;
+      const r = computeForRole(role);
+      out.step1 += r.step1;
+      out.tech += r.tech;
+      out.finals += r.finals;
+      out.offers += r.offers;
+      out.expected += r.expected;
+
+      if (r.offers > 0) anyOffer += 1;
+      if (r.finals >= 2) anyFinal2 += 1;
+      if (r.finals >= 1) anyFinal1 += 1;
+      if (r.tech >= 10) anyTech10 += 1;
+      if (r.tech >= 5) anyTech5 += 1;
+      if ((r.step1 + r.tech + r.finals + r.offers) > 0) anyPipeline += 1;
     });
 
-    // For "all roles" confidence is not super meaningful -> show —
-    return { step1, finals, offers, expected, conf: null };
+    // give "All roles" a confidence too (otherwise UI feels broken)
+    let conf = 0.07;
+    if (anyOffer) conf = 0.95;
+    else if (anyFinal2 || anyTech10) conf = 0.90;
+    else if (anyFinal1 || anyTech5) conf = 0.70;
+    else if (anyPipeline) conf = 0.30;
+
+    out.conf = conf;
+    return out;
   }
 
   const selectedRole = state.selectedForecastRole || "all";
-
-  const currentRes =
-    selectedRole === "all" ? computeAll("current") : computeForRole(selectedRole, "current");
-
-  const nextRes =
-    selectedRole === "all" ? computeAll("next") : computeForRole(selectedRole, "next");
+  const result = (selectedRole === "all") ? computeAll() : computeForRole(selectedRole);
 
   const scope = selectedRole === "all" ? "All roles" : selectedRole;
 
-  function confCell(res) {
-    if (selectedRole === "all" || res.conf === null) return "—";
-    return `<span class="pill ${pillClass(res.conf)}">${labelForConfidence(res.conf)} · ${Math.round(res.conf * 100)}%</span>`;
-  }
-
-  const labelCurrent = `Current month (MTD)`;
-  const labelNext = `Next month (Outlook)`;
+  const confCell = (result.conf === null)
+    ? "—"
+    : `<span class="pill ${pillClass(result.conf)}">${labelForConfidence(result.conf)} · ${Math.round(result.conf * 100)}%</span>`;
 
   container.innerHTML = `
     <div class="table-wrap">
@@ -2426,8 +2405,8 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
         <thead>
           <tr>
             <th>Scope</th>
-            <th>Period</th>
-            <th class="num">Step1</th>
+            <th class="num">Step1 (KW)</th>
+            <th class="num">Tech (KW)</th>
             <th class="num">Finals (KW)</th>
             <th class="num">Offers (KW)</th>
             <th class="num">Expected hires</th>
@@ -2437,110 +2416,17 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
         <tbody>
           <tr>
             <td>${scope}</td>
-            <td>${labelCurrent}</td>
-            <td class="num ${getNumberClass(currentRes.step1)}">${formatNumber(currentRes.step1)}</td>
-            <td class="num ${getNumberClass(currentRes.finals)}">${formatNumber(currentRes.finals)}</td>
-            <td class="num ${getNumberClass(currentRes.offers)}">${formatNumber(currentRes.offers)}</td>
-            <td class="num ${getNumberClass(currentRes.expected)}">~${Number(currentRes.expected).toFixed(1)}</td>
-            <td class="center">${confCell(currentRes)}</td>
-          </tr>
-          <tr>
-            <td>${scope}</td>
-            <td>${labelNext}</td>
-            <td class="num ${getNumberClass(nextRes.step1)}">${formatNumber(nextRes.step1)}</td>
-            <td class="num ${getNumberClass(nextRes.finals)}">${formatNumber(nextRes.finals)}</td>
-            <td class="num ${getNumberClass(nextRes.offers)}">${formatNumber(nextRes.offers)}</td>
-            <td class="num ${getNumberClass(nextRes.expected)}">~${Number(nextRes.expected).toFixed(1)}</td>
-            <td class="center">${confCell(nextRes)}</td>
+            <td class="num ${getNumberClass(result.step1)}">${formatNumber(result.step1)}</td>
+            <td class="num ${getNumberClass(result.tech)}">${formatNumber(result.tech)}</td>
+            <td class="num ${getNumberClass(result.finals)}">${formatNumber(result.finals)}</td>
+            <td class="num ${getNumberClass(result.offers)}">${formatNumber(result.offers)}</td>
+            <td class="num ${getNumberClass(result.expected)}">~${Number(result.expected).toFixed(1)}</td>
+            <td class="center">${confCell}</td>
           </tr>
         </tbody>
       </table>
-      <div class="muted small" style="margin-top:8px;">
-        Note: Finals/Offers are based on the selected KW snapshot. Step1 is counted per calendar month.
-      </div>
     </div>
   `;
-}
-
-/* ---------------- RENDER: HIRES ---------------- */
-
-function parseDate(value) {
-  if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function dayDiff(start, end) {
-  if (!start || !end) return null;
-  const ms = end - start;
-  return Number.isFinite(ms) ? Math.round(ms / (1000 * 60 * 60 * 24)) : null;
-}
-
-function average(values) {
-  if (!values.length) return null;
-  return values.reduce((s, v) => s + v, 0) / values.length;
-}
-
-function renderHires() {
-  const rows = state.hiredRows || [];
-  const tbody = $("hiresTable");
-  const empty = $("hiresEmpty");
-  if (!tbody || !empty) return;
-
-  tbody.innerHTML = "";
-
-  if (!rows.length) {
-    empty.classList.remove("hidden");
-  } else {
-    empty.classList.add("hidden");
-  }
-
-  const tthValues = [];
-  const ttfValues = [];
-
-  rows.forEach(r => {
-    const liveDate = parseDate(getField(r, ["live_date", "live date"]));
-    const signatureDate = parseDate(getField(r, ["signature_date", "signature date"]));
-    const startDate = parseDate(getField(r, ["start_date", "start date"]));
-    const firstContact = parseDate(getField(r, ["1st_contact", "first_contact", "1st contact", "first contact"]));
-
-    const tth = dayDiff(liveDate, signatureDate);
-    const ttf = dayDiff(liveDate, startDate);
-    const daysInProcess = dayDiff(firstContact, signatureDate);
-
-    if (tth !== null) tthValues.push(tth);
-    if (ttf !== null) ttfValues.push(ttf);
-
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${getField(r, ["role"])}</td>
-      <td>${getField(r, ["first_name", "first name"])}</td>
-      <td>${getField(r, ["last_name", "last name"])}</td>
-      <td>${getField(r, ["source"])}</td>
-      <td>${getField(r, ["salary"])}</td>
-      <td>${getField(r, ["live_date", "live date"])}</td>
-      <td>${getField(r, ["1st_contact", "first_contact", "1st contact", "first contact"])}</td>
-      <td>${getField(r, ["signature_date", "signature date"])}</td>
-      <td>${getField(r, ["start_date", "start date"])}</td>
-      <td class="num">${tth !== null ? tth : "—"}</td>
-      <td class="num">${ttf !== null ? ttf : "—"}</td>
-      <td class="num">${daysInProcess !== null ? daysInProcess : "—"}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-
-  const avgTth = average(tthValues);
-  const avgTtf = average(ttfValues);
-
-  const kpis = $("hiresKpis");
-  if (kpis) {
-    kpis.innerHTML = `
-      <div class="kpi"><div class="label">Total Hires</div><div class="value">${formatNumber(rows.length)}</div></div>
-      <div class="kpi"><div class="label">Avg TTH</div><div class="value">${avgTth !== null ? avgTth.toFixed(1) : "—"}</div></div>
-      <div class="kpi"><div class="label">Avg TTF</div><div class="value">${avgTtf !== null ? avgTtf.toFixed(1) : "—"}</div></div>
-      <div class="kpi"><div class="label">Scope</div><div class="value">All time</div></div>
-    `;
-  }
 }
   
   /* ---------------- VIEW SWITCH ---------------- */
@@ -2572,21 +2458,21 @@ function syncWeekSelections() {
 
   // --- preserve current selections (don't reset on refresh)
   const prev = {
-    pipelineWeek: getSelectValue("pipelineWeekSelect", state.selectedPipelineWeek || ""),
-    activityWeek: getSelectValue("activityWeekSelect", state.selectedActivityWeek || "all"),
-    sourcingWeek: getSelectValue("sourcingWeekSelect", state.selectedSourcingWeek || ""),
-    managementWeek: getSelectValue("managementWeekSelect", state.selectedManagementWeek || "all"),
-    managementQuarter: getSelectValue("managementQuarterSelect", state.selectedManagementQuarter || ""),
+    pipelineWeek: $("pipelineWeekSelect")?.value || state.selectedPipelineWeek || "",
+    activityWeek: $("activityWeekSelect")?.value || state.selectedActivityWeek || "all",
+    sourcingWeek: $("sourcingWeekSelect")?.value || state.selectedSourcingWeek || "",
+    managementWeek: $("managementWeekSelect")?.value || state.selectedManagementWeek || "all",
+    managementQuarter: $("managementQuarterSelect")?.value || state.selectedManagementQuarter || "",
 
-    pipelineRecruiter: getSelectValue("pipelineRecruiterSelect", state.selectedPipelineRecruiter || "all"),
-    activityRole: getSelectValue("activityRoleSelect", state.selectedActivityRole || "all"),
-    activityRecruiter: getSelectValue("activityRecruiterSelect", state.selectedActivityRecruiter || "all"),
-    sourcingRole: getSelectValue("sourcingRoleSelect", state.selectedSourcingRole || "all"),
-    sourcingRecruiter: getSelectValue("sourcingRecruiterSelect", state.selectedSourcingRecruiter || "all"),
+    pipelineRecruiter: $("pipelineRecruiterSelect")?.value || state.selectedPipelineRecruiter || "all",
+    activityRole: $("activityRoleSelect")?.value || state.selectedActivityRole || "all",
+    activityRecruiter: $("activityRecruiterSelect")?.value || state.selectedActivityRecruiter || "all",
+    sourcingRole: $("sourcingRoleSelect")?.value || state.selectedSourcingRole || "all",
+    sourcingRecruiter: $("sourcingRecruiterSelect")?.value || state.selectedSourcingRecruiter || "all",
 
-    // ✅ Forecast role (Management View)
-    forecastRole: getSelectValue("managementForecastRoleSelect", state.selectedForecastRole || "all")
+    forecastRole: $("managementForecastRoleSelect")?.value || state.selectedForecastRole || "all"
   };
+    state.selectedForecastRole = prev.forecastRole || state.selectedForecastRole || "all";
 
   // ✅ keep state in sync (OUTSIDE the object literal!)
   state.selectedForecastRole = prev.forecastRole || state.selectedForecastRole || "all";
