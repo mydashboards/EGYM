@@ -2423,6 +2423,7 @@ const expectedRaw = Math.max(
 return { step1: step1Rolling, tech: a.tech, finals: a.final, offers: a.offer, expected, conf };
 }
 
+                                                                                           
 function computeAll() {
   const out = { step1: 0, tech: 0, finals: 0, offers: 0, expected: 0, conf: null };
 
