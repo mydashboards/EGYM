@@ -2564,23 +2564,32 @@ function renderHires() {
  /* ---------------- WEEK SELECTIONS ---------------- */
 
 function syncWeekSelections() {
+  // Safe value getter (no optional chaining -> avoids parser issues in older environments)
+  function getSelectValue(id, fallback = "") {
+    const el = $(id);
+    return el && typeof el.value !== "undefined" ? el.value : fallback;
+  }
 
   // --- preserve current selections (don't reset on refresh)
   const prev = {
-    pipelineWeek: $("pipelineWeekSelect")?.value || state.selectedPipelineWeek || "",
-    activityWeek: $("activityWeekSelect")?.value || state.selectedActivityWeek || "all",
-    sourcingWeek: $("sourcingWeekSelect")?.value || state.selectedSourcingWeek || "",
-    managementWeek: $("managementWeekSelect")?.value || state.selectedManagementWeek || "all",
-    managementQuarter: $("managementQuarterSelect")?.value || state.selectedManagementQuarter || "",
+    pipelineWeek: getSelectValue("pipelineWeekSelect", state.selectedPipelineWeek || ""),
+    activityWeek: getSelectValue("activityWeekSelect", state.selectedActivityWeek || "all"),
+    sourcingWeek: getSelectValue("sourcingWeekSelect", state.selectedSourcingWeek || ""),
+    managementWeek: getSelectValue("managementWeekSelect", state.selectedManagementWeek || "all"),
+    managementQuarter: getSelectValue("managementQuarterSelect", state.selectedManagementQuarter || ""),
 
-    pipelineRecruiter: $("pipelineRecruiterSelect")?.value || state.selectedPipelineRecruiter || "all",
-    activityRole: $("activityRoleSelect")?.value || state.selectedActivityRole || "all",
-    activityRecruiter: $("activityRecruiterSelect")?.value || state.selectedActivityRecruiter || "all",
-    sourcingRole: $("sourcingRoleSelect")?.value || state.selectedSourcingRole || "all",
-    sourcingRecruiter: $("sourcingRecruiterSelect")?.value || state.selectedSourcingRecruiter || "all",
-  forecastRole: $("managementForecastRoleSelect")?.value || state.selectedForecastRole || "all",
-    state.selectedForecastRole = prev.forecastRole || state.selectedForecastRole || "all";
+    pipelineRecruiter: getSelectValue("pipelineRecruiterSelect", state.selectedPipelineRecruiter || "all"),
+    activityRole: getSelectValue("activityRoleSelect", state.selectedActivityRole || "all"),
+    activityRecruiter: getSelectValue("activityRecruiterSelect", state.selectedActivityRecruiter || "all"),
+    sourcingRole: getSelectValue("sourcingRoleSelect", state.selectedSourcingRole || "all"),
+    sourcingRecruiter: getSelectValue("sourcingRecruiterSelect", state.selectedSourcingRecruiter || "all"),
+
+    // ✅ Forecast role (Management View)
+    forecastRole: getSelectValue("managementForecastRoleSelect", state.selectedForecastRole || "all")
   };
+
+  // ✅ keep state in sync (OUTSIDE the object literal!)
+  state.selectedForecastRole = prev.forecastRole || state.selectedForecastRole || "all";
 
   // --- time context (needed for quarter logic)
   const berlinDate = getDateInTimeZone("Europe/Berlin");
@@ -2667,8 +2676,9 @@ function syncWeekSelections() {
     currentQuarter
   );
 
-  if ($("managementQuarterSelect"))
+  if ($("managementQuarterSelect")) {
     $("managementQuarterSelect").value = state.selectedManagementQuarter;
+  }
 
   // overview department dropdown
   setOverviewDepartmentOptions($("overviewDepartmentSelect"), state.departmentOptions);
@@ -2678,36 +2688,19 @@ function syncWeekSelections() {
   updateSourcingFilters();
 
   // restore filter selections if still available
-  if ($("pipelineRecruiterSelect"))
-    $("pipelineRecruiterSelect").value = prev.pipelineRecruiter;
-
-  if ($("activityRoleSelect"))
-    $("activityRoleSelect").value = prev.activityRole;
-
-  if ($("activityRecruiterSelect"))
-    $("activityRecruiterSelect").value = prev.activityRecruiter;
-
-  if ($("sourcingRoleSelect"))
-    $("sourcingRoleSelect").value = prev.sourcingRole;
-
-  if ($("sourcingRecruiterSelect"))
-    $("sourcingRecruiterSelect").value = prev.sourcingRecruiter;
+  if ($("pipelineRecruiterSelect")) $("pipelineRecruiterSelect").value = prev.pipelineRecruiter;
+  if ($("activityRoleSelect")) $("activityRoleSelect").value = prev.activityRole;
+  if ($("activityRecruiterSelect")) $("activityRecruiterSelect").value = prev.activityRecruiter;
+  if ($("sourcingRoleSelect")) $("sourcingRoleSelect").value = prev.sourcingRole;
+  if ($("sourcingRecruiterSelect")) $("sourcingRecruiterSelect").value = prev.sourcingRecruiter;
 
   // sync state from restored UI
-  state.selectedPipelineRecruiter =
-    $("pipelineRecruiterSelect")?.value || state.selectedPipelineRecruiter;
+  state.selectedPipelineRecruiter = getSelectValue("pipelineRecruiterSelect", state.selectedPipelineRecruiter || "all");
+  state.selectedActivityRole = getSelectValue("activityRoleSelect", state.selectedActivityRole || "all");
+  state.selectedActivityRecruiter = getSelectValue("activityRecruiterSelect", state.selectedActivityRecruiter || "all");
+  state.selectedSourcingRole = getSelectValue("sourcingRoleSelect", state.selectedSourcingRole || "all");
+  state.selectedSourcingRecruiter = getSelectValue("sourcingRecruiterSelect", state.selectedSourcingRecruiter || "all");
 
-  state.selectedActivityRole =
-    $("activityRoleSelect")?.value || state.selectedActivityRole;
-
-  state.selectedActivityRecruiter =
-    $("activityRecruiterSelect")?.value || state.selectedActivityRecruiter;
-
-  state.selectedSourcingRole =
-    $("sourcingRoleSelect")?.value || state.selectedSourcingRole;
-
-  state.selectedSourcingRecruiter =
-    $("sourcingRecruiterSelect")?.value || state.selectedSourcingRecruiter;
 }
   
   function renderAll() {
@@ -2953,9 +2946,7 @@ on("managementQuarterSelect", "change", handleManagementQuarterChange);
 
 // NEW: Forecast role selector
 on("managementForecastRoleSelect", "change", () => {
-  state.selectedForecastRole = $("managementForecastRoleSelect")
-    ? $("managementForecastRoleSelect").value
-    : "all";
+  state.selectedForecastRole = $("managementForecastRoleSelect") ? $("managementForecastRoleSelect").value : "all";
   renderManagement();
 });
 
