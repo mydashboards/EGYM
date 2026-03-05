@@ -2688,6 +2688,19 @@ function syncWeekSelections() {
   state.selectedSourcingRecruiter =
     $("sourcingRecruiterSelect")?.value || state.selectedSourcingRecruiter;
 }
+  
+  function renderAll() {
+  if (!state.selectedDepartment) {
+    return;
+  }
+
+  renderOverview();
+  renderPipeline();
+  renderActivity();
+  renderSourcing();
+  renderHires();
+  renderManagement();
+}
 
   /* ---------------- MAIN LOAD ---------------- */
 
