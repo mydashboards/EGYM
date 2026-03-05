@@ -1984,73 +1984,62 @@ if (hsEl) {
     renderManagementForecast({ inventoryRows, overviewRows, hiredRows });
   }
 
-  function renderManagementRecruiters({ weeklyRows }) {
+ function renderManagementRecruiters({ weeklyRows }) {
   const tbody = $("managementRecruiterTable");
   const empty = $("managementRecruiterEmpty");
   if (!tbody || !empty) return;
 
-  const allowedRecruiters = new Set(["Alex", "Sven"]);
+  const rows = weeklyRows || [];
 
-  // Pick the most recent week that has ANY Step1 data (so it's stable until current week is filled)
-  const step1Weeks = new Set();
-  (weeklyRows || []).forEach(r => {
-    const recruiter = r.recruiter || "Unassigned";
-    if (!allowedRecruiters.has(recruiter)) return;
+  const totalsByRecruiter = new Map();
+  const weekCountByRecruiter = new Map();
 
+  rows.forEach(r => {
+    const recruiter = (r.recruiter || "Unassigned").trim() || "Unassigned";
     const wk = weekKey(r);
     if (!wk) return;
 
-    const stage = normalizeHealthStage(r.stage);
-    const c = num(r.count);
-    if (stage === "step1" && c > 0) step1Weeks.add(wk);
-  });
-
-  const sortedWeeks = Array.from(step1Weeks).sort((a, b) => {
-    const A = getWeekYearFromKey(a);
-    const B = getWeekYearFromKey(b);
-    if (!A || !B) return 0;
-    if (A.year !== B.year) return B.year - A.year;
-    return B.kw - A.kw;
-  });
-
-  const displayWeekKey = sortedWeeks[0] || ""; // latest week with Step1>0
-
-  const totalsByRecruiter = new Map();
-  allowedRecruiters.forEach(r => totalsByRecruiter.set(r, { step1: 0 }));
-
-  (weeklyRows || []).forEach(r => {
-    const recruiter = r.recruiter || "Unassigned";
-    if (!allowedRecruiters.has(recruiter)) return;
-
-    if (!displayWeekKey) return;
-    if (weekKey(r) !== displayWeekKey) return;
+    if (!totalsByRecruiter.has(recruiter)) {
+      totalsByRecruiter.set(recruiter, { step1: 0 });
+      weekCountByRecruiter.set(recruiter, new Set());
+    }
 
     const stage = normalizeHealthStage(r.stage);
     if (stage !== "step1") return;
 
-    totalsByRecruiter.get(recruiter).step1 += num(r.count);
+    const agg = totalsByRecruiter.get(recruiter);
+    agg.step1 += num(r.count);
+    weekCountByRecruiter.get(recruiter).add(wk);
   });
 
   tbody.innerHTML = "";
 
-  const rows = Array.from(totalsByRecruiter.entries());
-  const hasAny = rows.some(([, d]) => num(d.step1) > 0);
+  const rowsOut = Array.from(totalsByRecruiter.entries());
 
-  if (!hasAny) {
+  if (!rowsOut.length) {
     empty.classList.remove("hidden");
     return;
   }
+
   empty.classList.add("hidden");
 
-  rows.forEach(([recruiter, data]) => {
-    const utilization = Math.round(Math.max(0, (num(data.step1) / 20) * 100));
+  rowsOut.forEach(([recruiter, data]) => {
+    const weeksSet = weekCountByRecruiter.get(recruiter) || new Set();
+    const weeksCount = weeksSet.size || 0;
+
+    const avgStep1 = weeksCount > 0 ? data.step1 / weeksCount : null;
+
+    const utilizationBase = avgStep1 || 0;
+
+    const utilization = Math.round(Math.max(0, Math.min(100, (utilizationBase / 20) * 100)));
+
     const barWidth = `${Math.max(0, Math.min(100, utilization))}%`;
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${recruiter}</td>
       <td class="num ${getNumberClass(data.step1)}">${formatNumber(data.step1)}</td>
-      <td class="num">—</td>
+      <td class="num ${getNumberClass(avgStep1)}">${avgStep1 === null ? "—" : avgStep1.toFixed(1)}</td>
       <td class="num">
         <div class="utilization">
           <div class="utilization-bar"><span style="width:${barWidth};"></span></div>
@@ -2058,6 +2047,7 @@ if (hsEl) {
         </div>
       </td>
     `;
+
     tbody.appendChild(tr);
   });
 }
