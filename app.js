@@ -521,6 +521,11 @@ function filterRowsByDepartment(rows) {
     const weeksInPrevYear = getISOWeeksInYear(prevYear);
     return `${prevYear}-KW${String(weeksInPrevYear).padStart(2, "0")}`;
   }
+  function getHealthWidgetWeekKey() {
+  // always show previous week in Role Health widget
+  const prev = getPreviousWeekKey(TODAY_WEEK_KEY);
+  return prev || TODAY_WEEK_KEY;
+}
 
   function getRollingWeekKeys(endWeekKey, weeks = 4) {
     const keys = [];
@@ -1258,10 +1263,12 @@ function renderOverview() {
   }
 
   // Health by role from inventory (week selection)
-  const healthByRole = getHealthByRoleFromInventory(
-    state.pipelineInventoryRows,
-    state.selectedPipelineWeek || TODAY_WEEK_KEY
-  );
+ const healthWeekKey = getHealthWidgetWeekKey();
+
+const healthByRole = getHealthByRoleFromInventory(
+  state.pipelineInventoryRows,
+  healthWeekKey
+);
 
   const onHoldRoles = rows.filter(r => {
     const status = normalizeHeader(getField(r, ["status"]));
