@@ -2366,45 +2366,44 @@ if (!isWeekMatch(r, invWeekKey)) return;
   // - tech => 1 hire per 10 in tech stage
   // Take the max signal, cap at remaining openings.
 
-  function computeForRole(role) {
-    const remaining = remainingOpeningsByRole[role] ?? 0;
-    const a = aggByRole.get(role) || { step1: 0, tech: 0, final: 0, offer: 0 };
+function computeForRole(role) {
+  const remaining = (remainingOpeningsByRole[role] !== undefined) ? remainingOpeningsByRole[role] : 0;
+  const a = aggByRole.get(role) || { step1: 0, tech: 0, final: 0, offer: 0 };
 
-    const expectedRaw = Math.max(
-      num(a.offer),          // strongest
-      num(a.final) * 0.5,    // medium
-      num(a.tech) / 10       // “10 tech => ~1 hire”
-    );
+  // Expected hires (conservative):
+  // - offers => 1:1
+  // - finals => 0.5 per final
+  // - tech => 1 hire per 10 in tech
+  // - step1 => 1 hire per 50 in step1 (very conservative "early funnel")
+  const expectedRaw = Math.max(
+    num(a.offer),
+    num(a.final) * 0.5,
+    num(a.tech) / 10,
+    num(a.step1) / 50
+  );
 
-    const expected = Math.min(remaining, expectedRaw);
+  const expected = Math.min(remaining, expectedRaw);
 
-// confidence (manager-proof, monotonic with Step1)
-let conf = 0.07; // baseline
-const anyPipeline = (a.step1 + a.tech + a.final + a.offer) > 0;
+  // confidence (manager-proof, monotonic with Step1)
+  let conf = 0.07; // baseline
+  const anyPipeline = (a.step1 + a.tech + a.final + a.offer) > 0;
 
-if (a.offer > 0) conf = 0.95;
-else if (a.final >= 2) conf = 0.95;
-else if (a.final >= 1) conf = 0.90;
-else if (a.tech >= 10) conf = 0.90;
-else if (a.tech >= 5) conf = 0.80;
-else if (a.step1 >= 25) conf = 0.95;
-else if (a.step1 >= 20) conf = 0.90;
-else if (a.step1 >= 15) conf = 0.80;
-else if (a.step1 >= 10) conf = 0.70;
-else if (a.step1 >= 5) conf = 0.55;
-else if (anyPipeline) conf = 0.40;
+  if (a.offer > 0) conf = 0.95;
+  else if (a.final >= 2) conf = 0.95;
+  else if (a.final >= 1) conf = 0.90;
+  else if (a.tech >= 10) conf = 0.90;
+  else if (a.tech >= 5) conf = 0.80;
+  else if (a.step1 >= 25) conf = 0.95;
+  else if (a.step1 >= 20) conf = 0.90;
+  else if (a.step1 >= 15) conf = 0.80;
+  else if (a.step1 >= 10) conf = 0.70;
+  else if (a.step1 >= 5) conf = 0.55;
+  else if (anyPipeline) conf = 0.40;
 
-return {
-  step1: a.step1,
-  tech: a.tech,
-  finals: a.final,
-  offers: a.offer,
-  expected,
-  conf
-};
+  return { step1: a.step1, tech: a.tech, finals: a.final, offers: a.offer, expected, conf };
 }
-  
-  function computeAll() {
+
+function computeAll() {
   const out = { step1: 0, tech: 0, finals: 0, offers: 0, expected: 0, conf: null };
 
   let anyOffer = 0;
@@ -2431,38 +2430,19 @@ return {
     if ((r.step1 + r.tech + r.finals + r.offers) > 0) anyPipeline += 1;
   });
 
-  let conf = 0.07;
-
-  if (anyOffer) {
-    conf = 0.95;
-  } else if (anyFinal2) {
-    conf = 0.95;
-  } else if (anyFinal1 || anyTech10) {
-    conf = 0.90;
-  } else if (anyTech5) {
-    conf = 0.80;
-  } else if (out.step1 >= 25) {
-    conf = 0.95;
-  } else if (out.step1 >= 20) {
-    conf = 0.90;
-  } else if (out.step1 >= 15) {
-    conf = 0.80;
-  } else if (out.step1 >= 10) {
-    conf = 0.70;
-  } else if (out.step1 >= 5) {
-    conf = 0.55;
-  } else if (anyPipeline) {
-    conf = 0.40;
-  }
-
-  out.conf = conf;
+  // If you still want NO confidence for "All roles", keep this null:
+  out.conf = null;
 
   return out;
 }
 
   const selectedRole = state.selectedForecastRole || "all";
-  const result = (selectedRole === "all") ? computeAll() : computeForRole(selectedRole);
+const result = (selectedRole === "all") ? computeAll() : computeForRole(selectedRole);
 
+// For "All roles" we don't show a confidence (too misleading as an aggregate)
+if (selectedRole === "all") {
+  result.conf = null;
+}
   const scope = selectedRole === "all" ? "All roles" : selectedRole;
 
   const confCell = (result.conf === null)
