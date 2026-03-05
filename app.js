@@ -2190,13 +2190,40 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
   if (!container || !roleSelect) return;
 
   // ---------------- SIMPLE FORECAST RULES (manager-proof) ----------------
-  // 1) Offers (KW) -> Expected hires = offers (High)
-  // 2) Finals (KW) -> Expected hires = finals * 0.5 (Medium)
-  // 3) Step1 (rolling 4W) -> Expected hires = step1 / 25 (Low)
-  // 4) Nothing -> 0 (Very Low)
-
+  // Offers (KW) -> Expected hires = offers (High)
+  // Finals (KW) -> Expected hires = finals * 0.5 (Medium)
+  // Step1 (period) -> Expected hires = step1 / 25 (Low)
   const STEP1_PER_HIRE = 25;
-  const ROLLING_WEEKS = 4;
+  const FINALS_TO_HIRE = 0.5;
+
+  // ---------------- Time helpers (ISO week -> Monday date) ----------------
+  function getMondayOfISOWeek(year, week) {
+    // ISO week: week 1 contains Jan 4th
+    const jan4 = new Date(Date.UTC(year, 0, 4));
+    const day = jan4.getUTCDay() || 7; // 1..7 (Mon..Sun)
+    const mondayWeek1 = new Date(jan4);
+    mondayWeek1.setUTCDate(jan4.getUTCDate() - (day - 1));
+    const monday = new Date(mondayWeek1);
+    monday.setUTCDate(mondayWeek1.getUTCDate() + (week - 1) * 7);
+    return monday; // UTC date
+  }
+
+  function isWeekInMonth(year, kw, targetYear, targetMonthIndex) {
+    if (!year || !kw) return false;
+    const monday = getMondayOfISOWeek(year, kw);
+    const m = monday.getUTCMonth();
+    const y = monday.getUTCFullYear();
+    return y === targetYear && m === targetMonthIndex;
+  }
+
+  // Berlin current month & next month (UTC-based but derived from Berlin date)
+  const berlinDate = getDateInTimeZone("Europe/Berlin");
+  const currentMonthYear = berlinDate.getUTCFullYear();
+  const currentMonthIndex = berlinDate.getUTCMonth();
+
+  const nextMonthDate = new Date(Date.UTC(currentMonthYear, currentMonthIndex + 1, 1));
+  const nextMonthYear = nextMonthDate.getUTCFullYear();
+  const nextMonthIndex = nextMonthDate.getUTCMonth();
 
   // ---------------- HIRES BY ROLE (valid = signature_date OR start_date) ----------------
   const hiresByRole = {};
@@ -2211,51 +2238,13 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
     hiresByRole[role] = (hiresByRole[role] || 0) + 1;
   });
 
-  // ---------------- TTF BY ROLE (avg from hired_data) ----------------
-const ttfByRole = {};
-(hiredRows || []).forEach(r => {
-  const role = String(getField(r, ["role"]) || "").trim();
-  if (!role) return;
-
-  const start = getField(r, ["start_date", "start date"]);
-  const created = getField(r, ["created_date", "created date"]);
-  if (!start || !created) return;
-
-  const startDate = new Date(start);
-  const createdDate = new Date(created);
-  if (isNaN(startDate) || isNaN(createdDate)) return;
-
-  const diffDays = Math.max(0, (startDate - createdDate) / (1000 * 60 * 60 * 24));
-  if (!ttfByRole[role]) ttfByRole[role] = [];
-  ttfByRole[role].push(diffDays);
-});
-
   // ---------------- REMAINING OPENINGS BY ROLE ----------------
   const remainingOpeningsByRole = {};
   (overviewRows || []).forEach(r => {
     const role = String(getField(r, ["role"]) || "").trim();
     if (!role) return;
-
     const baseOpenings = num(getField(r, ["openings"]));
     remainingOpeningsByRole[role] = Math.max(0, baseOpenings - (hiresByRole[role] || 0));
-  });
-
-  // ---------------- STEP1 (rolling 4w) from pipeline_weekly ----------------
-  const endWeekKey = state.selectedPipelineWeek || TODAY_WEEK_KEY;
-  const rollingKeys = new Set(getRollingWeekKeys(endWeekKey, ROLLING_WEEKS));
-
-  const step1ByRole4w = new Map();
-  (state.pipelineWeeklyRows || []).forEach(r => {
-    const wk = weekKey(r);
-    if (!wk || !rollingKeys.has(wk)) return;
-
-    const role = String(r.role || "").trim();
-    if (!role) return;
-
-    const stage = normalizeHealthStage(r.stage);
-    if (stage !== "step1") return;
-
-    step1ByRole4w.set(role, (step1ByRole4w.get(role) || 0) + num(r.count));
   });
 
   // ---------------- FINALS / OFFERS (inventory selected week snapshot) ----------------
@@ -2277,7 +2266,31 @@ const ttfByRole = {};
     if (stageNorm.includes("offer")) offersByRole.set(role, (offersByRole.get(role) || 0) + c);
   });
 
-  // ---------------- ROLE LIST (hide on-hold until data exists) ----------------
+  // ---------------- STEP1 BY ROLE (Current month MTD + Next month outlook) ----------------
+  const step1ByRoleCurrentMonth = new Map();
+  const step1ByRoleNextMonth = new Map();
+
+  (state.pipelineWeeklyRows || []).forEach(r => {
+    const year = num(getField(r, ["year"])) || num(r.year);
+    const kw = num(getField(r, ["kw"])) || num(r.kw);
+
+    const role = String(r.role || "").trim();
+    if (!role) return;
+
+    const stage = normalizeHealthStage(r.stage);
+    if (stage !== "step1") return;
+
+    const c = num(r.count);
+
+    if (isWeekInMonth(year, kw, currentMonthYear, currentMonthIndex)) {
+      step1ByRoleCurrentMonth.set(role, (step1ByRoleCurrentMonth.get(role) || 0) + c);
+    }
+    if (isWeekInMonth(year, kw, nextMonthYear, nextMonthIndex)) {
+      step1ByRoleNextMonth.set(role, (step1ByRoleNextMonth.get(role) || 0) + c);
+    }
+  });
+
+  // ---------------- ROLE LIST (from overview; hide on-hold until data exists) ----------------
   const roleList = [];
   const seen = new Set();
   (overviewRows || []).forEach(r => {
@@ -2285,7 +2298,8 @@ const ttfByRole = {};
     if (!role || seen.has(role)) return;
 
     const hasData =
-      num(step1ByRole4w.get(role) || 0) > 0 ||
+      num(step1ByRoleCurrentMonth.get(role) || 0) > 0 ||
+      num(step1ByRoleNextMonth.get(role) || 0) > 0 ||
       num(finalsByRole.get(role) || 0) > 0 ||
       num(offersByRole.get(role) || 0) > 0;
 
@@ -2321,89 +2335,90 @@ const ttfByRole = {};
     const allowed = new Set(["all", ...roleList]);
     roleSelect.value = allowed.has(current) ? current : "all";
     state.selectedForecastRole = roleSelect.value;
-}
+  }
 
-  // ---------------- CONFIDENCE UI ----------------
+  // ---------------- CONFIDENCE (your rules) ----------------
   function pillClass(conf) {
     if (conf >= 0.90) return "good";
     if (conf >= 0.60) return "warn";
     return "bad";
   }
   function labelForConfidence(conf) {
+    if (conf >= 0.95) return "High";
     if (conf >= 0.90) return "High";
     if (conf >= 0.60) return "Medium";
     if (conf > 0.10) return "Low";
     return "Very Low";
   }
 
-  // ---------------- COMPUTE ----------------
-  function computeForRole(role) {
-  const remaining = remainingOpeningsByRole[role] ?? 0;
-  const step1 = num(step1ByRole4w.get(role) || 0);
-  const finals = num(finalsByRole.get(role) || 0);
-  const offers = num(offersByRole.get(role) || 0);
+  function confidenceFromSignals({ offers, finals, step1 }) {
+    // 95% should be the max
+    if (offers > 0) return 0.95;
 
-  // Expected hires (simple rule)
-  const expOffers = offers;                 // strongest
-  const expFinals = finals * 0.5;           // medium
-  const expStep1  = step1 / STEP1_PER_HIRE; // early signal
+    if (finals >= 2) return 0.95;
+    if (finals === 1) return 0.90;
 
-  const expectedRaw = Math.max(expOffers, expFinals, expStep1);
-  const expected = Math.min(remaining, expectedRaw);
-
-  // Confidence (simple, explainable)
-  let conf = 0.07; // baseline
-  if (offers > 0) {
-    conf = 0.95;
-  } else if (finals > 0) {
-    conf = Math.min(0.90, 0.60 + finals * 0.10);
-  } else if (step1 >= 10) {
-    conf = 0.30;
-  } else if (step1 > 0) {
-    conf = 0.15;
+    if (step1 >= 25) return 0.95;
+    if (step1 >= 15) return 0.80;
+    if (step1 >= 10) return 0.60;
+    if (step1 > 0) return 0.30;
+    return 0.07;
   }
 
-  // ----- TTF adjustment -----
-  const ttfList = ttfByRole[role] || [];
-  if (ttfList.length > 0) {
-    const avgTTF = ttfList.reduce((a, b) => a + b, 0) / ttfList.length;
+  function computeForRole(role, whichPeriod /* "current" | "next" */) {
+    const remaining = remainingOpeningsByRole[role] ?? 0;
 
-    if (avgTTF <= 30) conf += 0.10;      // fast hire historically
-    else if (avgTTF > 60) conf -= 0.10;  // slow historically
+    const step1 =
+      whichPeriod === "current"
+        ? num(step1ByRoleCurrentMonth.get(role) || 0)
+        : num(step1ByRoleNextMonth.get(role) || 0);
+
+    const finals = num(finalsByRole.get(role) || 0);
+    const offers = num(offersByRole.get(role) || 0);
+
+    const expected_from_offers = offers;
+    const expected_from_finals = finals * FINALS_TO_HIRE;
+    const expected_from_step1 = step1 / STEP1_PER_HIRE;
+
+    const expectedRaw = Math.max(expected_from_offers, expected_from_finals, expected_from_step1);
+    const expected = Math.min(remaining, expectedRaw);
+
+    const conf = confidenceFromSignals({ offers, finals, step1 });
+
+    return { step1, finals, offers, expected, conf };
   }
 
-  // clamp
-  conf = Math.min(1, Math.max(0, conf));
-
-  return { step1, finals, offers, expected, conf };
-}
-
-  function computeAll() {
+  function computeAll(whichPeriod) {
     let step1 = 0, finals = 0, offers = 0, expected = 0;
-    let remaining = 0;
-
     roleList.forEach(role => {
-      const r = computeForRole(role);
+      const r = computeForRole(role, whichPeriod);
       step1 += r.step1;
       finals += r.finals;
       offers += r.offers;
       expected += r.expected;
-      remaining += (remainingOpeningsByRole[role] ?? 0);
     });
 
-    // Aggregate confidence for "All roles" is not super meaningful -> keep it blank in UI
+    // For "all roles" confidence is not super meaningful -> show —
     return { step1, finals, offers, expected, conf: null };
   }
 
   const selectedRole = state.selectedForecastRole || "all";
-  const result = (selectedRole === "all") ? computeAll() : computeForRole(selectedRole);
 
-  // ---------------- RENDER ----------------
+  const currentRes =
+    selectedRole === "all" ? computeAll("current") : computeForRole(selectedRole, "current");
+
+  const nextRes =
+    selectedRole === "all" ? computeAll("next") : computeForRole(selectedRole, "next");
+
   const scope = selectedRole === "all" ? "All roles" : selectedRole;
 
-  const confCell = (selectedRole === "all" || result.conf === null)
-    ? "—"
-    : `<span class="pill ${pillClass(result.conf)}">${labelForConfidence(result.conf)} · ${Math.round(result.conf * 100)}%</span>`;
+  function confCell(res) {
+    if (selectedRole === "all" || res.conf === null) return "—";
+    return `<span class="pill ${pillClass(res.conf)}">${labelForConfidence(res.conf)} · ${Math.round(res.conf * 100)}%</span>`;
+  }
+
+  const labelCurrent = `Current month (MTD)`;
+  const labelNext = `Next month (Outlook)`;
 
   container.innerHTML = `
     <div class="table-wrap">
@@ -2411,7 +2426,8 @@ const ttfByRole = {};
         <thead>
           <tr>
             <th>Scope</th>
-            <th class="num">Step1 (4W)</th>
+            <th>Period</th>
+            <th class="num">Step1</th>
             <th class="num">Finals (KW)</th>
             <th class="num">Offers (KW)</th>
             <th class="num">Expected hires</th>
@@ -2421,14 +2437,27 @@ const ttfByRole = {};
         <tbody>
           <tr>
             <td>${scope}</td>
-            <td class="num ${getNumberClass(result.step1)}">${formatNumber(result.step1)}</td>
-            <td class="num ${getNumberClass(result.finals)}">${formatNumber(result.finals)}</td>
-            <td class="num ${getNumberClass(result.offers)}">${formatNumber(result.offers)}</td>
-            <td class="num ${getNumberClass(result.expected)}">~${Number(result.expected).toFixed(1)}</td>
-            <td class="center">${confCell}</td>
+            <td>${labelCurrent}</td>
+            <td class="num ${getNumberClass(currentRes.step1)}">${formatNumber(currentRes.step1)}</td>
+            <td class="num ${getNumberClass(currentRes.finals)}">${formatNumber(currentRes.finals)}</td>
+            <td class="num ${getNumberClass(currentRes.offers)}">${formatNumber(currentRes.offers)}</td>
+            <td class="num ${getNumberClass(currentRes.expected)}">~${Number(currentRes.expected).toFixed(1)}</td>
+            <td class="center">${confCell(currentRes)}</td>
+          </tr>
+          <tr>
+            <td>${scope}</td>
+            <td>${labelNext}</td>
+            <td class="num ${getNumberClass(nextRes.step1)}">${formatNumber(nextRes.step1)}</td>
+            <td class="num ${getNumberClass(nextRes.finals)}">${formatNumber(nextRes.finals)}</td>
+            <td class="num ${getNumberClass(nextRes.offers)}">${formatNumber(nextRes.offers)}</td>
+            <td class="num ${getNumberClass(nextRes.expected)}">~${Number(nextRes.expected).toFixed(1)}</td>
+            <td class="center">${confCell(nextRes)}</td>
           </tr>
         </tbody>
       </table>
+      <div class="muted small" style="margin-top:8px;">
+        Note: Finals/Offers are based on the selected KW snapshot. Step1 is counted per calendar month.
+      </div>
     </div>
   `;
 }
@@ -2548,7 +2577,9 @@ function syncWeekSelections() {
     activityRole: $("activityRoleSelect")?.value || state.selectedActivityRole || "all",
     activityRecruiter: $("activityRecruiterSelect")?.value || state.selectedActivityRecruiter || "all",
     sourcingRole: $("sourcingRoleSelect")?.value || state.selectedSourcingRole || "all",
-    sourcingRecruiter: $("sourcingRecruiterSelect")?.value || state.selectedSourcingRecruiter || "all"
+    sourcingRecruiter: $("sourcingRecruiterSelect")?.value || state.selectedSourcingRecruiter || "all",
+  forecastRole: $("managementForecastRoleSelect")?.value || state.selectedForecastRole || "all",
+    state.selectedForecastRole = prev.forecastRole || state.selectedForecastRole || "all";
   };
 
   // --- time context (needed for quarter logic)
@@ -2917,8 +2948,17 @@ on("viewManagement", "click", () => {
   on("activityRecruiterSelect", "change", handleActivityRecruiterChange);
   on("sourcingRoleSelect", "change", handleSourcingRoleChange);
   on("sourcingRecruiterSelect", "change", handleSourcingRecruiterChange);
-  on("managementWeekSelect", "change", handleManagementWeekChange);
-  on("managementQuarterSelect", "change", handleManagementQuarterChange);
+on("managementWeekSelect", "change", handleManagementWeekChange);
+on("managementQuarterSelect", "change", handleManagementQuarterChange);
+
+// NEW: Forecast role selector
+on("managementForecastRoleSelect", "change", () => {
+  state.selectedForecastRole = $("managementForecastRoleSelect")
+    ? $("managementForecastRoleSelect").value
+    : "all";
+  renderManagement();
+});
+
 on("departmentSelectTop", "change", () => handleDepartmentChange("departmentSelectTop"));
 on("pipelineDepartmentSelect", "change", () => handleDepartmentChange("pipelineDepartmentSelect"));
 on("activityDepartmentSelect", "change", () => handleDepartmentChange("activityDepartmentSelect"));
