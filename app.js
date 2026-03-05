@@ -2189,9 +2189,41 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
   const roleSelect = $("managementForecastRoleSelect");
   if (!container || !roleSelect) return;
 
-  // ---------- Helpers ----------
-  const invWeekKey = state.selectedPipelineWeek || TODAY_WEEK_KEY;
+ // ---------- Helpers ----------
+// Inventory snapshot week for forecast:
+// - derive from inventoryRows (NOT pipelineOptions)
+// - if today is Mon–Thu, default to previous week (since inventory is updated on Fridays)
+let invWeekKey = "";
 
+// collect available inventory week keys
+const invWeekSet = new Set();
+(inventoryRows || []).forEach(r => {
+  const k = weekKey(r);
+  if (k) invWeekSet.add(k);
+});
+
+// sort newest -> oldest
+const invWeeksSorted = Array.from(invWeekSet).sort().reverse();
+
+// default = newest available
+invWeekKey = invWeeksSorted[0] || TODAY_WEEK_KEY;
+
+// If selectedPipelineWeek is a concrete week (not "all"), respect it
+const selected = state.selectedPipelineWeek || "";
+if (selected && selected !== "all") {
+  invWeekKey = selected;
+} else {
+  // Mon–Thu: show previous week if available (because current week is likely not updated yet)
+  const berlinNow = getDateInTimeZone("Europe/Berlin");
+  const day = berlinNow.getUTCDay(); // 0=Sun,1=Mon,...6=Sat
+
+  const isMonThu = day >= 1 && day <= 4;
+  if (isMonThu && invWeeksSorted.length >= 2) {
+    // if newest is current week, prefer previous; otherwise still take previous to avoid partial weeks
+    invWeekKey = invWeeksSorted[1];
+  }
+}
+  
   function stageBucket(stageRaw) {
     const s = normalizeStageValue(stageRaw); // normalized snake-ish
     const collapsed = s.replace(/_/g, "");
@@ -2245,7 +2277,7 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
   const aggByRole = new Map(); // role -> {step1, tech, final, offer}
 
   (inventoryRows || []).forEach(r => {
-    if (weekKey(r) !== invWeekKey) return;
+if (!isWeekMatch(r, invWeekKey)) return;
 
     const role = String(getField(r, ["role"]) || r.role || "").trim();
     if (!role) return;
@@ -2346,17 +2378,21 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
 
     const expected = Math.min(remaining, expectedRaw);
 
-    // confidence
-    let conf = 0.07; // baseline
-    const anyPipeline = (a.step1 + a.tech + a.final + a.offer) > 0;
+// confidence (manager-proof, monotonic with Step1)
+let conf = 0.07; // baseline
+const anyPipeline = (a.step1 + a.tech + a.final + a.offer) > 0;
 
-    if (a.offer > 0) conf = 0.95;
-    else if (a.final >= 2 || a.tech >= 10) conf = 0.90;
-    else if (a.final >= 1 || a.tech >= 5) conf = 0.70;
-    else if (anyPipeline) conf = 0.30;
-
-    return { step1: a.step1, tech: a.tech, finals: a.final, offers: a.offer, expected, conf };
-  }
+if (a.offer > 0) conf = 0.95;
+else if (a.final >= 2) conf = 0.95;
+else if (a.final >= 1) conf = 0.90;
+else if (a.tech >= 10) conf = 0.90;
+else if (a.tech >= 5) conf = 0.80;
+else if (a.step1 >= 25) conf = 0.95;
+else if (a.step1 >= 20) conf = 0.90;
+else if (a.step1 >= 15) conf = 0.80;
+else if (a.step1 >= 10) conf = 0.70;
+else if (a.step1 >= 5) conf = 0.55;
+else if (anyPipeline) conf = 0.40;
 
   function computeAll() {
     const out = { step1: 0, tech: 0, finals: 0, offers: 0, expected: 0, conf: null };
@@ -2380,14 +2416,17 @@ function renderManagementForecast({ inventoryRows, overviewRows, hiredRows }) {
     });
 
     // give "All roles" a confidence too (otherwise UI feels broken)
-    let conf = 0.07;
-    if (anyOffer) conf = 0.95;
-    else if (anyFinal2 || anyTech10) conf = 0.90;
-    else if (anyFinal1 || anyTech5) conf = 0.70;
-    else if (anyPipeline) conf = 0.30;
-
-    out.conf = conf;
-    return out;
+   let conf = 0.07;
+if (anyOffer) conf = 0.95;
+else if (anyFinal2) conf = 0.95;
+else if (anyFinal1 || anyTech10) conf = 0.90;
+else if (anyTech5) conf = 0.80;
+else if (out.step1 >= 25) conf = 0.95;
+else if (out.step1 >= 20) conf = 0.90;
+else if (out.step1 >= 15) conf = 0.80;
+else if (out.step1 >= 10) conf = 0.70;
+else if (out.step1 >= 5) conf = 0.55;
+else if (anyPipeline) conf = 0.40;
   }
 
   const selectedRole = state.selectedForecastRole || "all";
