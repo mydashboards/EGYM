@@ -40,26 +40,24 @@ document.addEventListener("DOMContentLoaded", () => {
   const PREFERRED_YEAR = CURRENT_ISO.year;
 
   const CSV = {
-    overview: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=780337575&single=true&output=csv",
-    pipelineWeekly: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=565686110&single=true&output=csv",
-    pipelineInventory: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1802705167&single=true&output=csv",
-    sourcing: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1825170360&single=true&output=csv",
-    hired: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=756634566&single=true&output=csv",
-    roleTargets: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1524950504&single=true&output=csv",
-    roleNotes: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1004956410&single=true&output=csv",
-    weeklyUpdates: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1004956410&single=true&output=csv"
-  };
+  overview: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRaty-Up3n29kb7kp66CKNU5nCHg-GvMmM3ouXpwYgvEJmtMutMtQtoTVmH0dnN1aEL3vhIfNsXneaM/pubhtml?gid=105684583&single=true",
+  pipelineWeekly: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRaty-Up3n29kb7kp66CKNU5nCHg-GvMmM3ouXpwYgvEJmtMutMtQtoTVmH0dnN1aEL3vhIfNsXneaM/pubhtml?gid=1333902667&single=true",
+  pipelineInventory: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRaty-Up3n29kb7kp66CKNU5nCHg-GvMmM3ouXpwYgvEJmtMutMtQtoTVmH0dnN1aEL3vhIfNsXneaM/pubhtml?gid=838880352&single=true",
+  sourcing: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRaty-Up3n29kb7kp66CKNU5nCHg-GvMmM3ouXpwYgvEJmtMutMtQtoTVmH0dnN1aEL3vhIfNsXneaM/pubhtml?gid=1333902667&single=true",
+  hired: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRaty-Up3n29kb7kp66CKNU5nCHg-GvMmM3ouXpwYgvEJmtMutMtQtoTVmH0dnN1aEL3vhIfNsXneaM/pubhtml?gid=1640011310&single=true",
+  roleTargets: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRaty-Up3n29kb7kp66CKNU5nCHg-GvMmM3ouXpwYgvEJmtMutMtQtoTVmH0dnN1aEL3vhIfNsXneaM/pubhtml?gid=465881222&single=true",
+  weeklyUpdates: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRaty-Up3n29kb7kp66CKNU5nCHg-GvMmM3ouXpwYgvEJmtMutMtQtoTVmH0dnN1aEL3vhIfNsXneaM/pubhtml?gid=326809222&single=true"
+};
 
   const DATA_SOURCE_LABELS = {
-    overview: "overview_data",
-    pipelineWeekly: "pipeline_weekly",
-    pipelineInventory: "pipeline_inventory",
-    sourcing: "sourcing_data",
-    hired: "hired_data",
-    roleTargets: "role_targets",
-    roleNotes: "role_notes",
-    weeklyUpdates: "weekly_updates"
-  };
+  overview: "overview_data",
+  pipelineWeekly: "pipeline_weekly",
+  pipelineInventory: "pipeline_inventory",
+  sourcing: "sourcing_data",
+  hired: "hired_data",
+  roleTargets: "role_targets",
+  weeklyUpdates: "weekly_updates"
+};
 
   const HIRES_PASSWORD = "EGYM2026";
   const MANAGEMENT_PASSWORD = "EGYM2026";
