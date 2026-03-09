@@ -1,6 +1,6 @@
 // app.js
 document.addEventListener("DOMContentLoaded", () => {
-  /* ---------------- CONFIG ---------------- */
+  /* ---------------- CONFIG ----------------- */
 
   // ISO week helper (current calendar week). Uses Europe/Berlin time.
   function getISOWeekFromDate(date) {
