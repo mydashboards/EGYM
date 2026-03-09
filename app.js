@@ -1250,6 +1250,7 @@ function renderOverview() {
   const hiredRows = state.hiredRows || [];
   let rows = state.allOverviewRows || [];
 
+  // Overview-only department filter
   const selectedOverviewDept = state.selectedOverviewDepartment || "all";
   if (selectedOverviewDept !== "all") {
     const want = normalizeDepartmentValue(selectedOverviewDept).toLowerCase();
@@ -1265,11 +1266,7 @@ function renderOverview() {
     healthWeekKey
   );
 
-  const onHoldRoles = rows.filter(r => {
-    const status = normalizeHeader(getField(r, ["status"]));
-    return status === "on_hold" || status === "onhold" || status.includes("hold");
-  }).length;
-
+  // Hires by role (valid hire = signature_date OR start_date)
   const hiresByRole = {};
   (hiredRows || []).forEach(r => {
     const role = getField(r, ["role"]);
@@ -1280,27 +1277,37 @@ function renderOverview() {
     hiresByRole[role] = (hiresByRole[role] || 0) + 1;
   });
 
+  // Remaining openings helper
+  function getRemainingOpenings(row) {
+    const role = getField(row, ["role"]);
+    const baseOpenings = num(getField(row, ["openings"]));
+    return Math.max(0, baseOpenings - (hiresByRole[role] || 0));
+  }
+
+  // KPIs should still use the filtered department scope,
+  // but the table should only show roles with remaining openings > 0
+  const onHoldRoles = rows.filter(r => {
+    const status = normalizeHeader(getField(r, ["status"]));
+    return status === "on_hold" || status === "onhold" || status.includes("hold");
+  }).length;
+
   const openRoles = rows.filter(r => {
     const status = normalizeHeader(getField(r, ["status"]));
     if (status !== "open") return false;
-
-    const role = getField(r, ["role"]);
-    const baseOpenings = num(getField(r, ["openings"]));
-    const remaining = Math.max(0, baseOpenings - (hiresByRole[role] || 0));
-    return remaining > 0;
+    return getRemainingOpenings(r) > 0;
   }).length;
 
   const filledPositions = Object.values(hiresByRole).reduce((a, b) => a + b, 0);
 
   const totalOpenings = rows.reduce((sum, r) => {
-    const role = getField(r, ["role"]);
-    const base = num(getField(r, ["openings"]));
-    const remaining = Math.max(0, base - (hiresByRole[role] || 0));
-    return sum + remaining;
+    return sum + getRemainingOpenings(r);
   }, 0);
 
+  // Only show roles with actual remaining openings in the overview table
+  const visibleRows = rows.filter(r => getRemainingOpenings(r) > 0);
+
   const counts = { healthy: 0, warning: 0, critical: 0 };
-  rows.forEach(r => {
+  visibleRows.forEach(r => {
     const role = getField(r, ["role"]);
     const h = healthByRole[role] || "unknown";
     if (h === "healthy") counts.healthy += 1;
@@ -1331,12 +1338,11 @@ function renderOverview() {
   if (!tbody) return;
   tbody.innerHTML = "";
 
-  rows.forEach(r => {
+  visibleRows.forEach(r => {
     const role = getField(r, ["role"]);
     const status = getField(r, ["status"]);
     const location = getField(r, ["location"]);
-    const baseOpenings = num(getField(r, ["openings"]));
-    const openings = Math.max(0, baseOpenings - (hiresByRole[role] || 0));
+    const openings = getRemainingOpenings(r);
     const owner = getField(r, ["pplwise_tap", "pplwise_sourcer", "tap", "owner", "recruiter"]);
     const h = healthByRole[role] || "unknown";
 
