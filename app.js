@@ -1900,12 +1900,10 @@ function renderManagement() {
   const selectedRole = state.selectedActivityRole || "all";
   const selectedRecruiter = state.selectedActivityRecruiter || "all";
 
-  const healthByRole = getHealthByRoleWithOfferOverride({
-    weeklyRows,
-    inventoryRows,
-    endWeekKey: TODAY_WEEK_KEY,
-    inventoryWeekKey: state.selectedPipelineWeek || TODAY_WEEK_KEY
-  });
+const healthByRole = getHealthByRoleFromInventory(
+  inventoryRows,
+  state.selectedPipelineWeek || TODAY_WEEK_KEY
+);
 
   let filledPositions = 0;
   const hiresByRole = {};
