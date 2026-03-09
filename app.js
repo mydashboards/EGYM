@@ -1039,23 +1039,34 @@ function getHealthByRole(weeklyRows, endWeekKey, filters = {}) {
   const byRole = new Map();
 
   (weeklyRows || []).forEach(r => {
-    const role = normalizeRoleKey(r.role);
-    if (!role) return;
+  const wk = weekKey(r);
+  if (!wk || !rollingKeys.has(wk)) return;
 
-    if (roleFilter !== "all" && role !== roleFilter) return;
-    if (recruiterFilter !== "all" && (r.recruiter || "Unassigned") !== recruiterFilter) return;
+  const role = String(getField(r, ["role"]) || r.role || "").trim();
+  if (!role) return;
 
-    const wk = weekKey(r);
-    if (!wk || !windowKeys.has(wk)) return;
+  const stageRaw = getField(r, ["stage"]) || r.stage;
+  if (!stageRaw) return;
 
-    const stage = normalizeHealthStage(r.stage);
-    if (stage !== "step1" && stage !== "step2") return;
+  const sRaw = normalizeStageValue(stageRaw);
+  const s = sRaw.replace(/_/g, "");
 
-    if (!byRole.has(role)) byRole.set(role, { step1: 0, step2: 0 });
-    const agg = byRole.get(role);
-    if (stage === "step1") agg.step1 += num(r.count);
-    if (stage === "step2") agg.step2 += num(r.count);
-  });
+  const isStep1Stage =
+    s === "step1" ||
+    s === "firstinterview" ||
+    s === "1stinterview" ||
+    sRaw.includes("step_1") ||
+    sRaw.includes("first_interview") ||
+    sRaw.includes("1st_interview") ||
+    sRaw.includes("recruiter_screen") ||
+    sRaw.includes("screening") ||
+    sRaw.includes("intro");
+
+  if (!isStep1Stage) return;
+
+  const c = num(getField(r, ["count"]) || r.count);
+  step1RollingByRole.set(role, (step1RollingByRole.get(role) || 0) + c);
+});
 
   const health = {};
   byRole.forEach((agg, role) => {
