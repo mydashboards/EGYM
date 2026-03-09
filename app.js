@@ -2528,6 +2528,7 @@ function renderAll() {
   renderPipeline();
   renderActivity();
   renderSourcing();
+  renderHires();
   renderManagement();
 }
 
