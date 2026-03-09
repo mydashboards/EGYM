@@ -2319,12 +2319,13 @@ if (!isWeekMatch(r, invWeekKey)) return;
   // ---------- Role list (from overview; hide on-hold unless data exists) ----------
   const roleList = [];
   const seen = new Set();
+
   (overviewRows || []).forEach(r => {
     const role = String(getField(r, ["role"]) || "").trim();
     if (!role || seen.has(role)) return;
 
- const a = aggByRole.get(role) || { step1: 0, tech: 0, final: 0, offer: 0 };
-const step1Rolling = num(step1RollingByRole.get(role) || 0);
+    const a = aggByRole.get(role) || { step1: 0, tech: 0, final: 0, offer: 0 };
+    const hasData = (a.step1 + a.tech + a.final + a.offer) > 0;
 
     if (!shouldShowRoleOutsideOverview(role, hasData)) return;
 
