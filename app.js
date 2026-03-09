@@ -1808,6 +1808,84 @@ function renderSourcing() {
   }
 }
 
+  function parseDate(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function dayDiff(start, end) {
+  if (!start || !end) return null;
+  const ms = end - start;
+  return Number.isFinite(ms) ? Math.round(ms / (1000 * 60 * 60 * 24)) : null;
+}
+
+function average(values) {
+  if (!values.length) return null;
+  return values.reduce((s, v) => s + v, 0) / values.length;
+}
+
+function renderHires() {
+  const rows = state.hiredRows || [];
+  const tbody = $("hiresTable");
+  const empty = $("hiresEmpty");
+  const kpis = $("hiresKpis");
+
+  if (!tbody || !empty || !kpis) return;
+
+  tbody.innerHTML = "";
+
+  if (!rows.length) {
+    empty.classList.remove("hidden");
+  } else {
+    empty.classList.add("hidden");
+  }
+
+  const tthValues = [];
+  const ttfValues = [];
+
+  rows.forEach(r => {
+    const liveDate = parseDate(getField(r, ["live_date", "live date"]));
+    const signatureDate = parseDate(getField(r, ["signature_date", "signature date"]));
+    const startDate = parseDate(getField(r, ["start_date", "start date"]));
+    const firstContact = parseDate(getField(r, ["1st_contact", "first_contact", "1st contact", "first contact"]));
+
+    const tth = dayDiff(liveDate, signatureDate);
+    const ttf = dayDiff(liveDate, startDate);
+    const daysInProcess = dayDiff(firstContact, signatureDate);
+
+    if (tth !== null) tthValues.push(tth);
+    if (ttf !== null) ttfValues.push(ttf);
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${getField(r, ["role"])}</td>
+      <td>${getField(r, ["first_name", "first name"])}</td>
+      <td>${getField(r, ["last_name", "last name"])}</td>
+      <td>${getField(r, ["source"])}</td>
+      <td>${getField(r, ["salary"])}</td>
+      <td>${getField(r, ["live_date", "live date"])}</td>
+      <td>${getField(r, ["1st_contact", "first_contact", "1st contact", "first contact"])}</td>
+      <td>${getField(r, ["signature_date", "signature date"])}</td>
+      <td>${getField(r, ["start_date", "start date"])}</td>
+      <td class="num">${tth !== null ? tth : "—"}</td>
+      <td class="num">${ttf !== null ? ttf : "—"}</td>
+      <td class="num">${daysInProcess !== null ? daysInProcess : "—"}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const avgTth = average(tthValues);
+  const avgTtf = average(ttfValues);
+
+  kpis.innerHTML = `
+    <div class="kpi"><div class="label">Total Hires</div><div class="value">${formatNumber(rows.length)}</div></div>
+    <div class="kpi"><div class="label">Avg TTH</div><div class="value">${avgTth !== null ? avgTth.toFixed(1) : "—"}</div></div>
+    <div class="kpi"><div class="label">Avg TTF</div><div class="value">${avgTtf !== null ? avgTtf.toFixed(1) : "—"}</div></div>
+    <div class="kpi"><div class="label">Scope</div><div class="value">All time</div></div>
+  `;
+}
+
 /* ---------------- RENDER: MANAGEMENT ---------------- */
 
 function renderManagement() {
