@@ -260,24 +260,6 @@ function filterRowsByDepartment(rows) {
     return n === 0 ? "num-zero" : "num-pos";
   }
 
-  function formatNumber(value) {
-  if (value === null || value === undefined) return "—";
-  return Number(value).toLocaleString();
-}
-
-function formatDateShort(value) {
-  if (!value) return "";
-
-  const d = new Date(value);
-  if (isNaN(d)) return value;
-
-  const month = d.getMonth() + 1;
-  const day = d.getDate();
-  const year = String(d.getFullYear()).slice(-2);
-
-  return `${month}/${day}/${year}`;
-}
-
   function normalizeHeader(value) {
     return String(value || "")
       .trim()
@@ -1882,10 +1864,10 @@ function renderHires() {
       <td>${getField(r, ["last_name", "last name"])}</td>
       <td>${getField(r, ["source"])}</td>
       <td>${getField(r, ["salary"])}</td>
-      ${formatDateShort(getField(r, ["live_date", "live date"]))}
-${formatDateShort(getField(r, ["1st_contact", "first_contact", "1st contact", "first contact"]))}
-${formatDateShort(getField(r, ["signature_date", "signature date"]))}
-${formatDateShort(getField(r, ["start_date", "start date"]))}
+      <td>${getField(r, ["live_date", "live date"])}</td>
+      <td>${getField(r, ["1st_contact", "first_contact", "1st contact", "first contact"])}</td>
+      <td>${getField(r, ["signature_date", "signature date"])}</td>
+      <td>${getField(r, ["start_date", "start date"])}</td>
       <td class="num">${tth !== null ? tth : "—"}</td>
       <td class="num">${ttf !== null ? ttf : "—"}</td>
       <td class="num">${daysInProcess !== null ? daysInProcess : "—"}</td>
