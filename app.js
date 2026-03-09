@@ -2593,10 +2593,13 @@ async function refreshAll() {
       weeklyUpdatesRows: state.allWeeklyUpdatesRows
     });
 
-    const storedDepartment = localStorage.getItem(DEPARTMENT_STORAGE_KEY);
-    const storedMatch = state.departmentOptions.find(option => option.toLowerCase() === String(storedDepartment || "").toLowerCase());
-    const softwareMatch = state.departmentOptions.find(option => option.toLowerCase() === "software");
-    const defaultDepartment = storedMatch || softwareMatch || state.departmentOptions[0] || "";
+   const storedDepartment = localStorage.getItem(DEPARTMENT_STORAGE_KEY);
+const storedMatch = state.departmentOptions.find(
+  option => option.toLowerCase() === String(storedDepartment || "").toLowerCase()
+);
+
+// Default soll immer "all" sein
+const defaultDepartment = storedMatch || "all";
 
     const departmentSelectTop = $("departmentSelectTop");
     const pipelineDepartmentSelect = $("pipelineDepartmentSelect");
