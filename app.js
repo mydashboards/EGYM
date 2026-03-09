@@ -271,11 +271,11 @@ function formatDateShort(value) {
   const d = new Date(value);
   if (isNaN(d)) return value;
 
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const month = d.getMonth() + 1;
+  const day = d.getDate();
   const year = String(d.getFullYear()).slice(-2);
 
-  return `${day}.${month}.${year}`;
+  return `${month}/${day}/${year}`;
 }
 
   function normalizeHeader(value) {
