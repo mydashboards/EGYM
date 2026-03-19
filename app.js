@@ -1882,10 +1882,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const selectedRecruiter = state.selectedActivityRecruiter || "all";
     const selectedActivityWeek = state.selectedActivityWeek || "";
 
-    const healthByRole = getHealthByRoleFromInventory(
-      inventoryRows,
-      state.selectedPipelineWeek || TODAY_WEEK_KEY
-    );
+   const healthByRole = {};
+(overviewRows || []).forEach(r => {
+  const role = getField(r, ["role"]);
+  if (!role) return;
+  healthByRole[role] = normalizeHealthValue(getField(r, ["health"])) || "unknown";
+});
 
     let filledPositions = 0;
     const hiresByRole = {};
