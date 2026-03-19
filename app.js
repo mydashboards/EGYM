@@ -1958,14 +1958,13 @@ document.addEventListener("DOMContentLoaded", () => {
       `;
     }
 
-    const counts = { healthy: 0, warning: 0, critical: 0 };
-    overviewRows.forEach(r => {
-      const role = getField(r, ["role"]);
-      const value = healthByRole[role] || "";
-      if (value === "healthy") counts.healthy += 1;
-      else if (value === "warning") counts.warning += 1;
-      else if (value === "critical") counts.critical += 1;
-    });
+const counts = state.overviewHealthCounts || {
+  healthy: 0,
+  warning: 0,
+  critical: 0
+};
+    
+    state.overviewHealthCounts = counts;
 
     const hsEl = $("managementHealthSummary");
     if (hsEl) {
