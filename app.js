@@ -728,6 +728,23 @@ document.addEventListener("DOMContentLoaded", () => {
     if (health === "critical") return `<span class="status-dot bad" title="Critical"></span>`;
     return `<span class="status-dot neutral" title="New/Unknown"></span>`;
   }
+  
+  function normalizeHealthValue(value) {
+  const normalized = normalizeHeader(String(value || ""));
+  if (normalized === "bad" || normalized.includes("critical")) return "critical";
+  if (
+    normalized === "warn" ||
+    normalized.includes("warning") ||
+    normalized.includes("risk") ||
+    normalized.includes("at_risk")
+  ) return "warning";
+  if (
+    normalized === "ok" ||
+    normalized.includes("healthy") ||
+    normalized.includes("good")
+  ) return "healthy";
+  return "";
+}
 
   function isOnHoldRole(role) {
     const st = normalizeHeader(state.roleStatusByRole?.[role] || "");
