@@ -8,7 +8,6 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -37,7 +36,6 @@
     <div id="dataErrors" class="banner hidden" aria-live="polite"></div>
 
     <main>
-      <!-- Contributor View -->
       <section id="contributorView">
         <nav class="tabs" aria-label="Dashboard tabs">
           <button class="tab active" data-tab="overview" type="button">Overview</button>
@@ -47,7 +45,6 @@
           <button class="tab" data-tab="hires" type="button">Hires & KPIs</button>
         </nav>
 
-        <!-- OVERVIEW -->
         <section id="overview" class="panel active">
           <div class="overview-top">
             <div class="card">
@@ -94,7 +91,6 @@
           </div>
         </section>
 
-        <!-- PIPELINE -->
         <section id="pipeline" class="panel">
           <div class="panel-head">
             <div><h2>Pipeline</h2></div>
@@ -120,7 +116,6 @@
           <div class="card">
             <div class="card-head">
               <h3>End-of-week inventory</h3>
-              <p class="muted small">Stages shown for the selected calendar week (or cumulative for All time).</p>
             </div>
 
             <div id="pipelineEmpty" class="placeholder hidden">
@@ -136,7 +131,6 @@
           </div>
         </section>
 
-        <!-- ACTIVITY -->
         <section id="activity" class="panel">
           <div class="panel-head">
             <div><h2>Activity</h2></div>
@@ -144,7 +138,22 @@
             <div class="filters">
               <label>
                 <span>Week</span>
+                <select id="activityWeekModeSelect"></select>
+              </label>
+
+              <label id="activityWeekSingleWrap">
+                <span>KW</span>
                 <select id="activityWeekSelect"></select>
+              </label>
+
+              <label id="activityWeekFromWrap" class="hidden">
+                <span>From KW</span>
+                <select id="activityFromWeekSelect"></select>
+              </label>
+
+              <label id="activityWeekToWrap" class="hidden">
+                <span>To KW</span>
+                <select id="activityToWeekSelect"></select>
               </label>
 
               <label>
@@ -167,7 +176,6 @@
           <div class="card">
             <div class="card-head">
               <h3>Weekly stage activity</h3>
-              <p class="muted small">Counts by stage for the selected week (or cumulative for All time).</p>
             </div>
 
             <div class="table-wrap">
@@ -179,7 +187,6 @@
           </div>
         </section>
 
-        <!-- SOURCING -->
         <section id="sourcing" class="panel">
           <div class="panel-head">
             <div><h2>Sourcing</h2></div>
@@ -187,7 +194,22 @@
             <div class="filters">
               <label>
                 <span>Week</span>
+                <select id="sourcingWeekModeSelect"></select>
+              </label>
+
+              <label id="sourcingWeekSingleWrap">
+                <span>KW</span>
                 <select id="sourcingWeekSelect"></select>
+              </label>
+
+              <label id="sourcingWeekFromWrap" class="hidden">
+                <span>From KW</span>
+                <select id="sourcingFromWeekSelect"></select>
+              </label>
+
+              <label id="sourcingWeekToWrap" class="hidden">
+                <span>To KW</span>
+                <select id="sourcingToWeekSelect"></select>
               </label>
 
               <label>
@@ -212,7 +234,6 @@
           <div class="card">
             <div class="card-head">
               <h3>Weekly sourcing</h3>
-              <p class="muted small">By role (or cumulative for All time).</p>
             </div>
 
             <div class="table-wrap">
@@ -232,56 +253,73 @@
           </div>
         </section>
 
-        <!-- HIRES -->
         <section id="hires" class="panel">
-          <div class="panel-head">
-            <div>
-              <h2>Hires & KPIs</h2>
-            </div>
-          </div>
-
-          <div id="hiresKpis" class="kpi-grid"></div>
-
-          <div class="card">
+          <div id="hiresLock" class="card">
             <div class="card-head">
-              <h3>Hires</h3>
+              <h3>Protected Content</h3>
             </div>
 
-            <div id="hiresEmpty" class="placeholder hidden">No hire data yet.</div>
-
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Role</th>
-                    <th>First Name</th>
-                    <th>Last Name</th>
-                    <th>Source</th>
-                    <th>Salary</th>
-                    <th>Live Date</th>
-                    <th>1st Contact</th>
-                    <th>Signature Date</th>
-                    <th>Start Date</th>
-                    <th class="num">TTH</th>
-                    <th class="num">TTF</th>
-                    <th class="num">Days in Process</th>
-                  </tr>
-                </thead>
-                <tbody id="hiresTable"></tbody>
-              </table>
+            <div style="padding:24px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+              <input
+                id="hiresPasswordInput"
+                type="password"
+                placeholder="Enter password"
+                style="padding:10px 12px; border-radius:10px; border:1px solid #d8d8d8; min-width:220px;"
+              />
+              <button id="hiresUnlockBtn" class="btn" type="button">Unlock</button>
             </div>
+
+            <div id="hiresErrorMsg" class="muted small" style="padding:0 24px 24px; color:#b00020;"></div>
           </div>
 
-          <div id="hiresError" class="error hidden"></div>
+          <div id="hiresContent" class="hidden">
+            <div class="panel-head">
+              <div>
+                <h2>Hires & KPIs</h2>
+              </div>
+            </div>
+
+            <div id="hiresKpis" class="kpi-grid"></div>
+
+            <div class="card">
+              <div class="card-head">
+                <h3>Hires</h3>
+              </div>
+
+              <div id="hiresEmpty" class="placeholder hidden">No hire data yet.</div>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Role</th>
+                      <th>First Name</th>
+                      <th>Last Name</th>
+                      <th>Source</th>
+                      <th>Salary</th>
+                      <th>Live Date</th>
+                      <th>1st Contact</th>
+                      <th>Signature Date</th>
+                      <th>Start Date</th>
+                      <th class="num">TTH</th>
+                      <th class="num">TTF</th>
+                      <th class="num">Days in Process</th>
+                    </tr>
+                  </thead>
+                  <tbody id="hiresTable"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div id="hiresError" class="error hidden"></div>
+          </div>
         </section>
       </section>
 
-      <!-- Management View -->
       <section id="managementView" class="hidden">
         <div class="card">
           <div class="card-head">
-            <h2>Management View</h2>
-            <p class="muted small">Executive rollups across active data sources.</p>
+            <h2>Management Overview</h2>
           </div>
           <div id="managementKpis" class="kpi-grid"></div>
         </div>
@@ -293,18 +331,28 @@
           <div id="managementHealthSummary" class="health-row"></div>
         </div>
 
-        <!-- Hiring Forecast (single clean card) -->
         <div class="card">
-          <div class="card-head" style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
+          <div class="card-head" style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap;">
             <div>
               <h3>Hiring Forecast</h3>
-              <p class="muted small">Horizon: today → end of current month. Step1 = rolling 4W, Finals/Offers = inventory snapshot (selected KW).</p>
             </div>
 
-            <label style="min-width:260px;">
-              <span class="muted small">Role</span>
-              <select id="managementForecastRoleSelect"></select>
-            </label>
+            <div class="filters">
+              <label>
+                <span>Role</span>
+                <select id="managementForecastRoleSelect"></select>
+              </label>
+
+              <label>
+                <span>Recruiter</span>
+                <select id="managementForecastRecruiterSelect"></select>
+              </label>
+
+              <label>
+                <span>Department</span>
+                <select id="managementForecastDepartmentSelect"></select>
+              </label>
+            </div>
           </div>
 
           <div id="managementForecast"></div>
@@ -313,7 +361,6 @@
         <div class="card">
           <div class="card-head">
             <h3>Recruiter Utilization</h3>
-            <p class="muted small">Rolling 4 weeks (Step1 screens).</p>
           </div>
           <div id="managementRecruiterEmpty" class="placeholder hidden">No recruiter data available.</div>
           <div class="table-wrap">
@@ -321,7 +368,8 @@
               <thead>
                 <tr>
                   <th>Recruiter</th>
-                  <th class="num">Screens (4W)</th>
+                  <th class="num">Step1 Screens (4W)</th>
+                  <th class="num">Avg / Week</th>
                   <th class="num">Utilization</th>
                 </tr>
               </thead>
@@ -332,8 +380,14 @@
 
         <div class="card">
           <div class="card-head">
+            <h3>Role Insights</h3>
+          </div>
+          <div id="managementRoleInsights"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
             <h3>Weekly Updates</h3>
-            <p class="muted small">Most recent updates from the last 4 weeks.</p>
           </div>
           <div id="managementUpdatesEmpty" class="placeholder hidden">No updates in the last 4 weeks.</div>
           <div id="managementWeeklyUpdates"></div>
