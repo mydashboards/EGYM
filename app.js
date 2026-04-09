@@ -1617,35 +1617,33 @@ document.addEventListener("DOMContentLoaded", () => {
       `;
       tbody.appendChild(tr);
     });
+        const totals = new Map();
+
+    stages.forEach(stage => {
+      totals.set(stage, 0);
+    });
+
+    roles.forEach(role => {
+      const sm = countsByRole.get(role) || new Map();
+      stages.forEach(stage => {
+        const current = totals.get(stage) || 0;
+        totals.set(stage, current + (sm.get(stage) || 0));
+      });
+    });
+
+    const totalCells = stages.map(stage => {
+      const value = totals.get(stage) || 0;
+      return `<td class="num ${getNumberClass(value)}"><strong>${formatNumber(value)}</strong></td>`;
+    }).join("");
+
+    const totalRow = document.createElement("tr");
+    totalRow.innerHTML = `
+      <td><strong>Total</strong></td>
+      ${totalCells}
+    `;
+
+    tbody.appendChild(totalRow);
   }
-
-  // ---- TOTAL ROW ----
-const totals = new Map();
-
-stages.forEach(stage => {
-  totals.set(stage, 0);
-});
-
-roles.forEach(role => {
-  const sm = countsByRole.get(role) || new Map();
-  stages.forEach(stage => {
-    const current = totals.get(stage) || 0;
-    totals.set(stage, current + (sm.get(stage) || 0));
-  });
-});
-
-const totalCells = stages.map(stage => {
-  const value = totals.get(stage) || 0;
-  return `<td class="num ${getNumberClass(value)}"><strong>${formatNumber(value)}</strong></td>`;
-}).join("");
-
-const totalRow = document.createElement("tr");
-totalRow.innerHTML = `
-  <td><strong>Total</strong></td>
-  ${totalCells}
-`;
-
-tbody.appendChild(totalRow);
   
   /* ---------------- SOURCING ---------------- */
 
