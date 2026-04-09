@@ -1843,8 +1843,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!rows.length) empty.classList.remove("hidden");
     else empty.classList.add("hidden");
 
-    const tthValues = [];
-    const ttfValues = [];
+  const tthValues = [];
+const ttfValues = [];
+const dipValues = [];
 
     rows.forEach(r => {
       const liveDate = parseDate(getField(r, ["live_date", "live date"]));
@@ -1857,7 +1858,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const daysInProcess = dayDiff(firstContact, signatureDate);
 
       if (tth !== null) tthValues.push(tth);
-      if (ttf !== null) ttfValues.push(ttf);
+if (ttf !== null) ttfValues.push(ttf);
+if (daysInProcess !== null) dipValues.push(daysInProcess);
 
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -1877,8 +1879,8 @@ document.addEventListener("DOMContentLoaded", () => {
       tbody.appendChild(tr);
     });
 
-    const avgTth = average(tthValues);
-    const avgTtf = average(ttfValues);
+   const avgTth = average(tthValues);
+const avgDip = average(dipValues);
 
     kpis.innerHTML = `
       <div class="kpi"><div class="label">Total Hires</div><div class="value">${formatNumber(rows.length)}</div></div>
