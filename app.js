@@ -279,8 +279,7 @@ document.addEventListener("DOMContentLoaded", () => {
     state.pipelineInventoryRows = filterRowsByDepartment(state.allPipelineInventoryRows);
     state.sourcingRows = filterRowsByDepartment(state.allSourcingRows);
 
-    // Hires stay unfiltered because hired_data is often department-less
-    state.hiredRows = state.allHiredRows || [];
+    state.hiredRows = filterRowsByDepartment(state.allHiredRows);
 
     state.roleNotesRows = filterRowsByDepartment(state.allRoleNotesRows);
     state.weeklyUpdatesRows = filterRowsByDepartment(state.allWeeklyUpdatesRows);
@@ -2842,15 +2841,17 @@ const counts = state.overviewHealthCounts || {
 
       const defaultDepartment = storedMatch || "all";
 
-      const departmentSelectTop = $("departmentSelectTop");
-      const pipelineDepartmentSelect = $("pipelineDepartmentSelect");
-      const activityDepartmentSelect = $("activityDepartmentSelect");
-      const sourcingDepartmentSelect = $("sourcingDepartmentSelect");
+   const departmentSelectTop = $("departmentSelectTop");
+const pipelineDepartmentSelect = $("pipelineDepartmentSelect");
+const activityDepartmentSelect = $("activityDepartmentSelect");
+const sourcingDepartmentSelect = $("sourcingDepartmentSelect");
+const hiresDepartmentSelect = $("hiresDepartmentSelect");
 
-      if (departmentSelectTop) setDepartmentOptions(departmentSelectTop, state.departmentOptions, defaultDepartment);
-      if (pipelineDepartmentSelect) setDepartmentOptions(pipelineDepartmentSelect, state.departmentOptions, defaultDepartment);
-      if (activityDepartmentSelect) setDepartmentOptions(activityDepartmentSelect, state.departmentOptions, defaultDepartment);
-      if (sourcingDepartmentSelect) setDepartmentOptions(sourcingDepartmentSelect, state.departmentOptions, defaultDepartment);
+if (departmentSelectTop) setDepartmentOptions(departmentSelectTop, state.departmentOptions, defaultDepartment);
+if (pipelineDepartmentSelect) setDepartmentOptions(pipelineDepartmentSelect, state.departmentOptions, defaultDepartment);
+if (activityDepartmentSelect) setDepartmentOptions(activityDepartmentSelect, state.departmentOptions, defaultDepartment);
+if (sourcingDepartmentSelect) setDepartmentOptions(sourcingDepartmentSelect, state.departmentOptions, defaultDepartment);
+if (hiresDepartmentSelect) setDepartmentOptions(hiresDepartmentSelect, state.departmentOptions, defaultDepartment);
 
       state.selectedDepartment = defaultDepartment;
       if (state.selectedDepartment) {
@@ -2920,7 +2921,7 @@ const counts = state.overviewHealthCounts || {
     state.selectedDepartment = selected;
     localStorage.setItem(DEPARTMENT_STORAGE_KEY, selected);
 
-    const ids = ["departmentSelectTop", "pipelineDepartmentSelect", "activityDepartmentSelect", "sourcingDepartmentSelect"];
+    const ids = ["departmentSelectTop", "pipelineDepartmentSelect", "activityDepartmentSelect", "sourcingDepartmentSelect", "hiresDepartmentSelect"];
     ids.forEach(id => {
       const el = $(id);
       if (el) el.value = selected;
@@ -3056,11 +3057,12 @@ const counts = state.overviewHealthCounts || {
     renderManagement();
   });
 
-  on("departmentSelectTop", "change", () => handleDepartmentChange("departmentSelectTop"));
-  on("pipelineDepartmentSelect", "change", () => handleDepartmentChange("pipelineDepartmentSelect"));
-  on("activityDepartmentSelect", "change", () => handleDepartmentChange("activityDepartmentSelect"));
-  on("sourcingDepartmentSelect", "change", () => handleDepartmentChange("sourcingDepartmentSelect"));
-
+ on("departmentSelectTop", "change", () => handleDepartmentChange("departmentSelectTop"));
+on("pipelineDepartmentSelect", "change", () => handleDepartmentChange("pipelineDepartmentSelect"));
+on("activityDepartmentSelect", "change", () => handleDepartmentChange("activityDepartmentSelect"));
+on("sourcingDepartmentSelect", "change", () => handleDepartmentChange("sourcingDepartmentSelect"));
+on("hiresDepartmentSelect", "change", () => handleDepartmentChange("hiresDepartmentSelect"));
+  
   on("hiresUnlockBtn", "click", unlockHiresWithPassword);
   on("hiresPasswordInput", "keydown", (e) => {
     if (e.key === "Enter") unlockHiresWithPassword();
