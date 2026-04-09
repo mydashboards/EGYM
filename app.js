@@ -1885,7 +1885,7 @@ const avgDip = average(dipValues);
     kpis.innerHTML = `
       <div class="kpi"><div class="label">Total Hires</div><div class="value">${formatNumber(rows.length)}</div></div>
       <div class="kpi"><div class="label">Avg TTH</div><div class="value">${avgTth !== null ? avgTth.toFixed(1) : "—"}</div></div>
-      <div class="kpi"><div class="label">Avg TTF</div><div class="value">${avgTtf !== null ? avgTtf.toFixed(1) : "—"}</div></div>
+      <div class="kpi"><div class="label">Avg Days in Process</div><div class="value">${avgDip !== null ? avgDip.toFixed(1) : "—"}</div></div>
       <div class="kpi"><div class="label">Scope</div><div class="value">All time</div></div>
     `;
   }
