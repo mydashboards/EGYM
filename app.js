@@ -1221,7 +1221,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderOverview() {
     const hiredRows = state.hiredRows || [];
-    let rows = state.allOverviewRows || [];
+   let rows = state.overviewRows || [];
 
     const selectedOverviewDept = state.selectedOverviewDepartment || "all";
     if (selectedOverviewDept !== "all") {
@@ -1917,7 +1917,7 @@ const avgDip = average(dipValues);
     /* ---------------- MANAGEMENT ---------------- */
 
   function renderManagement() {
-    const overviewRows = state.allOverviewRows || [];
+   const overviewRows = state.overviewRows || [];
     const hiredRows = state.hiredRows || [];
     const weeklyRows = state.allPipelineWeeklyRows || [];
     const inventoryRows = state.allPipelineInventoryRows || [];
