@@ -1277,6 +1277,8 @@ document.addEventListener("DOMContentLoaded", () => {
       else if (h === "critical") counts.critical += 1;
     });
 
+    state.overviewHealthCounts = counts;
+
     const cardsEl = $("overviewCards");
     if (cardsEl) {
       cardsEl.innerHTML = `
@@ -1963,8 +1965,6 @@ const counts = state.overviewHealthCounts || {
   warning: 0,
   critical: 0
 };
-    
-    state.overviewHealthCounts = counts;
 
     const hsEl = $("managementHealthSummary");
     if (hsEl) {
