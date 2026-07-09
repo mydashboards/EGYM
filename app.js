@@ -121,6 +121,8 @@ document.addEventListener("DOMContentLoaded", () => {
     selectedActivityRecruiter: "all",
     selectedSourcingRole: "all",
     selectedSourcingRecruiter: "all",
+    
+    selectedHiresRecruiter: "all",
 
     selectedManagementWeek: "",
     selectedManagementQuarter: "",
@@ -184,6 +186,16 @@ document.addEventListener("DOMContentLoaded", () => {
     return String(value || "").trim();
   }
 
+  function getRecruiterValue(row) {
+  return String(getField(row, [
+    "recruiter",
+    "pplwise_tap",
+    "pplwise_sourcer",
+    "tap",
+    "owner"
+  ]) || "").trim();
+}
+  
   function getDepartmentValue(row) {
     const val = getField(row, [
       "department",
@@ -1855,8 +1867,32 @@ document.addEventListener("DOMContentLoaded", () => {
     return values.reduce((s, v) => s + v, 0) / values.length;
   }
 
+  function updateHiresRecruiterFilter() {
+  const sel = $("hiresRecruiterSelect");
+  if (!sel) return;
+
+  const recruiters = getOrderedValues(
+    state.hiredRows || [],
+    "all",
+    r => getRecruiterValue(r)
+  );
+
+  setFilterOptions(sel, recruiters, "All recruiters");
+
+  const current = state.selectedHiresRecruiter || "all";
+  const allowed = new Set(["all", ...recruiters]);
+  sel.value = allowed.has(current) ? current : "all";
+  state.selectedHiresRecruiter = sel.value;
+}
+  
   function renderHires() {
-    const rows = state.hiredRows || [];
+    const selectedRecruiter = state.selectedHiresRecruiter || "all";
+
+    const rows = (state.hiredRows || []).filter(r => {
+      const recruiter = getRecruiterValue(r);
+      if (selectedRecruiter !== "all" && recruiter !== selectedRecruiter) return false;
+      return true;
+    });
     const tbody = $("hiresTable");
     const empty = $("hiresEmpty");
     const kpis = $("hiresKpis");
@@ -2694,8 +2730,9 @@ const counts = state.overviewHealthCounts || {
     setOverviewDepartmentOptions($("overviewDepartmentSelect"), state.departmentOptions);
 
     updatePipelineFilters();
-    updateActivityFilters();
-    updateSourcingFilters();
+updateActivityFilters();
+updateSourcingFilters();
+updateHiresRecruiterFilter();
 
     const awm = $("activityWeekModeSelect");
     if (awm) awm.value = state.selectedActivityWeekMode;
@@ -3062,6 +3099,10 @@ on("pipelineDepartmentSelect", "change", () => handleDepartmentChange("pipelineD
 on("activityDepartmentSelect", "change", () => handleDepartmentChange("activityDepartmentSelect"));
 on("sourcingDepartmentSelect", "change", () => handleDepartmentChange("sourcingDepartmentSelect"));
 on("hiresDepartmentSelect", "change", () => handleDepartmentChange("hiresDepartmentSelect"));
+  on("hiresRecruiterSelect", "change", () => {
+  state.selectedHiresRecruiter = $("hiresRecruiterSelect") ? $("hiresRecruiterSelect").value : "all";
+  renderHires();
+});
   
   on("hiresUnlockBtn", "click", unlockHiresWithPassword);
   on("hiresPasswordInput", "keydown", (e) => {
