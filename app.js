@@ -1077,56 +1077,88 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function getHealthByRoleFromInventory(inventoryRows, selectedWeekKey, filters = {}) {
-    const { roleFilter = "all", recruiterFilter = "all" } = filters;
+  const { roleFilter = "all", recruiterFilter = "all" } = filters;
 
-    const byRole = new Map();
-    const offerByRole = new Map();
+  const byRole = new Map();
+  const greenOverrideByRole = new Map();
 
-    const weekKeyToUse = selectedWeekKey === "all" ? TODAY_WEEK_KEY : selectedWeekKey;
-    if (!weekKeyToUse) return {};
+  const weekKeyToUse = selectedWeekKey === "all" ? TODAY_WEEK_KEY : selectedWeekKey;
+  if (!weekKeyToUse) return {};
 
-    (inventoryRows || []).forEach(r => {
-      const role = normalizeRoleKey(getField(r, ["role"]) || r.role);
-      if (!role) return;
+  (inventoryRows || []).forEach(r => {
+    const role = normalizeRoleKey(getField(r, ["role"]) || r.role);
+    if (!role) return;
 
-      if (roleFilter !== "all" && role !== roleFilter) return;
+    if (roleFilter !== "all" && role !== roleFilter) return;
 
-      const recruiter = (getField(r, ["recruiter"]) || r.recruiter || "Unassigned");
-      if (recruiterFilter !== "all" && recruiter !== recruiterFilter) return;
+    const recruiter =
+      getField(r, ["recruiter"]) ||
+      r.recruiter ||
+      "Unassigned";
 
-      if (weekKey(r) !== weekKeyToUse) return;
+    if (
+      recruiterFilter !== "all" &&
+      recruiter !== recruiterFilter
+    ) return;
 
-      const stageRaw = getField(r, ["stage"]) || r.stage;
-      const stageNorm = normalizeStageValue(stageRaw);
-      const c = num(getField(r, ["count"]) || r.count);
+    if (weekKey(r) !== weekKeyToUse) return;
 
-      if (stageNorm.includes("offer")) {
-        offerByRole.set(role, (offerByRole.get(role) || 0) + c);
-      }
+    const stageRaw = getField(r, ["stage"]) || r.stage;
+    const stageNorm = normalizeStageValue(stageRaw);
+    const c = num(getField(r, ["count"]) || r.count);
 
-      const stage = normalizeHealthStage(stageRaw);
-      if (stage !== "step1" && stage !== "step2") return;
+    // FINAL or OFFER >= 1 => always healthy
+    if (
+      c > 0 &&
+      (
+        stageNorm.includes("final") ||
+        stageNorm.includes("offer")
+      )
+    ) {
+      greenOverrideByRole.set(
+        role,
+        (greenOverrideByRole.get(role) || 0) + c
+      );
+    }
 
-      if (!byRole.has(role)) byRole.set(role, { step1: 0, step2: 0 });
-      const agg = byRole.get(role);
-      if (stage === "step1") agg.step1 += c;
-      if (stage === "step2") agg.step2 += c;
-    });
+    const stage = normalizeHealthStage(stageRaw);
+    if (stage !== "step1" && stage !== "step2") return;
 
-    const health = {};
+    if (!byRole.has(role)) {
+      byRole.set(role, { step1: 0, step2: 0 });
+    }
 
-    byRole.forEach((agg, role) => {
-      const base = computeHealthFromCounts(agg.step1, agg.step2);
-      const hasOffer = (offerByRole.get(role) || 0) > 0;
-      health[role] = hasOffer ? "healthy" : base;
-    });
+    const agg = byRole.get(role);
 
-    offerByRole.forEach((count, role) => {
-      if (count > 0 && !health[role]) health[role] = "healthy";
-    });
+    if (stage === "step1") agg.step1 += c;
+    if (stage === "step2") agg.step2 += c;
+  });
 
-    return health;
-  }
+  const health = {};
+
+  byRole.forEach((agg, role) => {
+    const base = computeHealthFromCounts(
+      agg.step1,
+      agg.step2
+    );
+
+    const hasFinalOrOffer =
+      (greenOverrideByRole.get(role) || 0) > 0;
+
+    health[role] = hasFinalOrOffer
+      ? "healthy"
+      : base;
+  });
+
+  // Covers roles that only have Final/Offer
+  greenOverrideByRole.forEach((count, role) => {
+    if (count > 0 && !health[role]) {
+      health[role] = "healthy";
+    }
+  });
+
+  return health;
+}
 
   /* ---------------- TABS ---------------- */
 
