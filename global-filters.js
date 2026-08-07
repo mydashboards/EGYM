@@ -38,12 +38,26 @@
   function schedulePost(delay=80){clearTimeout(postTimer);postTimer=setTimeout(postProcess,delay);}
   function applyAll(){if(applying)return;applying=true;try{applyPeriod();applyDimensions();}finally{applying=false;}schedulePost();}
   function change(){applyAll();window.dispatchEvent(new CustomEvent("egym:global-filters-change",{detail:{...F}}));}
-  function scrollFiltersIntoView(){
-    const tabs=document.querySelector("#contributorView .tabs");
-    if(!tabs)return;
-    requestAnimationFrame(()=>tabs.scrollIntoView({block:"start",behavior:"auto"}));
-    setTimeout(()=>tabs.scrollIntoView({block:"start",behavior:"auto"}),0);
+
+  function activateTabWithoutAnchorJump(id){
+    const target=id||"overview";
+    localStorage.setItem("active_tab",target);
+    document.querySelectorAll("#contributorView .tab").forEach(tab=>{
+      const active=tab.dataset.tab===target;
+      tab.classList.toggle("active",active);
+      tab.setAttribute("aria-selected",String(active));
+    });
+    document.querySelectorAll("#contributorView .panel").forEach(panel=>panel.classList.toggle("active",panel.id===target));
+
+    if(target==="hires"){
+      const unlocked=localStorage.getItem("hires_unlocked")==="1";
+      $("hiresLock")?.classList.toggle("hidden",unlocked);
+      $("hiresContent")?.classList.toggle("hidden",!unlocked);
+    }
+
+    history.replaceState(null,"",`${window.location.pathname}${window.location.search}#${target}`);
   }
+
   function bind(){
     $("globalPeriodModeSelect")?.addEventListener("change",e=>{F.periodMode=e.target.value;if(F.periodMode==="rolling"){F.fromWeek=rollingStart(F.week,4);F.toWeek=F.week;}updateModeUI();change();});
     $("globalWeekSelect")?.addEventListener("change",e=>{F.week=e.target.value;F.toWeek=F.week;if(F.periodMode==="rolling")F.fromWeek=rollingStart(F.week,4);change();});
@@ -53,10 +67,16 @@
     $("globalRoleSelect")?.addEventListener("change",e=>{F.role=e.target.value;change();});
     $("globalRecruiterSelect")?.addEventListener("change",e=>{F.recruiter=e.target.value;change();});
 
-    // app.js updates location.hash when a tab is selected. The browser then
-    // jumps to that panel. After the hash change, move the viewport back to
-    // the tab navigation so the global filter bar directly below it remains visible.
-    window.addEventListener("hashchange",scrollFiltersIntoView);
+    // Intercept tab clicks before app.js writes window.location.hash.
+    // Updating the URL with history.replaceState preserves the hash/deep link
+    // but does not trigger the browser's native anchor scrolling.
+    document.querySelector("#contributorView .tabs")?.addEventListener("click",e=>{
+      const tab=e.target.closest(".tab");
+      if(!tab)return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      activateTabWithoutAnchorJump(tab.dataset.tab||"overview");
+    },true);
   }
 
   document.addEventListener("DOMContentLoaded",()=>{inject();bind();updateModeUI();const last=$("lastUpdated");if(last)new MutationObserver(()=>{syncOptions();applyAll();}).observe(last,{childList:true,characterData:true,subtree:true});setTimeout(()=>{syncOptions();applyAll();},1000);setTimeout(()=>{syncOptions();applyAll();},2500);});
