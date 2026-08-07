@@ -131,7 +131,6 @@
       bar.id = "globalFilterBar";
       bar.className = "global-filter-bar";
       bar.innerHTML = `
-        <div class="global-filter-title">Global Filters</div>
         <div class="global-filter-controls">
           <label><span>Period</span><select id="globalPeriodModeSelect">
             <option value="week">Single week</option><option value="rolling">Rolling 4 weeks</option>
@@ -144,20 +143,53 @@
           <label><span>Role</span><select id="globalRoleSelect"></select></label>
           <label><span>Recruiter</span><select id="globalRecruiterSelect"></select></label>
         </div>`;
-      $("dataErrors")?.insertAdjacentElement("afterend", bar);
+
+      const tabs = document.querySelector("#contributorView .tabs");
+      if (tabs) tabs.insertAdjacentElement("afterend", bar);
+      else document.querySelector("main")?.insertAdjacentElement("afterbegin", bar);
     }
 
     if (!$("globalFilterStyles")) {
       const style = document.createElement("style");
       style.id = "globalFilterStyles";
       style.textContent = `
-        .global-filter-bar{margin:16px 0 18px;padding:14px 16px;border:1px solid #e5e7eb;border-radius:14px;background:#fff;display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap;box-shadow:0 1px 2px rgba(0,0,0,.03)}
-        .global-filter-title{font-weight:700;font-size:14px;padding-bottom:10px;white-space:nowrap}
-        .global-filter-controls{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;flex:1}
-        .global-filter-controls label{display:flex;flex-direction:column;gap:5px;min-width:130px}.global-filter-controls label span{font-size:11px;color:#6b7280;font-weight:600}.global-filter-controls select{min-height:36px}
+        .global-filter-bar{
+          margin:12px 0 18px;
+          padding:12px 14px;
+          border:1px solid var(--line);
+          border-radius:18px;
+          background:rgba(255,255,255,.03);
+          box-shadow:0 8px 24px rgba(0,0,0,.18);
+        }
+        .global-filter-controls{
+          display:grid;
+          grid-template-columns:minmax(145px,.85fr) minmax(130px,.7fr) minmax(190px,1.05fr) minmax(220px,1.25fr) minmax(170px,.95fr);
+          gap:10px;
+          align-items:end;
+          width:100%;
+        }
+        .global-filter-controls label{min-width:0}
+        .global-filter-controls label span{color:var(--muted2);font-size:11px;font-weight:700}
+        .global-filter-controls select{
+          width:100%;
+          min-width:0;
+          min-height:40px;
+          background:rgba(255,255,255,.04);
+          border:1px solid var(--line);
+          color:var(--text);
+          padding:10px 12px;
+          border-radius:14px;
+          box-shadow:0 4px 14px rgba(0,0,0,.12);
+        }
+        .global-filter-controls select:focus{border-color:rgba(249,115,22,.42)}
         .global-filter-controls .hidden,.global-local-filter-hidden,tr.global-filter-hidden{display:none!important}
-        body.global-filters-active #pipeline .panel-head .filters,body.global-filters-active #activity .panel-head .filters,body.global-filters-active #sourcing .panel-head .filters,body.global-filters-active #hiresContent .panel-head .filters,body.global-filters-active #managementView .card-head .filters{display:none!important}
-        @media(max-width:900px){.global-filter-bar{align-items:stretch}.global-filter-title{width:100%;padding-bottom:0}.global-filter-controls label{min-width:150px;flex:1}}
+        body.global-filters-active #pipeline .panel-head .filters,
+        body.global-filters-active #activity .panel-head .filters,
+        body.global-filters-active #sourcing .panel-head .filters,
+        body.global-filters-active #hiresContent .panel-head .filters,
+        body.global-filters-active #managementView .card-head .filters{display:none!important}
+        @media(max-width:1050px){.global-filter-controls{grid-template-columns:repeat(3,minmax(150px,1fr))}}
+        @media(max-width:700px){.global-filter-controls{grid-template-columns:1fr 1fr}}
       `;
       document.head.appendChild(style);
     }
@@ -206,7 +238,7 @@
     const end = endWeek();
     const start = F.periodMode === "rolling" ? rollingStart(end, 4) : F.fromWeek;
 
-    if (end) setLocal("pipelineWeekSelect", end); // inventory = final snapshot only
+    if (end) setLocal("pipelineWeekSelect", end);
 
     if (F.periodMode === "week") {
       setLocal("activityWeekModeSelect", "week");
