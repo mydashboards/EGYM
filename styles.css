@@ -513,3 +513,52 @@ tbody tr:hover{
 #overviewCards .kpi { display: flex; flex-direction: column; }
 #overviewCards .kpi .label { min-height: 2.6em; }
 #overviewCards .kpi .value { margin-top: 8px; }
+
+
+/* EGYM brand refresh — cyan / violet / magenta / red gradient */
+:root{
+  --bg0:#090d18;
+  --bg1:#101426;
+  --panel:#141a2b;
+  --panel2:#1c2336;
+  --line:rgba(206,226,243,.12);
+  --line2:rgba(206,226,243,.20);
+  --text:#f4f7fb;
+  --muted:rgba(230,239,249,.75);
+  --muted2:rgba(230,239,249,.60);
+  --accent:#65cfd6;
+  --accent-soft:rgba(101,207,214,.13);
+  --accent-soft-2:rgba(101,207,214,.30);
+  --accent-text:#9cecf0;
+  --shadow:0 16px 45px rgba(0,0,0,.24);
+}
+body{
+  background:
+    radial-gradient(900px 600px at 0% 0%,rgba(101,207,214,.15),transparent 65%),
+    radial-gradient(800px 600px at 100% 5%,rgba(195,24,104,.14),transparent 65%),
+    linear-gradient(180deg,#0a1020 0%,#111626 65%,#0c1020 100%);
+}
+.topbar{border-bottom:1px solid rgba(101,207,214,.20)}
+.brand{gap:18px}
+.brand h1{font-size:clamp(26px,3vw,40px);font-weight:800;letter-spacing:-.035em}
+.brand .pill{
+  border:0;
+  border-radius:8px;
+  background:linear-gradient(105deg,#67cdd5 0%,#6bafd4 30%,#8b69b6 53%,#c21869 76%,#ec332d 100%);
+  color:white;
+  font-weight:800;
+  letter-spacing:.38em;
+  padding:10px 12px 10px 17px;
+  box-shadow:0 5px 22px rgba(191,29,107,.17);
+}
+.toggle.active,.tab.active{background:rgba(101,207,214,.15);color:#a6f3f4}
+.btn{border-color:rgba(101,207,214,.30);color:#a6f3f4}
+.btn:hover{border-color:rgba(101,207,214,.55);background:rgba(101,207,214,.12)}
+select:focus,input[type="password"]:focus,input[type="text"]:focus,input[type="email"]:focus{
+  border-color:rgba(101,207,214,.60);
+  box-shadow:0 0 0 4px rgba(101,207,214,.12);
+}
+tbody tr:hover{background:rgba(101,207,214,.06)}
+.utilization-bar span{background:linear-gradient(90deg,#67cdd5,#b91c74)}
+.card{border-color:rgba(206,226,243,.11)}
+.kpi{border-color:rgba(206,226,243,.10)}
