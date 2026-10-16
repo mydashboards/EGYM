@@ -300,7 +300,8 @@ document.addEventListener("DOMContentLoaded", () => {
     state.pipelineInventoryRows = filterActiveRecruiters(filterRowsByDepartment(state.allPipelineInventoryRows));
     state.sourcingRows = filterActiveRecruiters(filterRowsByDepartment(state.allSourcingRows));
 
-    state.hiredRows = filterActiveRecruiters(filterRowsByDepartment(state.allHiredRows));
+    // Historical hires must include former and unassigned recruiters.
+    state.hiredRows = filterRowsByDepartment(state.allHiredRows);
 
     state.roleNotesRows = filterActiveRecruiters(filterRowsByDepartment(state.allRoleNotesRows));
     state.weeklyUpdatesRows = filterActiveRecruiters(filterRowsByDepartment(state.allWeeklyUpdatesRows));
