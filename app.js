@@ -1012,9 +1012,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const s1 = num(step1Count);
     const s2 = num(step2Count);
     if (s1 === 0 && s2 === 0) return "unknown";
-    if (s1 < 3) return "critical";
-    if (s1 < 6 && s2 < 3) return "critical";
-    if (s1 < 10 && s2 < 4) return "warning";
+    // Action only for very thin early-stage pipelines without Step 2 progress.
+    if (s1 < 3 && s2 === 0) return "critical";
+    // Low volume or limited conversion is Attention, not automatically Action.
+    if (s1 < 8 && s2 < 2) return "warning";
     return "healthy";
   }
 
