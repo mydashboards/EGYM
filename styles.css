@@ -508,3 +508,8 @@ tbody tr:hover{
 /* Sourcing: align KPI with the table container and keep sourced counts left-aligned. */
 #sourcingSummary { padding-left: 0; padding-right: 0; }
 #sourcingTable td.num, #sourcing table thead th.num { text-align: left; padding-left: 12px; }
+
+/* Overview executive KPIs: align values regardless of label wrapping. */
+#overviewCards .kpi { display: flex; flex-direction: column; }
+#overviewCards .kpi .label { min-height: 2.6em; }
+#overviewCards .kpi .value { margin-top: 8px; }
