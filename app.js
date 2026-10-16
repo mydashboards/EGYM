@@ -2061,7 +2061,6 @@ const avgDip = average(dipValues);
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${recruiter.charAt(0).toUpperCase() + recruiter.slice(1)}</td>
-        <td class="num">${formatNumber(agg.screens)}</td>
         <td class="num">${avgScreens.toFixed(1)}</td>
         <td class="num">${formatNumber(agg.sourced)}</td>
         <td class="num">${avgSourced.toFixed(1)}</td>
