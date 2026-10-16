@@ -1882,6 +1882,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
     tbody.innerHTML = "";
 
+    const hiresScroll = $("hiresTableScroll");
+    const hiresFullButton = $("hiresSeeFullList");
+    if (hiresFullButton && !hiresFullButton.dataset.bound) {
+      hiresFullButton.dataset.bound = "1";
+      hiresFullButton.addEventListener("click", () => {
+        const expanded = hiresScroll.classList.toggle("expanded");
+        hiresFullButton.textContent = expanded ? "Show less" : "See full list";
+        hiresFullButton.setAttribute("aria-expanded", String(expanded));
+      });
+    }
+
     if (!rows.length) empty.classList.remove("hidden");
     else empty.classList.add("hidden");
 
@@ -1920,6 +1931,28 @@ if (daysInProcess !== null) dipValues.push(daysInProcess);
       `;
       tbody.appendChild(tr);
     });
+
+    // Size the collapsed viewport to the header plus exactly seven rows.
+    // Recalculate after filtering and on layout changes (wrapping can vary).
+    const sizeHiresViewport = () => {
+      if (!hiresScroll) return;
+      const table = hiresScroll.querySelector("table");
+      const header = table?.querySelector("thead");
+      const visibleRows = [...tbody.querySelectorAll("tr")].filter(row =>
+        !row.classList.contains("global-filter-hidden") && getComputedStyle(row).display !== "none"
+      );
+      const rowHeights = visibleRows.slice(0, 7).map(row => row.getBoundingClientRect().height);
+      const height = (header?.getBoundingClientRect().height || 0) +
+        rowHeights.reduce((sum, value) => sum + value, 0) + 2;
+      if (height > 2) hiresScroll.style.setProperty("--hires-list-height", height + "px");
+      if (hiresFullButton) hiresFullButton.classList.toggle("hidden", visibleRows.length <= 7);
+    };
+    requestAnimationFrame(sizeHiresViewport);
+    if (!window.egymHiresViewportResizeBound) {
+      window.egymHiresViewportResizeBound = true;
+      window.addEventListener("resize", () => requestAnimationFrame(sizeHiresViewport));
+      document.addEventListener("egym:hires-filtered", () => requestAnimationFrame(sizeHiresViewport));
+    }
 
    const avgTth = average(tthValues);
 const avgDip = average(dipValues);
