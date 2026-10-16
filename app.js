@@ -2018,61 +2018,58 @@ const avgDip = average(dipValues);
     const empty = $("managementRecruiterEmpty");
     if (!tbody || !empty) return;
 
-    const rows = weeklyRows || [];
-    const totalsByRecruiter = new Map();
-    const weekCountByRecruiter = new Map();
+    const active = ["alex", "jenny", "mehak", "sven"];
+    const totals = new Map(active.map(name => [name, { screens: 0, sourced: 0, weeks: new Set() }]));
+    const allWeeks = new Set();
 
-    rows.forEach(r => {
-      const recruiter = (r.recruiter || "Unassigned").trim() || "Unassigned";
-      if (!new Set(["alex", "jenny", "mehak", "sven"]).has(recruiter.toLowerCase())) return;
+    (weeklyRows || []).forEach(r => {
+      const recruiter = String(r.recruiter || "").trim().toLowerCase();
+      if (!totals.has(recruiter)) return;
       const wk = weekKey(r);
       if (!wk) return;
-
-      if (!totalsByRecruiter.has(recruiter)) {
-        totalsByRecruiter.set(recruiter, { step1: 0 });
-        weekCountByRecruiter.set(recruiter, new Set());
-      }
-
-      const stage = normalizeHealthStage(r.stage);
-      if (stage !== "step1") return;
-
-      const agg = totalsByRecruiter.get(recruiter);
-      agg.step1 += num(r.count);
-      weekCountByRecruiter.get(recruiter).add(wk);
+      allWeeks.add(wk);
+      const agg = totals.get(recruiter);
+      agg.weeks.add(wk);
+      if (normalizeHealthStage(r.stage) === "step1") agg.screens += num(r.count);
     });
 
+    // Use the same recent four-week window for both activities.
+    const sortedWeeks = [...allWeeks].sort();
+    const windowWeeks = new Set(sortedWeeks.slice(-4));
+    // Recalculate screens within that window, not across all historical weeks.
+    totals.forEach(agg => { agg.screens = 0; agg.sourced = 0; });
+    (weeklyRows || []).forEach(r => {
+      const recruiter = String(r.recruiter || "").trim().toLowerCase();
+      if (!totals.has(recruiter) || !windowWeeks.has(weekKey(r))) return;
+      if (normalizeHealthStage(r.stage) === "step1") totals.get(recruiter).screens += num(r.count);
+    });
+    (state.allSourcingRows || []).forEach(r => {
+      const recruiter = String(r.recruiter || "").trim().toLowerCase();
+      if (!totals.has(recruiter) || !windowWeeks.has(weekKey(r))) return;
+      totals.get(recruiter).sourced += num(r.sourced);
+    });
+
+    const weeksCount = windowWeeks.size || 1;
     tbody.innerHTML = "";
-    const rowsOut = Array.from(totalsByRecruiter.entries());
-
-    if (!rowsOut.length) {
-      empty.classList.remove("hidden");
-      return;
-    }
-
-    empty.classList.add("hidden");
-
-    rowsOut.forEach(([recruiter, data]) => {
-      const weeksSet = weekCountByRecruiter.get(recruiter) || new Set();
-      const weeksCount = weeksSet.size || 0;
-      const avgStep1 = weeksCount > 0 ? data.step1 / weeksCount : null;
-      const utilizationBase = avgStep1 || 0;
-      const utilization = Math.round((utilizationBase / 15) * 100);
-      const barWidth = `${Math.max(0, Math.min(100, utilization))}%`;
-
+    active.forEach(recruiter => {
+      const agg = totals.get(recruiter);
+      const avgScreens = agg.screens / weeksCount;
+      const avgSourced = agg.sourced / weeksCount;
+      // 15 screens = 100%; 8 screens + 100 sourced = 100%.
+      const utilization = Math.round((avgScreens / 15 + avgSourced * (7 / 1500)) * 100);
+      const barWidth = Math.max(0, Math.min(100, utilization));
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${recruiter}</td>
-        <td class="num ${getNumberClass(data.step1)}">${formatNumber(data.step1)}</td>
-        <td class="num ${getNumberClass(avgStep1)}">${avgStep1 === null ? "—" : avgStep1.toFixed(1)}</td>
-        <td class="num">
-          <div class="utilization">
-            <div class="utilization-bar"><span style="width:${barWidth};"></span></div>
-            <span>${utilization}%</span>
-          </div>
-        </td>
+        <td>${recruiter.charAt(0).toUpperCase() + recruiter.slice(1)}</td>
+        <td class="num">${formatNumber(agg.screens)}</td>
+        <td class="num">${avgScreens.toFixed(1)}</td>
+        <td class="num">${formatNumber(agg.sourced)}</td>
+        <td class="num">${avgSourced.toFixed(1)}</td>
+        <td class="num"><div class="utilization"><div class="utilization-bar"><span style="width:${barWidth}%;"></span></div><span>${utilization}%</span></div></td>
       `;
       tbody.appendChild(tr);
     });
+    empty.classList.add("hidden");
   }
 
   function renderManagementRoleInsights({ roleNotesRows, selectedActivityWeek, selectedRole, selectedRecruiter, healthByRole }) {
