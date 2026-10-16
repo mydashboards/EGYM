@@ -1806,7 +1806,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const role = r.role;
       if (!role || seen.has(role)) return;
 
-      if (!shouldShowRoleOutsideOverview(role, num(r.sourced) > 0)) return;
+      // Hide roles with no sourcing in the selected week or date range.
+      if ((byRole.get(role) || 0) <= 0) return;
+      if (!shouldShowRoleOutsideOverview(role, true)) return;
 
       seen.add(role);
       roleOrder.push(role);
