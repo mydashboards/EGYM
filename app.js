@@ -1466,7 +1466,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if ((sm.get(stageKey) || 0) > 0) hasData = true;
       });
 
-      if (!shouldShowRoleOutsideOverview(role, hasData)) return;
+      // Inventory lists every role present in the selected week, including zero-count roles.
 
       seen.add(role);
       roleList.push(role);
