@@ -562,3 +562,39 @@ tbody tr:hover{background:rgba(101,207,214,.06)}
 .utilization-bar span{background:linear-gradient(90deg,#67cdd5,#b91c74)}
 .card{border-color:rgba(206,226,243,.11)}
 .kpi{border-color:rgba(206,226,243,.10)}
+
+
+/* Lighter EGYM canvas: neutral, airy background instead of dark navy. */
+:root{
+  --bg0:#f4f6f8;
+  --bg1:#edf1f4;
+  --panel:#ffffff;
+  --panel2:#f5f7fa;
+  --line:rgba(37,53,70,.12);
+  --line2:rgba(37,53,70,.20);
+  --text:#202a35;
+  --muted:rgba(32,42,53,.72);
+  --muted2:rgba(32,42,53,.60);
+  --accent-text:#167d87;
+  --accent-soft:rgba(85,196,207,.13);
+  --accent-soft-2:rgba(85,196,207,.30);
+  --shadow:0 12px 35px rgba(35,55,70,.07);
+}
+body{
+  background:
+    radial-gradient(950px 560px at 0% 0%,rgba(101,207,214,.17),transparent 68%),
+    radial-gradient(850px 580px at 100% 0%,rgba(207,58,126,.09),transparent 68%),
+    linear-gradient(180deg,#f8fafb 0%,#f1f4f7 100%);
+}
+.view-toggle,.tabs{background:rgba(255,255,255,.75);box-shadow:0 4px 20px rgba(35,55,70,.05)}
+.toggle:hover,.tab:hover{background:rgba(85,196,207,.10)}
+.toggle.active,.tab.active{background:rgba(85,196,207,.17);color:#146f79}
+.btn{background:#fff;color:#167d87;box-shadow:0 4px 14px rgba(35,55,70,.06)}
+.btn:hover{background:#eaf9fa}
+select,input[type="password"],input[type="text"],input[type="email"]{
+  background:#fff;color:var(--text);box-shadow:none;
+}
+thead th{background:#f6f8fa}
+tbody tr:hover{background:rgba(85,196,207,.07)}
+.health-badge{background:#f6f8fa}
+.utilization-bar{background:#e7edf1}
