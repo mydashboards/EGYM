@@ -37,14 +37,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const PREFERRED_YEAR = CURRENT_ISO.year;
 
   const CSV = {
-    overview: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=780337575&single=true&output=csv",
-    pipelineWeekly: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=565686110&single=true&output=csv",
-    pipelineInventory: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1802705167&single=true&output=csv",
-    sourcing: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1825170360&single=true&output=csv",
-    hired: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=756634566&single=true&output=csv",
-    roleTargets: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1524950504&single=true&output=csv",
-    roleNotes: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1004956410&single=true&output=csv",
-    weeklyUpdates: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQDgJVM1NTZyJW9bWpf5GrcS3WbJP7Et0AViTEkCs5OhaBmbvOGZuUSwnhNLJCg7yDfiCCz-TAHCC0p/pub?gid=1004956410&single=true&output=csv"
+    overview: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ3oxExPG__Mo0V706NexD1ffSd_DaAudfRzfbjF4bXyNwo0b93IqlGShOdCFLSqw/pub?gid=792421337&single=true&output=csv",
+    pipelineWeekly: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ3oxExPG__Mo0V706NexD1ffSd_DaAudfRzfbjF4bXyNwo0b93IqlGShOdCFLSqw/pub?gid=882165607&single=true&output=csv",
+    pipelineInventory: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ3oxExPG__Mo0V706NexD1ffSd_DaAudfRzfbjF4bXyNwo0b93IqlGShOdCFLSqw/pub?gid=1284601080&single=true&output=csv",
+    sourcing: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ3oxExPG__Mo0V706NexD1ffSd_DaAudfRzfbjF4bXyNwo0b93IqlGShOdCFLSqw/pub?gid=1634913670&single=true&output=csv",
+    hired: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ3oxExPG__Mo0V706NexD1ffSd_DaAudfRzfbjF4bXyNwo0b93IqlGShOdCFLSqw/pub?gid=1421447105&single=true&output=csv",
+    roleTargets: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ3oxExPG__Mo0V706NexD1ffSd_DaAudfRzfbjF4bXyNwo0b93IqlGShOdCFLSqw/pub?gid=1127452941&single=true&output=csv",
+    weeklyUpdates: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ3oxExPG__Mo0V706NexD1ffSd_DaAudfRzfbjF4bXyNwo0b93IqlGShOdCFLSqw/pub?gid=917475845&single=true&output=csv"
   };
 
   const DATA_SOURCE_LABELS = {
@@ -2854,16 +2853,14 @@ updateHiresRecruiterFilter();
         pipelineInventoryRaw,
         sourcingRaw,
         hiredRaw,
-        targetsRaw,
-        roleNotesRaw
+        targetsRaw
       ] = await Promise.all([
         loadCSV("overview", CSV.overview),
         loadCSV("pipelineWeekly", CSV.pipelineWeekly),
         loadCSV("pipelineInventory", CSV.pipelineInventory),
         loadCSV("sourcing", CSV.sourcing),
         loadCSV("hired", CSV.hired),
-        loadCSV("roleTargets", CSV.roleTargets),
-        loadCSV("roleNotes", CSV.roleNotes)
+        loadCSV("roleTargets", CSV.roleTargets)
       ]);
 
       let weeklyUpdatesRaw = [];
@@ -2890,7 +2887,7 @@ updateHiresRecruiterFilter();
       state.allSourcingRows = normalizeSourcing(sourcingRaw || []);
       state.allHiredRows = hiredRaw || [];
       state.roleTargets = normalizeTargets(targetsRaw || []);
-      state.allRoleNotesRows = normalizeRoleNotes(roleNotesRaw || []);
+      state.allRoleNotesRows = [];
       state.allWeeklyUpdatesRows = normalizeWeeklyUpdates(weeklyUpdatesRaw || []);
 
       state.departmentOptions = buildDepartmentOptions({
