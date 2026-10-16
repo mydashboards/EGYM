@@ -2062,9 +2062,7 @@ const avgDip = average(dipValues);
       tr.innerHTML = `
         <td>${recruiter.charAt(0).toUpperCase() + recruiter.slice(1)}</td>
         <td class="num">${avgScreens.toFixed(1)}</td>
-        <td class="num">${formatNumber(agg.sourced)}</td>
         <td class="num">${avgSourced.toFixed(1)}</td>
-        <td class="num"><div class="utilization"><div class="utilization-bar"><span style="width:${barWidth}%;"></span></div><span>${utilization}%</span></div></td>
       `;
       tbody.appendChild(tr);
     });
