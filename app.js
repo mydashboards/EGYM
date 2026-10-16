@@ -277,6 +277,16 @@ document.addEventListener("DOMContentLoaded", () => {
     return normalizedRow === normalizedSelected;
   }
 
+  // Former project contributors: retain source data, exclude from active dashboard views.
+  const INACTIVE_RECRUITERS = new Set(["sophia", "marco", "richard"]);
+  function isActiveRecruiter(row) {
+    const recruiter = String(getField(row, ["recruiter", "pplwise_tap", "pplwise_sourcer", "tap", "owner"]) || row.recruiter || "").trim().toLowerCase();
+    return !INACTIVE_RECRUITERS.has(recruiter);
+  }
+  function filterActiveRecruiters(rows) {
+    return (rows || []).filter(isActiveRecruiter);
+  }
+
   function filterRowsByDepartment(rows) {
     if (!state.selectedDepartment || String(state.selectedDepartment).toLowerCase() === "all") return rows || [];
     return (rows || []).filter(row =>
@@ -286,14 +296,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function applyDepartmentSelection() {
     state.overviewRows = filterRowsByDepartment(state.allOverviewRows);
-    state.pipelineWeeklyRows = filterRowsByDepartment(state.allPipelineWeeklyRows);
-    state.pipelineInventoryRows = filterRowsByDepartment(state.allPipelineInventoryRows);
-    state.sourcingRows = filterRowsByDepartment(state.allSourcingRows);
+    state.pipelineWeeklyRows = filterActiveRecruiters(filterRowsByDepartment(state.allPipelineWeeklyRows));
+    state.pipelineInventoryRows = filterActiveRecruiters(filterRowsByDepartment(state.allPipelineInventoryRows));
+    state.sourcingRows = filterActiveRecruiters(filterRowsByDepartment(state.allSourcingRows));
 
-    state.hiredRows = filterRowsByDepartment(state.allHiredRows);
+    state.hiredRows = filterActiveRecruiters(filterRowsByDepartment(state.allHiredRows));
 
-    state.roleNotesRows = filterRowsByDepartment(state.allRoleNotesRows);
-    state.weeklyUpdatesRows = filterRowsByDepartment(state.allWeeklyUpdatesRows);
+    state.roleNotesRows = filterActiveRecruiters(filterRowsByDepartment(state.allRoleNotesRows));
+    state.weeklyUpdatesRows = filterActiveRecruiters(filterRowsByDepartment(state.allWeeklyUpdatesRows));
   }
 
   function getNumberClass(value) {
