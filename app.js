@@ -1304,11 +1304,6 @@ document.addEventListener("DOMContentLoaded", () => {
       return Math.max(0, baseOpenings - (hiresByRole[role] || 0));
     }
 
-    const onHoldRoles = rows.filter(r => {
-      const status = normalizeHeader(getField(r, ["status"]));
-      return status === "on_hold" || status === "onhold" || status.includes("hold");
-    }).length;
-
     const openRoles = rows.filter(r => {
       const status = normalizeHeader(getField(r, ["status"]));
       if (status !== "open") return false;
@@ -1337,7 +1332,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (cardsEl) {
       cardsEl.innerHTML = `
         <div class="kpi"><div class="label">Open Roles</div><div class="value">${openRoles}</div></div>
-        <div class="kpi"><div class="label">On hold</div><div class="value">${onHoldRoles}</div></div>
         <div class="kpi"><div class="label">Filled Positions</div><div class="value">${filledPositions}</div></div>
         <div class="kpi"><div class="label">Total Openings</div><div class="value">${totalOpenings}</div></div>
       `;
