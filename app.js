@@ -1789,51 +1789,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const thead = document.querySelector("#sourcing table thead");
     if (thead) {
-      const convLabel = mode === "all" ? "Conv. (all)" : mode === "range" ? "Conv. (range)" : "Conv. (4w)";
-      thead.innerHTML = `
-        <tr>
-          <th>Role</th>
-          <th class="num">Sourced</th>
-          <th class="num">Sourced Screens</th>
-          <th class="num">${convLabel}</th>
-          <th class="num">Connects</th>
-          <th class="num">Connect Screens</th>
-          <th class="num">${convLabel}</th>
-        </tr>
-      `;
+      thead.innerHTML = `<tr><th>Role</th><th class="num">Sourced</th></tr>`;
     }
 
     let totalSourced = 0;
-    let totalSourcedScreens = 0;
-    let totalConnect = 0;
-    let totalConnectScreens = 0;
-
     const byRole = new Map();
     filtered.forEach(r => {
-      if (!byRole.has(r.role)) {
-        byRole.set(r.role, {
-          sourced: 0,
-          sourcedScreens: 0,
-          connect: 0,
-          connectScreens: 0
-        });
-      }
-
-      const agg = byRole.get(r.role);
-      const sourced = num(r.sourced);
-      const sourcedScreens = num(r.sourced_screens);
-      const connect = num(r.connect);
-      const connectScreens = num(r.connect_screens);
-
-      agg.sourced += sourced;
-      agg.sourcedScreens += sourcedScreens;
-      agg.connect += connect;
-      agg.connectScreens += connectScreens;
-
-      totalSourced += sourced;
-      totalSourcedScreens += sourcedScreens;
-      totalConnect += connect;
-      totalConnectScreens += connectScreens;
+      byRole.set(r.role, (byRole.get(r.role) || 0) + num(r.sourced));
+      totalSourced += num(r.sourced);
     });
 
     const roleOrder = [];
@@ -1843,50 +1806,23 @@ document.addEventListener("DOMContentLoaded", () => {
       const role = r.role;
       if (!role || seen.has(role)) return;
 
-      const hasData =
-        num(r.sourced) > 0 ||
-        num(r.connect) > 0 ||
-        num(r.sourced_screens) > 0 ||
-        num(r.connect_screens) > 0;
-
-      if (!shouldShowRoleOutsideOverview(role, hasData)) return;
+      if (!shouldShowRoleOutsideOverview(role, num(r.sourced) > 0)) return;
 
       seen.add(role);
       roleOrder.push(role);
     });
 
     roleOrder.forEach(role => {
-      const agg = byRole.get(role) || { sourced: 0, sourcedScreens: 0, connect: 0, connectScreens: 0 };
-      const sourcedConv = agg.sourced > 0 ? agg.sourcedScreens / agg.sourced : null;
-      const connectConv = agg.connect > 0 ? agg.connectScreens / agg.connect : null;
-
+      const sourced = byRole.get(role) || 0;
       const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${role}</td>
-        <td class="num ${getNumberClass(agg.sourced)}">${formatNumber(agg.sourced)}</td>
-        <td class="num ${getNumberClass(agg.sourcedScreens)}">${formatNumber(agg.sourcedScreens)}</td>
-        <td class="num ${getNumberClass(sourcedConv)}">${formatPercent(sourcedConv)}</td>
-        <td class="num ${getNumberClass(agg.connect)}">${formatNumber(agg.connect)}</td>
-        <td class="num ${getNumberClass(agg.connectScreens)}">${formatNumber(agg.connectScreens)}</td>
-        <td class="num ${getNumberClass(connectConv)}">${formatPercent(connectConv)}</td>
-      `;
+      tr.innerHTML = `<td>${role}</td><td class="num ${getNumberClass(sourced)}">${formatNumber(sourced)}</td>`;
       tbody.appendChild(tr);
     });
-
-    const overallSourcedConv = totalSourced > 0 ? totalSourcedScreens / totalSourced : null;
-    const overallConnectConv = totalConnect > 0 ? totalConnectScreens / totalConnect : null;
-
-    let convLabel = "4-week conversion";
-    if (mode === "all") convLabel = "All-time conversion";
-    if (mode === "range") convLabel = "Range conversion";
 
     const summary = $("sourcingSummary");
     if (summary) {
       summary.innerHTML = `
         <div class="kpi"><div class="label">Total Sourced</div><div class="value">${formatNumber(totalSourced)}</div></div>
-        <div class="kpi"><div class="label">Sourced Screens</div><div class="value">${formatNumber(totalSourcedScreens)}</div><div class="sub">${formatPercent(overallSourcedConv)} ${convLabel}</div></div>
-        <div class="kpi"><div class="label">Total Connects</div><div class="value">${formatNumber(totalConnect)}</div></div>
-        <div class="kpi"><div class="label">Connect Screens</div><div class="value">${formatNumber(totalConnectScreens)}</div><div class="sub">${formatPercent(overallConnectConv)} ${convLabel}</div></div>
       `;
     }
   }
