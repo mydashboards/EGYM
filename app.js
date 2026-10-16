@@ -278,7 +278,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Former project contributors: retain source data, exclude from active dashboard views.
-  const INACTIVE_RECRUITERS = new Set(["sophia", "marco", "richard"]);
+  const INACTIVE_RECRUITERS = new Set(["sophia", "marco", "richard", "tap", "unassigned", "lara", "marina"]);
   function isActiveRecruiter(row) {
     const recruiter = String(getField(row, ["recruiter", "pplwise_tap", "pplwise_sourcer", "tap", "owner"]) || row.recruiter || "").trim().toLowerCase();
     return !INACTIVE_RECRUITERS.has(recruiter);
@@ -640,14 +640,18 @@ document.addEventListener("DOMContentLoaded", () => {
     allOpt.textContent = allLabel;
     select.appendChild(allOpt);
 
-    values.forEach(value => {
+    const visibleValues = /recruiter/i.test(select.id || "")
+      ? values.filter(value => !INACTIVE_RECRUITERS.has(String(value).trim().toLowerCase()))
+      : values;
+
+    visibleValues.forEach(value => {
       const opt = document.createElement("option");
       opt.value = value;
       opt.textContent = value;
       select.appendChild(opt);
     });
 
-    const allowed = new Set(["all", ...values]);
+    const allowed = new Set(["all", ...visibleValues]);
     if (current && allowed.has(current)) select.value = current;
     else select.value = "all";
   }
