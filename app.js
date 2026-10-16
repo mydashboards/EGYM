@@ -1314,7 +1314,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return getRemainingOpenings(r) > 0;
     }).length;
 
-    const filledPositions = Object.values(hiresByRole).reduce((a, b) => a + b, 0);
+    const filledPositions = hiredRows.length; // Same all-time total as Hires & KPIs
     const visibleRows = rows.filter(r => {
       const status = normalizeHeader(getField(r, ["status"]));
       return status === "open" && getRemainingOpenings(r) > 0;
