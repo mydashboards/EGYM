@@ -33,8 +33,37 @@
   function setDot(cell,health){const cls=health==="healthy"?"good":health==="warning"?"warn":health==="critical"?"bad":"neutral",title=health==="healthy"?"Healthy":health==="warning"?"At risk":health==="critical"?"Critical":"New/Unknown",old=cell?.querySelector(".status-dot");if(old&&old.classList.contains(cls))return;if(cell)cell.innerHTML=`<span class="status-dot ${cls}" title="${title}"></span>`;}
   function filterHires(){let total=0;const tth=[],dip=[];document.querySelectorAll("#hiresTable tr").forEach(row=>{const c=row.querySelectorAll("td"),roleOk=F.role==="all"||same(c[0]?.textContent,F.role),wk=dateWeekKey(parseDate(c[7]?.textContent)),timeOk=F.periodMode==="all"||weekInScope(wk),visible=roleOk&&timeOk;row.classList.toggle("global-filter-hidden",!visible);if(!visible)return;total++;const a=Number(clean(c[9]?.textContent)),b=Number(clean(c[11]?.textContent));if(Number.isFinite(a))tth.push(a);if(Number.isFinite(b))dip.push(b);});const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;document.querySelectorAll("#hiresKpis .kpi").forEach(card=>{const label=clean(card.querySelector(".label")?.textContent).toLowerCase(),value=card.querySelector(".value");if(!value)return;if(label==="total hires")value.textContent=String(total);else if(label==="avg tth")value.textContent=avg(tth)===null?"—":avg(tth).toFixed(1);else if(label.includes("avg days in process"))value.textContent=avg(dip)===null?"—":avg(dip).toFixed(1);else if(label==="scope")value.textContent=F.periodMode==="all"?"All time":F.periodMode==="week"?clean(F.week).replace("-"," · "):F.periodMode==="rolling"?"Rolling 4 weeks":"Custom range";});return total;}
   function filterOverview(hireCount){const healthMap=pipelineHealth(),hc={healthy:0,warning:0,critical:0};let open=0,hold=0,openings=0;document.querySelectorAll("#overviewTable tr").forEach(row=>{const c=row.querySelectorAll("td"),role=clean(c[0]?.textContent),owner=clean(c[4]?.textContent),status=clean(c[1]?.textContent).toLowerCase(),visible=(F.role==="all"||same(role,F.role))&&(F.recruiter==="all"||same(owner,F.recruiter));row.classList.toggle("global-filter-hidden",!visible);if(!visible)return;const h=healthMap.get(role.toLowerCase());if(h)setDot(c[c.length-1],h);if(status==="open")open++;if(status.includes("hold"))hold++;const n=Number(clean(c[3]?.textContent).replace(/[^0-9.-]/g,""));if(Number.isFinite(n))openings+=n;const dot=c[c.length-1]?.querySelector(".status-dot");if(dot?.classList.contains("good"))hc.healthy++;else if(dot?.classList.contains("warn"))hc.warning++;else if(dot?.classList.contains("bad"))hc.critical++;});document.querySelectorAll("#overviewCards .kpi").forEach(card=>{const label=clean(card.querySelector(".label")?.textContent).toLowerCase(),value=card.querySelector(".value");if(!value)return;const next=label==="open roles"?open:label==="on hold"?hold:label==="filled positions"?document.querySelectorAll("#hiresTable tr").length:label==="total openings"?openings:null;if(next!==null&&value.textContent!==String(next))value.textContent=String(next);});const html=`<div class="health-badge good"><span class="health-dot good"></span><span>${hc.healthy} Healthy</span></div><div class="health-badge warn"><span class="health-dot warn"></span><span>${hc.warning} Attention</span></div><div class="health-badge bad"><span class="health-dot bad"></span><span>${hc.critical} Action</span></div>`;if($("overviewHealthSummary")?.innerHTML!==html)$("overviewHealthSummary").innerHTML=html;}
+  let activeHealthFilter = "all";
+  function applyHealthSelection(){
+    document.querySelectorAll("#overviewTable tr").forEach(row=>{
+      const dot=row.querySelector("td:last-child .status-dot");
+      const health=dot?.classList.contains("good")?"healthy":dot?.classList.contains("warn")?"warning":dot?.classList.contains("bad")?"critical":"unknown";
+      const matches=activeHealthFilter==="all"||health===activeHealthFilter;
+      row.classList.toggle("health-filter-hidden",!matches);
+    });
+    ["overviewHealthSummary","managementHealthSummary"].forEach(id=>{
+      const el=$(id);if(!el)return;
+      el.querySelectorAll(".health-badge").forEach(badge=>{
+        const health=badge.classList.contains("good")?"healthy":badge.classList.contains("warn")?"warning":"critical";
+        badge.classList.toggle("health-selected",health===activeHealthFilter);
+        badge.setAttribute("role","button");badge.setAttribute("tabindex","0");
+        badge.setAttribute("aria-pressed",String(health===activeHealthFilter));
+        badge.title="Click to filter roles; click again to show all";
+      });
+    });
+  }
+  function toggleHealthFilter(event){
+    const badge=event.target.closest(".health-badge");if(!badge)return;
+    const health=badge.classList.contains("good")?"healthy":badge.classList.contains("warn")?"warning":"critical";
+    activeHealthFilter=activeHealthFilter===health?"all":health;
+    applyHealthSelection();
+    if(badge.closest("#managementHealthSummary")){
+      const contributor=$("contributorView"),management=$("managementView");
+      if(contributor&&management){management.classList.add("hidden");contributor.classList.remove("hidden");activateTabWithoutAnchorJump("overview");}
+    }
+  }
   function filterManagement(){const sourceCards=Array.from(document.querySelectorAll("#overviewCards .kpi"));document.querySelectorAll("#managementKpis .kpi").forEach(card=>{const label=clean(card.querySelector(".label")?.textContent).toLowerCase(),source=sourceCards.find(x=>clean(x.querySelector(".label")?.textContent).toLowerCase()===label),a=card.querySelector(".value"),b=source?.querySelector(".value");if(a&&b&&a.textContent!==b.textContent)a.textContent=b.textContent;});if($("managementHealthSummary")&&$("overviewHealthSummary")&&$("managementHealthSummary").innerHTML!==$("overviewHealthSummary").innerHTML)$("managementHealthSummary").innerHTML=$("overviewHealthSummary").innerHTML;document.querySelectorAll("#managementRecruiterTable tr").forEach(row=>{const recruiter=clean(row.querySelector("td")?.textContent);row.classList.toggle("global-filter-hidden",F.recruiter!=="all"&&!same(recruiter,F.recruiter));});}
-  function postProcess(){const hires=filterHires();filterOverview(hires);filterManagement();}
+  function postProcess(){const hires=filterHires();filterOverview(hires);filterManagement();applyHealthSelection();}
   function schedulePost(delay=80){clearTimeout(postTimer);postTimer=setTimeout(postProcess,delay);}
   function applyAll(){if(applying)return;applying=true;try{applyPeriod();applyDimensions();}finally{applying=false;}schedulePost();}
   function change(){applyAll();window.dispatchEvent(new CustomEvent("egym:global-filters-change",{detail:{...F}}));}
@@ -59,6 +88,10 @@
   }
 
   function bind(){
+    ["overviewHealthSummary","managementHealthSummary"].forEach(id=>{
+      $(id)?.addEventListener("click",toggleHealthFilter);
+      $(id)?.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();toggleHealthFilter(e);}});
+    });
     $("globalPeriodModeSelect")?.addEventListener("change",e=>{F.periodMode=e.target.value;if(F.periodMode==="rolling"){F.fromWeek=rollingStart(F.week,4);F.toWeek=F.week;}updateModeUI();change();});
     $("globalWeekSelect")?.addEventListener("change",e=>{F.week=e.target.value;F.toWeek=F.week;if(F.periodMode==="rolling")F.fromWeek=rollingStart(F.week,4);change();});
     $("globalFromWeekSelect")?.addEventListener("change",e=>{F.fromWeek=e.target.value;change();});
@@ -79,6 +112,6 @@
     },true);
   }
 
-  document.addEventListener("DOMContentLoaded",()=>{inject();bind();updateModeUI();const last=$("lastUpdated");if(last)new MutationObserver(()=>{syncOptions();applyAll();}).observe(last,{childList:true,characterData:true,subtree:true});setTimeout(()=>{syncOptions();applyAll();},1000);setTimeout(()=>{syncOptions();applyAll();},2500);});
+  document.addEventListener("DOMContentLoaded",()=>{inject();const healthStyle=document.createElement("style");healthStyle.textContent=".health-filter-hidden{display:none!important}.health-badge[role=button]{cursor:pointer;user-select:none}.health-badge.health-selected{outline:2px solid currentColor;outline-offset:3px}";document.head.appendChild(healthStyle);bind();updateModeUI();const last=$("lastUpdated");if(last)new MutationObserver(()=>{syncOptions();applyAll();}).observe(last,{childList:true,characterData:true,subtree:true});setTimeout(()=>{syncOptions();applyAll();},1000);setTimeout(()=>{syncOptions();applyAll();},2500);});
   window.EGYM_GLOBAL_FILTERS=F;
 })();
