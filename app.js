@@ -1070,7 +1070,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const stageRaw = getField(r, ["stage"]) || r.stage;
       const stageNorm = normalizeStageValue(stageRaw);
-      if (!stageNorm.includes("offer")) return;
+      if (!stageNorm.includes("offer") && !stageNorm.includes("final")) return;
 
       const c = num(getField(r, ["count"]) || r.count);
       offerByRole.set(role, (offerByRole.get(role) || 0) + c);
