@@ -1306,9 +1306,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }).length;
 
     const filledPositions = Object.values(hiresByRole).reduce((a, b) => a + b, 0);
-    const totalOpenings = rows.reduce((sum, r) => sum + getRemainingOpenings(r), 0);
-
-    const visibleRows = rows.filter(r => getRemainingOpenings(r) > 0);
+    const visibleRows = rows.filter(r => {
+      const status = normalizeHeader(getField(r, ["status"]));
+      return status === "open" && getRemainingOpenings(r) > 0;
+    });
+    const totalOpenings = visibleRows.reduce((sum, r) => sum + getRemainingOpenings(r), 0);
 
     const counts = { healthy: 0, warning: 0, critical: 0 };
     visibleRows.forEach(r => {
