@@ -504,3 +504,7 @@ tbody tr:hover{
     align-items:flex-start;
   }
 }
+
+/* Sourcing: align KPI with the table container and keep sourced counts left-aligned. */
+#sourcingSummary { padding-left: 0; padding-right: 0; }
+#sourcingTable td.num, #sourcing table thead th.num { text-align: left; padding-left: 12px; }
