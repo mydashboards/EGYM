@@ -63,7 +63,7 @@
     }
   }
   function filterManagement(){const sourceCards=Array.from(document.querySelectorAll("#overviewCards .kpi"));document.querySelectorAll("#managementKpis .kpi").forEach(card=>{const label=clean(card.querySelector(".label")?.textContent).toLowerCase(),source=sourceCards.find(x=>clean(x.querySelector(".label")?.textContent).toLowerCase()===label),a=card.querySelector(".value"),b=source?.querySelector(".value");if(a&&b&&a.textContent!==b.textContent)a.textContent=b.textContent;});if($("managementHealthSummary")&&$("overviewHealthSummary")&&$("managementHealthSummary").innerHTML!==$("overviewHealthSummary").innerHTML)$("managementHealthSummary").innerHTML=$("overviewHealthSummary").innerHTML;document.querySelectorAll("#managementRecruiterTable tr").forEach(row=>{const recruiter=clean(row.querySelector("td")?.textContent);row.classList.toggle("global-filter-hidden",F.recruiter!=="all"&&!same(recruiter,F.recruiter));});}
-  function postProcess(){const hires=filterHires();filterOverview(hires);filterManagement();applyHealthSelection();}
+  function postProcess(){const hires=filterHires();filterOverview(hires);filterManagement();applyHealthSelection();document.dispatchEvent(new Event("egym:hires-filtered"));}
   function schedulePost(delay=80){clearTimeout(postTimer);postTimer=setTimeout(postProcess,delay);}
   function applyAll(){if(applying)return;applying=true;try{applyPeriod();applyDimensions();}finally{applying=false;}schedulePost();}
   function change(){applyAll();window.dispatchEvent(new CustomEvent("egym:global-filters-change",{detail:{...F}}));}
