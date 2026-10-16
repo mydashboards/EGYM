@@ -1992,30 +1992,14 @@ const avgDip = average(dipValues);
       return sum + remaining;
     }, 0);
 
+    // Mirror the Overview KPI and role-health widgets exactly.
     const kpisEl = $("managementKpis");
-    if (kpisEl) {
-      kpisEl.innerHTML = `
-        <div class="kpi"><div class="label">Open Roles</div><div class="value">${formatNumber(openRoles)}</div></div>
-        <div class="kpi"><div class="label">On hold</div><div class="value">${formatNumber(onHoldRoles)}</div></div>
-        <div class="kpi"><div class="label">Filled Positions</div><div class="value">${formatNumber(filledPositions)}</div><div class="sub">All time${hiredRows.length ? "" : " · No hire data yet."}</div></div>
-        <div class="kpi"><div class="label">Total Openings</div><div class="value">${formatNumber(totalOpenings)}</div></div>
-      `;
-    }
-
-const counts = state.overviewHealthCounts || {
-  healthy: 0,
-  warning: 0,
-  critical: 0
-};
+    const overviewKpisEl = $("overviewCards");
+    if (kpisEl && overviewKpisEl) kpisEl.innerHTML = overviewKpisEl.innerHTML;
 
     const hsEl = $("managementHealthSummary");
-    if (hsEl) {
-      hsEl.innerHTML = `
-        <div class="health-badge good"><span class="health-dot good"></span><span>${counts.healthy} Healthy</span></div>
-        <div class="health-badge warn"><span class="health-dot warn"></span><span>${counts.warning} Attention</span></div>
-        <div class="health-badge bad"><span class="health-dot bad"></span><span>${counts.critical} Action</span></div>
-      `;
-    }
+    const overviewHealthEl = $("overviewHealthSummary");
+    if (hsEl && overviewHealthEl) hsEl.innerHTML = overviewHealthEl.innerHTML;
 
     renderManagementRecruiters({ weeklyRows });
     renderManagementRoleInsights({
@@ -2040,6 +2024,7 @@ const counts = state.overviewHealthCounts || {
 
     rows.forEach(r => {
       const recruiter = (r.recruiter || "Unassigned").trim() || "Unassigned";
+      if (!new Set(["alex", "jenny", "mehak", "sven"]).has(recruiter.toLowerCase())) return;
       const wk = weekKey(r);
       if (!wk) return;
 
